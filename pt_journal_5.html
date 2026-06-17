@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<title>PT 일지</title>
+<style>
+  :root {
+    --green-deep:  #1E4D0A;
+    --green-mid:   #2E7010;
+    --green-light: #EAF3DE;
+    --green-border:#B2D98A;
+    --gold:        #C4801A;
+    --gold-light:  #FDF3E3;
+    --gold-border: #EAC98A;
+    --bg:          #F7F7F5;
+    --surface:     #FFFFFF;
+    --surface2:    #F2F2EF;
+    --border:      #E4E4DF;
+    --border2:     #CECECA;
+    --text:        #1A1A18;
+    --text2:       #5A5A55;
+    --text3:       #9A9A94;
+    --red:         #C0392B;
+    --red-light:   #FDECEA;
+    --radius-sm:   8px;
+    --radius-md:   12px;
+    --radius-lg:   16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { min-height: 100%; background: var(--bg); font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: var(--text); }
+
+  /* NAV */
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(247,247,245,0.94);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 0.5px solid var(--border);
+    padding: 0 16px;
+  }
+  .nav-inner { display: flex; gap: 4px; padding: 10px 0; }
+  .nav-tab {
+    flex: 1; padding: 8px 4px;
+    font-size: 13px; font-weight: 500; color: var(--text3);
+    background: none; border: none; cursor: pointer;
+    border-radius: var(--radius-sm); font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    transition: all .15s;
+  }
+  .nav-tab.active { background: var(--green-deep); color: #fff; }
+  .nav-tab svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+  /* PAGES */
+  .page { display: none; padding: 16px; padding-bottom: 100px; }
+  .page.active { display: block; }
+
+  /* EYEBROW */
+  .eyebrow { font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: .08em; text-transform: uppercase; margin: 16px 0 8px; }
+  .eyebrow:first-child { margin-top: 0; }
+
+  /* CARD */
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .card-section { padding: 12px 14px; }
+  .card-section + .card-section { border-top: 0.5px solid var(--border); }
+  .card-section label { font-size: 10px; color: var(--text3); letter-spacing: .04em; display: block; margin-bottom: 5px; }
+
+  /* INPUTS */
+  input, textarea {
+    font-size: 14px; padding: 0 10px; height: 38px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text); outline: none; font-family: inherit;
+    transition: border-color .15s, background .15s;
+    width: 100%;
+  }
+  input:focus, textarea:focus { border-color: var(--green-mid); background: var(--surface); }
+  textarea { height: auto; resize: none; padding: 8px 10px; line-height: 1.6; }
+
+  /* MEMBER ROW */
+  .member-row { display: flex; gap: 8px; }
+  .member-row .f-name { flex: 1; }
+  .member-row .f-bw input  { width: 72px; }
+  .member-row .f-sess input { width: 58px; }
+  .field label { font-size: 10px; color: var(--text3); display: block; margin-bottom: 4px; }
+
+  /* STREAK */
+  .streak-strip {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--green-light); border: 0.5px solid var(--green-border);
+    border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 10px;
+  }
+  .streak-dots { display: flex; gap: 4px; }
+  .sdot { width: 10px; height: 10px; border-radius: 50%; background: var(--green-mid); transition: background .2s; }
+  .sdot.empty { background: var(--green-border); }
+  .streak-text { font-size: 12px; color: var(--green-deep); font-weight: 500; flex: 1; }
+  .streak-inp {
+    width: 42px; height: 28px; text-align: center; font-size: 13px;
+    border-radius: 6px; border: 0.5px solid var(--green-border);
+    background: #fff; color: var(--green-deep); outline: none; font-family: inherit; padding: 0;
+  }
+
+  /* LIVE BAR */
+  .live-bar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+  .live-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; }
+  .live-label { font-size: 10px; color: var(--text3); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 4px; }
+  .live-val { font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; }
+  .live-val span { font-size: 12px; font-weight: 400; color: var(--text3); margin-left: 2px; }
+  .live-delta { font-size: 11px; margin-top: 4px; }
+  .d-up { color: var(--green-mid); } .d-dn { color: var(--red); } .d-eq { color: var(--text3); }
+
+  /* PART CHIPS — 일지 전체에서 하나 */
+  .parts-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .part-chip {
+    font-size: 12px; padding: 5px 12px; border-radius: 20px;
+    border: 0.5px solid var(--border2);
+    background: var(--surface2); color: var(--text2);
+    cursor: pointer; transition: all .12s; white-space: nowrap; user-select: none;
+  }
+  .part-chip.sel { background: var(--green-light); color: var(--green-deep); border-color: var(--green-border); font-weight: 500; }
+
+  /* EXERCISE CARD */
+  .ex-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 10px; overflow: hidden; }
+  .ex-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; border-bottom: 0.5px solid var(--border); }
+  .ex-name-inp {
+    flex: 1; font-size: 15px; font-weight: 600;
+    border: none; background: transparent; color: var(--text); outline: none; font-family: inherit;
+    height: auto; padding: 0; width: auto;
+  }
+  .ex-name-inp::placeholder { color: var(--text3); font-weight: 400; }
+  .ex-del-btn {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--surface2); border: 0.5px solid var(--border);
+    color: var(--text3); font-size: 16px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .ex-del-btn:active { background: var(--red-light); color: var(--red); }
+
+  .prev-row { display: flex; gap: 8px; padding: 10px 14px; border-bottom: 0.5px solid var(--border); }
+  .prev-inp-wrap { flex: 1; }
+  .prev-inp-wrap label { font-size: 10px; color: var(--text3); display: block; margin-bottom: 3px; }
+  .prev-inp-wrap input { height: 32px; font-size: 12px; padding: 0 8px; }
+
+  /* SETS */
+  .sets-area { padding: 0 14px; }
+  .sets-header {
+    display: grid; grid-template-columns: 26px 1fr 12px 1fr 1fr 26px;
+    gap: 5px; align-items: center;
+    padding: 7px 0 4px; border-bottom: 0.5px solid var(--border);
+  }
+  .sets-header span { font-size: 10px; color: var(--text3); letter-spacing: .03em; }
+  .sets-header .th-r { text-align: right; }
+  .set-row {
+    display: grid; grid-template-columns: 26px 1fr 12px 1fr 1fr 26px;
+    gap: 5px; align-items: center;
+    padding: 5px 0; border-bottom: 0.5px solid var(--border);
+  }
+  .set-row:last-of-type { border-bottom: none; }
+  .set-idx { font-size: 11px; color: var(--text3); text-align: center; }
+  .set-inp {
+    height: 34px; text-align: center; font-size: 14px;
+    border-radius: var(--radius-sm); border: 0.5px solid var(--border);
+    background: var(--surface2); color: var(--text); outline: none;
+    font-family: inherit; padding: 0; width: 100%;
+    transition: border-color .12s;
+  }
+  .set-inp:focus { border-color: var(--green-mid); background: var(--surface); }
+  .set-sep { font-size: 12px; color: var(--text3); text-align: center; }
+  .set-vol { font-size: 12px; color: var(--text3); text-align: right; }
+  .set-del {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: none; border: none; color: var(--text3); font-size: 16px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit;
+  }
+  .set-del:active { color: var(--red); }
+
+  .ex-footer {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px 12px; border-top: 0.5px solid var(--border);
+  }
+  .ex-summary { flex: 1; font-size: 12px; color: var(--text2); }
+  .ex-summary strong { color: var(--text); font-weight: 600; }
+  .pr-badge {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    background: var(--gold-light); color: var(--gold); border: 0.5px solid var(--gold-border);
+    display: none; white-space: nowrap;
+  }
+  .add-set-btn {
+    background: none; border: 0.5px dashed var(--border2);
+    border-radius: var(--radius-sm); padding: 5px 12px;
+    font-size: 12px; color: var(--text2); cursor: pointer; white-space: nowrap; font-family: inherit;
+  }
+  .add-set-btn:active { background: var(--surface2); }
+
+  .add-ex-btn {
+    width: 100%; padding: 12px; background: var(--surface);
+    border: 0.5px dashed var(--border2); border-radius: var(--radius-lg);
+    font-size: 13px; color: var(--text2); cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    margin-bottom: 14px; transition: background .12s;
+  }
+  .add-ex-btn:active { background: var(--surface2); }
+
+  /* COPY BTN */
+  .copy-btn {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    width: calc(100% - 32px); max-width: 388px;
+    padding: 15px; background: var(--green-deep); border: none; border-radius: var(--radius-lg);
+    font-size: 15px; font-weight: 600; color: #fff; cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    box-shadow: 0 4px 20px rgba(30,77,10,.28); transition: background .15s; z-index: 50;
+  }
+  .copy-btn:active { background: var(--green-mid); transform: translateX(-50%) scale(.98); }
+  .copy-btn.done { background: #2E7010; }
+
+  /* PREVIEW */
+  .preview-wrap {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg); padding: 18px; margin-bottom: 80px;
+  }
+  .preview-text {
+    font-size: 13px; line-height: 1.95; white-space: pre-wrap; color: var(--text);
+    font-family: 'Courier New', 'Malgun Gothic', monospace;
+  }
+
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .copy-btn { bottom: calc(16px + env(safe-area-inset-bottom)); }
+    .page { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  }
+
+  /* INTENSITY SLIDER */
+  .intensity-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px 12px;
+    margin-bottom: 10px;
+  }
+  .intensity-top {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+  }
+  .intensity-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .intensity-score-wrap { display: flex; align-items: baseline; gap: 2px; }
+  .intensity-score { font-size: 30px; font-weight: 700; line-height: 1; transition: color .2s; }
+  .intensity-score-unit { font-size: 13px; color: var(--text3); }
+  .intensity-track {
+    position: relative; height: 40px; display: flex; align-items: center; margin-bottom: 4px;
+  }
+  .intensity-bg {
+    position: absolute; left: 0; right: 0; height: 8px; border-radius: 4px;
+    background: linear-gradient(to right, #52b443 0%, #f5c842 55%, #e8503a 100%);
+    opacity: .22;
+  }
+  .intensity-fill {
+    position: absolute; left: 0; height: 8px; border-radius: 4px;
+    background: linear-gradient(to right, #52b443 0%, #f5c842 55%, #e8503a 100%);
+    transition: width .12s; pointer-events: none;
+  }
+  input[type=range]#iIntensity {
+    position: relative; width: 100%; height: 40px;
+    -webkit-appearance: none; appearance: none;
+    background: transparent; border: none; padding: 0; cursor: pointer; z-index: 1;
+  }
+  input[type=range]#iIntensity::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #fff; border: 2.5px solid #888;
+    box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  }
+  input[type=range]#iIntensity::-moz-range-thumb {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #fff; border: 2.5px solid #888;
+    box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  }
+  input[type=range]#iIntensity::-webkit-slider-runnable-track { background: transparent; }
+  input[type=range]#iIntensity::-moz-range-track { background: transparent; }
+  .intensity-labels {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--text3); padding: 0 2px; margin-bottom: 6px;
+  }
+  .intensity-desc {
+    text-align: center; font-size: 13px; font-weight: 500;
+    padding: 6px 0 2px; transition: color .2s;
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <button class="nav-tab active" id="tab-input" onclick="switchTab('input')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      입력
+    </button>
+    <button class="nav-tab" id="tab-preview" onclick="switchTab('preview'); renderPreview();">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      미리보기
+    </button>
+  </div>
+</nav>
+
+<!-- INPUT PAGE -->
+<div class="page active" id="page-input">
+
+  <div class="eyebrow">회원 정보</div>
+  <div class="card">
+    <div class="card-section">
+      <div class="member-row">
+        <div class="field f-name">
+          <label>이름</label>
+          <input id="iName" placeholder="회원 이름"/>
+        </div>
+        <div class="field f-bw">
+          <label>체중 kg</label>
+          <input id="iBW" type="number" placeholder="60" oninput="recalcAll()"/>
+        </div>
+        <div class="field f-sess">
+          <label>회차</label>
+          <input id="iSession" type="number" placeholder="1"/>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="streak-strip">
+    <div class="streak-dots" id="streakDots"></div>
+    <span class="streak-text" id="streakText">연속 출석</span>
+    <input class="streak-inp" id="iStreak" type="number" value="1" min="1" oninput="renderStreak()"/>
+    <span style="font-size:11px;color:var(--green-deep);margin-left:2px;">회</span>
+  </div>
+
+  <div class="live-bar">
+    <div class="live-card">
+      <div class="live-label">전체 볼륨</div>
+      <div class="live-val" id="sumVol">0<span>kg</span></div>
+      <div class="live-delta" id="sumDelta"></div>
+    </div>
+    <div class="live-card">
+      <div class="live-label">소모 칼로리</div>
+      <div class="live-val" id="sumCal">0<span>kcal</span></div>
+      <div class="live-delta" style="font-size:10px;color:var(--text3);">체중 기반 추정</div>
+    </div>
+  </div>
+
+  <!-- 운동 부위 (일지 전체) -->
+  <div class="eyebrow">오늘 운동 부위</div>
+  <div class="card">
+    <div class="card-section">
+      <div class="parts-row" id="partsRow"></div>
+    </div>
+  </div>
+
+  <!-- 운동 종목 -->
+  <div class="eyebrow">운동 종목</div>
+  <div id="exCards"></div>
+  <button class="add-ex-btn" onclick="addExercise()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    종목 추가
+  </button>
+
+  <!-- 운동 강도 -->
+  <div class="eyebrow">운동 강도</div>
+  <div class="intensity-card">
+    <div class="intensity-top">
+      <span class="intensity-title">오늘 수업 강도</span>
+      <div class="intensity-score-wrap">
+        <span class="intensity-score" id="intensityScore">70</span>
+        <span class="intensity-score-unit">/ 100</span>
+      </div>
+    </div>
+    <div class="intensity-track">
+      <div class="intensity-bg"></div>
+      <div class="intensity-fill" id="intensityFill" style="width:70%"></div>
+      <input type="range" id="iIntensity" min="0" max="100" value="70" oninput="updateIntensity(this.value)"/>
+    </div>
+    <div class="intensity-labels">
+      <span>가볍게</span>
+      <span>적당히</span>
+      <span>빡세게</span>
+    </div>
+    <div class="intensity-desc" id="intensityDesc"></div>
+  </div>
+
+  <!-- 코멘트 -->
+  <div class="eyebrow">코멘트</div>
+  <div class="card">
+    <div class="card-section">
+      <label>트레이너 피드백</label>
+      <textarea id="iNote" rows="3" placeholder="오늘 수업에서 잘 된 점, 개선할 점..."></textarea>
+    </div>
+    <div class="card-section">
+      <label>다음 수업 포인트</label>
+      <textarea id="iNext" rows="2" placeholder="한 줄에 하나씩 입력하세요"></textarea>
+    </div>
+    <div class="card-section">
+      <label>응원 한마디</label>
+      <textarea id="iCheer" rows="1" placeholder="회원님께 전하는 말"></textarea>
+    </div>
+  </div>
+
+</div>
+
+<!-- PREVIEW PAGE -->
+<div class="page" id="page-preview">
+  <div class="preview-wrap">
+    <div class="preview-text" id="previewText"></div>
+  </div>
+</div>
+
+<button class="copy-btn" id="copyBtn" onclick="doCopy()">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+  일지 복사하기
+</button>
+
+<script>
+const PARTS_LIST = ['가슴','등','어깨','하체','팔','코어','전신','유산소','재활'];
+let selectedParts = [];
+
+/* ── INTENSITY ── */
+const INTENSITY_LEVELS = [
+  { max:20,  color:'#52b443', desc:'😌  아주 가볍게 움직였어요' },
+  { max:40,  color:'#7ec843', desc:'🙂  워밍업 같은 수준이에요' },
+  { max:60,  color:'#f5c842', desc:'😤  적당히 땀 흘렸어요' },
+  { max:75,  color:'#f5a623', desc:'💪  꽤 열심히 했어요' },
+  { max:88,  color:'#e8703a', desc:'🔥  많이 힘들었어요' },
+  { max:100, color:'#e8503a', desc:'🥵  한계까지 밀어붙였어요' },
+];
+function intensityLevel(v) {
+  return INTENSITY_LEVELS.find(l => v <= l.max) || INTENSITY_LEVELS[INTENSITY_LEVELS.length-1];
+}
+function updateIntensity(v) {
+  const val = parseInt(v);
+  const lv  = intensityLevel(val);
+  document.getElementById('intensityScore').textContent = val;
+  document.getElementById('intensityScore').style.color = lv.color;
+  document.getElementById('intensityFill').style.width  = val + '%';
+  document.getElementById('intensityDesc').textContent  = lv.desc;
+  document.getElementById('intensityDesc').style.color  = lv.color;
+  // thumb border color
+  document.getElementById('iIntensity').style.setProperty('--thumb-color', lv.color);
+}
+
+let exercises = [];
+
+/* ── PARTS (일지 전체) ── */
+function renderParts() {
+  const row = document.getElementById('partsRow');
+  row.innerHTML = PARTS_LIST.map(p =>
+    `<span class="part-chip${selectedParts.includes(p) ? ' sel' : ''}"
+      onclick="togglePart('${p}',this)">${p}</span>`
+  ).join('');
+}
+function togglePart(part, el) {
+  const idx = selectedParts.indexOf(part);
+  if (idx === -1) { selectedParts.push(part); el.classList.add('sel'); }
+  else            { selectedParts.splice(idx, 1); el.classList.remove('sel'); }
+}
+
+/* ── STREAK ── */
+function renderStreak() {
+  const n = parseInt(document.getElementById('iStreak').value) || 1;
+  let h = '';
+  for (let i = 0; i < 7; i++) h += `<span class="sdot${i < Math.min(n,7) ? '' : ' empty'}"></span>`;
+  document.getElementById('streakDots').innerHTML = h;
+  document.getElementById('streakText').textContent = `연속 ${n}회 출석`;
+}
+
+/* ── TAB ── */
+function switchTab(t) {
+  ['input','preview'].forEach(id => {
+    document.getElementById('tab-' + id).classList.toggle('active', id === t);
+    document.getElementById('page-' + id).classList.toggle('active', id === t);
+  });
+}
+
+/* ── CALC ── */
+function exVol(ex)  { return ex.sets.reduce((s,st) => s + st.w * st.r, 0); }
+function exMaxW(ex) { return ex.sets.length ? Math.max(...ex.sets.map(st => st.w)) : 0; }
+
+function recalcAll() {
+  const bw        = parseFloat(document.getElementById('iBW').value) || 70;
+  const grandVol  = exercises.reduce((s,ex) => s + exVol(ex), 0);
+  const grandPrev = exercises.reduce((s,ex) => s + (ex.prevVol||0), 0);
+  const totalSets = exercises.reduce((s,ex) => s + ex.sets.length, 0);
+  const cal       = Math.round(bw * 0.088 * totalSets * 2.5);
+
+  document.getElementById('sumVol').innerHTML = grandVol.toLocaleString() + '<span>kg</span>';
+  document.getElementById('sumCal').innerHTML = cal.toLocaleString() + '<span>kcal</span>';
+
+  if (grandPrev > 0) {
+    const diff = grandVol - grandPrev;
+    const pct  = Math.round((diff / grandPrev) * 100);
+    const cl   = diff > 0 ? 'd-up' : diff < 0 ? 'd-dn' : 'd-eq';
+    const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
+    document.getElementById('sumDelta').innerHTML =
+      `<span class="${cl}">${arrow} ${diff>=0?'+':''}${diff.toLocaleString()}kg (${diff>=0?'+':''}${pct}%)</span>`;
+  } else {
+    document.getElementById('sumDelta').innerHTML = '';
+  }
+  exercises.forEach((_,ei) => updateExFooter(ei));
+}
+
+function updateExFooter(ei) {
+  const ex    = exercises[ei];
+  const vol   = exVol(ex);
+  const mw    = exMaxW(ex);
+  const chip  = document.getElementById('chip-'+ei);
+  const badge = document.getElementById('badge-'+ei);
+  if (chip)  chip.innerHTML = `볼륨 <strong>${vol.toLocaleString()}kg</strong>　최고 <strong>${mw}kg</strong>`;
+  if (badge) badge.style.display = (ex.prevMaxW>0 && mw>ex.prevMaxW) ? 'inline-block' : 'none';
+  ex.sets.forEach((_,si) => {
+    const el = document.getElementById(`rv-${ei}-${si}`);
+    if (el) el.textContent = (ex.sets[si].w && ex.sets[si].r)
+      ? (ex.sets[si].w * ex.sets[si].r).toLocaleString() + 'kg' : '';
+  });
+}
+
+/* ── SETS ── */
+function buildSetRows(ei) {
+  const c = document.getElementById('sets-'+ei);
+  if (!c) return;
+  c.innerHTML = '';
+  const hdr = document.createElement('div');
+  hdr.className = 'sets-header';
+  hdr.innerHTML = `<span></span><span>무게</span><span></span><span>횟수</span><span class="th-r">볼륨</span><span></span>`;
+  c.appendChild(hdr);
+
+  exercises[ei].sets.forEach((s, si) => {
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    row.innerHTML = `
+      <span class="set-idx">${si+1}</span>
+      <input class="set-inp" type="number" value="${s.w||''}" placeholder="kg"
+        oninput="exercises[${ei}].sets[${si}].w=parseFloat(this.value)||0;
+                 var el=document.getElementById('rv-${ei}-${si}');
+                 el.textContent=(exercises[${ei}].sets[${si}].w*exercises[${ei}].sets[${si}].r)?
+                 (exercises[${ei}].sets[${si}].w*exercises[${ei}].sets[${si}].r).toLocaleString()+'kg':'';
+                 recalcAll();"/>
+      <span class="set-sep">×</span>
+      <input class="set-inp" type="number" value="${s.r||''}" placeholder="회"
+        oninput="exercises[${ei}].sets[${si}].r=parseInt(this.value)||0;
+                 var el=document.getElementById('rv-${ei}-${si}');
+                 el.textContent=(exercises[${ei}].sets[${si}].w*exercises[${ei}].sets[${si}].r)?
+                 (exercises[${ei}].sets[${si}].w*exercises[${ei}].sets[${si}].r).toLocaleString()+'kg':'';
+                 recalcAll();"/>
+      <span class="set-vol" id="rv-${ei}-${si}">${s.w&&s.r?(s.w*s.r).toLocaleString()+'kg':''}</span>
+      <button class="set-del" onclick="removeSet(${ei},${si})">×</button>`;
+    c.appendChild(row);
+  });
+}
+
+function addSet(ei) {
+  const last = exercises[ei].sets.slice(-1)[0];
+  exercises[ei].sets.push({ w: last?last.w:0, r: last?last.r:10 });
+  buildSetRows(ei); updateExFooter(ei); recalcAll();
+}
+function removeSet(ei, si) {
+  exercises[ei].sets.splice(si,1);
+  buildSetRows(ei); updateExFooter(ei); recalcAll();
+}
+
+/* ── EXERCISE CARDS ── */
+function renderExCards() {
+  const container = document.getElementById('exCards');
+  container.innerHTML = '';
+  exercises.forEach((ex, ei) => {
+    const card = document.createElement('div');
+    card.className = 'ex-card';
+    card.innerHTML = `
+      <div class="ex-header">
+        <input class="ex-name-inp" value="${ex.name}" placeholder="종목명 입력"
+          oninput="exercises[${ei}].name=this.value;"/>
+        <button class="ex-del-btn" onclick="removeExercise(${ei})">×</button>
+      </div>
+      <div class="prev-row">
+        <div class="prev-inp-wrap">
+          <label>지난 최고 무게 kg</label>
+          <input type="number" value="${ex.prevMaxW||''}" placeholder="0"
+            oninput="exercises[${ei}].prevMaxW=parseFloat(this.value)||0;updateExFooter(${ei});"/>
+        </div>
+        <div class="prev-inp-wrap">
+          <label>지난 볼륨 kg</label>
+          <input type="number" value="${ex.prevVol||''}" placeholder="0"
+            oninput="exercises[${ei}].prevVol=parseInt(this.value)||0;recalcAll();"/>
+        </div>
+      </div>
+      <div class="sets-area" id="sets-${ei}"></div>
+      <div class="ex-footer">
+        <span class="ex-summary" id="chip-${ei}">볼륨 <strong>0kg</strong></span>
+        <span class="pr-badge" id="badge-${ei}">✦ 신기록</span>
+        <button class="add-set-btn" onclick="addSet(${ei})">+ 세트</button>
+      </div>`;
+    container.appendChild(card);
+    buildSetRows(ei);
+    updateExFooter(ei);
+  });
+}
+
+function addExercise() {
+  exercises.push({ name:'', prevMaxW:0, prevVol:0, sets:[{w:0,r:10}] });
+  renderExCards(); recalcAll();
+}
+function removeExercise(ei) {
+  exercises.splice(ei,1);
+  renderExCards(); recalcAll();
+}
+
+/* ── TEXT BUILD ── */
+function getToday() {
+  const d = new Date();
+  const days = ['일','월','화','수','목','금','토'];
+  return `${d.getMonth()+1}월 ${d.getDate()}일 ${days[d.getDay()]}요일`;
+}
+
+function buildText() {
+  const name      = document.getElementById('iName').value.trim() || '회원';
+  const session   = document.getElementById('iSession').value || '1';
+  const streak    = document.getElementById('iStreak').value || '1';
+  const bw        = parseFloat(document.getElementById('iBW').value) || 70;
+  const note      = document.getElementById('iNote').value.trim();
+  const nextRaw   = document.getElementById('iNext').value.trim();
+  const cheer     = document.getElementById('iCheer').value.trim();
+  const intensity = parseInt(document.getElementById('iIntensity').value) || 70;
+  const intensityEmoji = intensityLevel(intensity).desc;
+
+  const grandVol  = exercises.reduce((s,ex) => s + exVol(ex), 0);
+  const grandPrev = exercises.reduce((s,ex) => s + (ex.prevVol||0), 0);
+  const totalSets = exercises.reduce((s,ex) => s + ex.sets.length, 0);
+  const cal       = Math.round(bw * 0.088 * totalSets * 2.5);
+  const volDiff   = grandVol - grandPrev;
+  const volPct    = grandPrev ? Math.round((volDiff/grandPrev)*100) : null;
+
+  const partStr = selectedParts.length ? selectedParts.join('  ') : '';
+
+  const L = [];
+
+  // 헤더
+  L.push(`🏋️ ${name}님  ${getToday()}`);
+  L.push(`${session}번째 수업${partStr ? '  |  ' + partStr : ''}`);
+  L.push('');
+
+  // 종목별
+  exercises.forEach((ex, ei) => {
+    const vol  = exVol(ex);
+    const mw   = exMaxW(ex);
+    const isPR = ex.prevMaxW > 0 && mw > ex.prevMaxW;
+    const diff = vol - (ex.prevVol||0);
+    const pct  = ex.prevVol ? Math.round((diff/ex.prevVol)*100) : null;
+
+    L.push(`📌 ${ex.name || '종목'}${isPR ? '  🏅 신기록' : ''}`);
+    ex.sets.forEach((st, si) => {
+      L.push(`   ${si+1}세트  ${st.w}kg × ${st.r}회`);
+    });
+    L.push('');
+    L.push(`   볼륨  ${vol.toLocaleString()}kg${pct!==null ? `  (지난 대비 ${diff>=0?'+':''}${pct}%)` : ''}`);
+    if (ex.prevMaxW) {
+      L.push(`   최고 무게  ${mw}kg${mw !== ex.prevMaxW ? `  (지난번 ${ex.prevMaxW}kg)` : ''}`);
+    }
+    L.push('');
+  });
+
+  // 총합
+  L.push('──────────────────────');
+  L.push(`📊 총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null ? `  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)` : ''}`);
+  L.push(`🔥 소모 칼로리  약 ${cal.toLocaleString()}kcal`);
+  L.push(`💥 운동 강도  ${intensity}점 / 100점   ${intensityEmoji}`);
+  L.push(`🗓 연속 출석  ${streak}회`);
+
+  // 피드백
+  if (note) {
+    L.push('');
+    L.push('──────────────────────');
+    L.push('💬 오늘 피드백');
+    L.push('');
+    L.push(note);
+  }
+
+  // 다음 수업
+  const nextLines = nextRaw.split('\n').filter(s => s.trim());
+  if (nextLines.length) {
+    L.push('');
+    L.push('📋 다음 수업 포인트');
+    nextLines.forEach((l, i) => L.push(`   ${i+1}.  ${l.trim()}`));
+  }
+
+  // 응원
+  if (cheer) {
+    L.push('');
+    L.push('──────────────────────');
+    L.push('');
+    L.push(cheer);
+  }
+
+  L.push('');
+  L.push('트레이너  이광명');
+
+  return L.join('\n');
+}
+
+function renderPreview() {
+  document.getElementById('previewText').textContent = buildText();
+}
+
+function doCopy() {
+  const text = buildText();
+  const btn  = document.getElementById('copyBtn');
+
+  function markDone() {
+    btn.classList.add('done');
+    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 복사 완료`;
+    setTimeout(() => {
+      btn.classList.remove('done');
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 일지 복사하기`;
+    }, 2000);
+  }
+
+  // 1) 최신 클립보드 API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(markDone).catch(fallback);
+  } else {
+    fallback();
+  }
+
+  function fallback() {
+    // 2) textarea execCommand 방식 — 로컬 파일·구형 브라우저 대응
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:2em;height:2em;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      const ok = document.execCommand('copy');
+      if (ok) { markDone(); }
+      else    { showModal(text); }
+    } catch(e) {
+      showModal(text);
+    }
+    document.body.removeChild(ta);
+  }
+}
+
+// 3) 모달 직접 선택 — 위 두 방법 모두 실패 시
+function showModal(text) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;
+    display:flex;align-items:flex-end;justify-content:center;padding:0 0 20px;
+  `;
+  const box = document.createElement('div');
+  box.style.cssText = `
+    background:#fff;border-radius:16px;padding:16px;width:calc(100% - 32px);max-width:420px;
+    max-height:70vh;display:flex;flex-direction:column;gap:10px;
+  `;
+  box.innerHTML = `
+    <div style="font-size:13px;font-weight:600;color:#1A1A18;">전체 선택 후 복사하세요</div>
+    <textarea readonly style="flex:1;min-height:220px;font-size:12px;line-height:1.8;
+      border:0.5px solid #E4E4DF;border-radius:8px;padding:10px;resize:none;
+      font-family:'Courier New',monospace;color:#1A1A18;background:#F7F7F5;">${text}</textarea>
+    <button onclick="this.closest('div').parentElement.remove()"
+      style="padding:12px;background:#1E4D0A;color:#fff;border:none;border-radius:10px;
+      font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">닫기</button>
+  `;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  // 자동 전체선택
+  const ta = box.querySelector('textarea');
+  ta.focus();
+  ta.select();
+}
+
+/* ── INIT ── */
+renderStreak();
+renderParts();
+renderExCards();
+recalcAll();
+updateIntensity(70);
+</script>
+</body>
+</html>
