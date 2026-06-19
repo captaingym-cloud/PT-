@@ -351,6 +351,10 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 .dial-arrows span{font-size:9px;line-height:1;color:var(--t2);}
 .dial-unit{font-size:10px;color:var(--t3);font-weight:400;margin-left:2px;}
 .ex-footer{display:flex;align-items:center;gap:8px;padding:10px 14px 12px;border-top:0.5px solid var(--bd);}
+.ex-comment-row{padding:0 14px 12px;border-top:0.5px solid var(--bd);padding-top:10px;}
+.ex-comment-inp{width:100%;font-size:13px;border:0.5px solid var(--bd2);border-radius:var(--r8);background:var(--sf2);color:var(--t);padding:8px 10px;outline:none;resize:none;font-family:inherit;line-height:1.5;min-height:36px;overflow:hidden;transition:border-color .12s,background .12s;}
+.ex-comment-inp:focus{border-color:var(--g1);background:var(--sf);}
+.ex-comment-inp::placeholder{color:var(--t3);}
 .ex-sets-summary{padding:6px 14px 8px;display:flex;flex-wrap:wrap;gap:4px;}
 .ex-set-chip{font-size:11px;padding:3px 9px;border-radius:20px;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t2);white-space:nowrap;}
 .ex-set-chip.filled{background:var(--g2);border-color:var(--g3);color:var(--g0);}
@@ -657,19 +661,10 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       <div class="intensity-desc" id="intensityDesc"></div>
     </div>
 
-    <div class="eyebrow">코멘트</div>
+    <div class="eyebrow">회원님께 보내는 편지</div>
     <div class="card">
       <div class="card-section">
-        <label>트레이너 피드백</label>
-        <textarea id="iNote" rows="3" placeholder="오늘 수업에서 잘 된 점, 개선할 점..."></textarea>
-      </div>
-      <div class="card-section">
-        <label>다음 수업 포인트</label>
-        <textarea id="iNext" rows="2" placeholder="한 줄에 하나씩 입력하세요"></textarea>
-      </div>
-      <div class="card-section">
-        <label>응원 한마디</label>
-        <textarea id="iCheer" rows="1" placeholder="회원님께 전하는 말"></textarea>
+        <textarea id="iLetter" rows="5" placeholder="오늘 수업은 어땠는지, 다음에 신경 쓸 부분, 응원의 말까지 자유롭게 적어주세요"></textarea>
       </div>
     </div>
   </div>
@@ -1672,40 +1667,23 @@ async function openDetailModal(e, idx){
           +'<span class="detail-set-vol">'+vol.toLocaleString()+'kg</span>'
           +'</div>';
       });
+      if((ex.comment||'').trim()){
+        html += '<div style="padding:8px 14px 10px;font-size:12px;color:var(--t2);border-top:0.5px solid var(--bd);line-height:1.6;">'+ex.comment.trim().replace(/\n/g,'<br>')+'</div>';
+      }
       html += '</div>';
     });
     html += '</div>';
   }
 
-  // 피드백
-  if(e.note){
-    html += '<div class="detail-section">';
-    html += '<div class="detail-eyebrow">트레이너 피드백</div>';
-    html += '<div class="detail-text-card">'+e.note.replace(/\n/g,'<br>')+'</div>';
-    html += '</div>';
+  // 편지 (구버전 호환: letter 없으면 note/next/cheer 합쳐서 표시)
+  let letterText = e.letter;
+  if(letterText === undefined){
+    letterText = [e.note, e.next, e.cheer].filter(Boolean).join('\n\n');
   }
-
-  // 다음 수업
-  if(e.next){
-    const nextLines = e.next.split('\n').filter(s=>s.trim());
-    if(nextLines.length){
-      html += '<div class="detail-section">';
-      html += '<div class="detail-eyebrow">다음 수업 포인트</div>';
-      html += '<div class="detail-card">';
-      nextLines.forEach((l,i) => {
-        html += '<div class="detail-row" style="padding:10px 14px;">'
-          +'<span style="font-size:12px;color:var(--t3);margin-right:10px;flex-shrink:0;">'+(i+1)+'</span>'
-          +'<span style="font-size:13px;color:var(--t);">'+l.trim()+'</span>'
-          +'</div>';
-      });
-      html += '</div></div>';
-    }
-  }
-
-  // 응원
-  if(e.cheer){
+  if((letterText||'').trim()){
     html += '<div class="detail-section">';
-    html += '<div class="detail-cheer">'+e.cheer+'</div>';
+    html += '<div class="detail-eyebrow">회원님께 보내는 편지</div>';
+    html += '<div class="detail-cheer" style="text-align:left;">'+letterText.trim().replace(/\n/g,'<br>')+'</div>';
     html += '<div style="text-align:right;font-size:11px;color:var(--t3);margin-top:6px;">트레이너 '+trainer+'</div>';
     html += '</div>';
   }
@@ -1747,9 +1725,7 @@ async function openNewJournal(){
   recalcAll();
   updateIntensity(70);
   document.getElementById('iIntensity').value = 70;
-  document.getElementById('iNote').value = '';
-  document.getElementById('iNext').value = lastEntry && lastEntry.next ? lastEntry.next : '';
-  document.getElementById('iCheer').value = '';
+  document.getElementById('iLetter').value = '';
 
   switchTab('input');
   showScreen('screen-journal');
@@ -1770,6 +1746,7 @@ async function openEditJournal(idx){
     name: ex.name,
     prevMaxW: ex.prevMaxW || 0,
     prevVol:  ex.prevVol  || 0,
+    comment:  ex.comment  || '',
     sets: (ex.sets||[]).map(st => ({w: st.w, r: st.r})),
   }));
 
@@ -1788,9 +1765,13 @@ async function openEditJournal(idx){
   const iv = e.intensity || 70;
   document.getElementById('iIntensity').value = iv;
   updateIntensity(iv);
-  document.getElementById('iNote').value  = e.note  || '';
-  document.getElementById('iNext').value  = e.next  || '';
-  document.getElementById('iCheer').value = e.cheer || '';
+
+  // 편지 — 새 필드 우선, 없으면 옛 3필드 합쳐서 보여줌 (구버전 호환)
+  let letterVal = e.letter;
+  if(letterVal === undefined){
+    letterVal = [e.note, e.next, e.cheer].filter(Boolean).join('\n\n');
+  }
+  document.getElementById('iLetter').value = letterVal || '';
 
   switchTab('input');
   showScreen('screen-journal');
@@ -2259,6 +2240,11 @@ async function getLastExData(name){
   return null;
 }
 
+function autoGrow(el){
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
 function renderExCards(){
   const container=document.getElementById('exCards');
   container.innerHTML='';
@@ -2278,6 +2264,10 @@ function renderExCards(){
         <span class="ex-summary" id="chip-${ei}">볼륨 <strong>0kg</strong></span>
         <span class="pr-badge" id="badge-${ei}">✦ 신기록</span>
         <button class="add-set-btn" onclick="addSet(${ei})">+ 세트</button>
+      </div>
+      <div class="ex-comment-row">
+        <textarea class="ex-comment-inp" rows="1" placeholder="이 종목에 대한 코멘트 (선택)"
+          oninput="exercises[${ei}].comment=this.value;autoGrow(this);">${ex.comment||''}</textarea>
       </div>`;
     container.appendChild(card);
     buildSetRows(ei);
@@ -2291,6 +2281,8 @@ function renderExCards(){
         '지난 기록 &nbsp;최고 <strong>'+(ex.prevMaxW||0)+'kg</strong>'
         +'&nbsp;·&nbsp;볼륨 <strong>'+(ex.prevVol||0).toLocaleString()+'kg</strong>';
     }
+    const commentEl = card.querySelector('.ex-comment-inp');
+    if(commentEl) autoGrow(commentEl);
   });
 }
 
@@ -2318,7 +2310,7 @@ async function autoFillPrev(ei, name){
 }
 
 function addExercise(){
-  exercises.push({name:'',prevMaxW:0,prevVol:0,sets:[{w:0,r:10}]});
+  exercises.push({name:'',prevMaxW:0,prevVol:0,comment:'',sets:[{w:0,r:10}]});
   renderExCards();recalcAll();
 }
 function removeExercise(ei){
@@ -2340,6 +2332,7 @@ async function saveJournal(){
     vol:exVol(ex),
     prevMaxW: ex.prevMaxW || 0,
     prevVol:  ex.prevVol  || 0,
+    comment:  (ex.comment||'').trim(),
     sets:[...ex.sets],
   }));
 
@@ -2356,9 +2349,7 @@ async function saveJournal(){
       intensity:parseInt(document.getElementById('iIntensity').value)||70,
       streak:parseInt(document.getElementById('iStreak').value)||1,
       session:parseInt(document.getElementById('iSession').value)||1,
-      note:document.getElementById('iNote').value.trim(),
-      next:document.getElementById('iNext').value.trim(),
-      cheer:document.getElementById('iCheer').value.trim(),
+      letter:document.getElementById('iLetter').value.trim(),
     };
   } else {
     const entry={
@@ -2371,9 +2362,7 @@ async function saveJournal(){
       intensity:parseInt(document.getElementById('iIntensity').value)||70,
       streak:parseInt(document.getElementById('iStreak').value)||1,
       session:parseInt(document.getElementById('iSession').value)||1,
-      note:document.getElementById('iNote').value.trim(),
-      next:document.getElementById('iNext').value.trim(),
-      cheer:document.getElementById('iCheer').value.trim(),
+      letter:document.getElementById('iLetter').value.trim(),
     };
     hist.push(entry);
     // 날짜순 정렬 (과거 날짜로 추가했을 수 있으므로)
@@ -2477,9 +2466,7 @@ async function buildText(){
   const member=currentMember?currentMember.name:'회원';
   const session=document.getElementById('iSession').value||document.getElementById('iStreak').value||'1';
   const intensity=parseInt(document.getElementById('iIntensity').value)||70;
-  const note=document.getElementById('iNote').value.trim();
-  const nextRaw=document.getElementById('iNext').value.trim();
-  const cheer=document.getElementById('iCheer').value.trim();
+  const letter=document.getElementById('iLetter').value.trim();
 
   const grandVol=exercises.reduce((s,ex)=>s+exVol(ex),0);
   const grandPrev=exercises.reduce((s,ex)=>s+(ex.prevVol||0),0);
@@ -2506,6 +2493,7 @@ async function buildText(){
     L.push('');
     L.push(`   볼륨  ${vol.toLocaleString()}kg${pct!==null?`  (지난 대비 ${diff>=0?'+':''}${pct}%)`:''}` );
     if(ex.prevMaxW) L.push(`   최고 무게  ${mw}kg${mw!==ex.prevMaxW?`  (이전 ${ex.prevMaxW}kg)`:''}`);
+    if((ex.comment||'').trim()){ L.push(''); L.push(`   💬 ${ex.comment.trim()}`); }
     L.push('');
   });
 
@@ -2514,18 +2502,9 @@ async function buildText(){
   L.push(`🔥 소모 칼로리  약 ${cal.toLocaleString()}kcal`);
   L.push(`💥 운동 강도  ${intensity}점 / 100점   ${intensityDesc}`);
 
-  if(note){
+  if(letter){
     L.push('');L.push('──────────────────────');
-    L.push('💬 오늘 피드백');L.push('');L.push(note);
-  }
-  const nextLines=nextRaw.split('\n').filter(s=>s.trim());
-  if(nextLines.length){
-    L.push('');L.push('📋 다음 수업 포인트');
-    nextLines.forEach((l,i)=>L.push(`   ${i+1}.  ${l.trim()}`));
-  }
-  if(cheer){
-    L.push('');L.push('──────────────────────');
-    L.push('');L.push(cheer);
+    L.push('');L.push(letter);
   }
   L.push('');L.push(`트레이너  ${trainer}`);
   return L.join('\n');
@@ -2566,15 +2545,20 @@ async function doCopyEntry(idx){
     L.push('');
     L.push('   볼륨  '+ex.vol.toLocaleString()+'kg'+(pct!==null?'  (지난 대비 '+(diff>=0?'+':'')+pct+'%)':''));
     if(ex.prevMaxW) L.push('   최고 무게  '+ex.maxW+'kg'+(ex.maxW!==ex.prevMaxW?'  (이전 '+ex.prevMaxW+'kg)':''));
+    if((ex.comment||'').trim()){ L.push(''); L.push('   💬 '+ex.comment.trim()); }
     L.push('');
   });
   L.push('──────────────────────');
   L.push('📊 총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
   L.push('💥 운동 강도  '+iv+'점 / 100점   '+iDesc(iv));
-  if(e.note){L.push('');L.push('──────────────────────');L.push('💬 오늘 피드백');L.push('');L.push(e.note);}
-  const nextLines=(e.next||'').split('\n').filter(s=>s.trim());
-  if(nextLines.length){L.push('');L.push('📋 다음 수업 포인트');nextLines.forEach((l,i)=>L.push('   '+(i+1)+'.  '+l.trim()));}
-  if(e.cheer){L.push('');L.push('──────────────────────');L.push('');L.push(e.cheer);}
+  let letterText = e.letter;
+  if(letterText === undefined){
+    letterText = [e.note, e.next, e.cheer].filter(Boolean).join('\n\n');
+  }
+  if((letterText||'').trim()){
+    L.push('');L.push('──────────────────────');
+    L.push('');L.push(letterText.trim());
+  }
   L.push('');L.push('트레이너  '+trainer);
   const text=L.join('\n');
   const btn=document.querySelector('.detail-copy-btn');
