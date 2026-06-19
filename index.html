@@ -186,7 +186,7 @@ input,textarea,button,select{touch-action:manipulation;}
 .cal-dow span:first-child{color:#E24B4A;}
 .cal-dow span:last-child{color:#378ADD;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
-.cal-cell{aspect-ratio:0.68;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;border-radius:var(--r8);cursor:pointer;position:relative;touch-action:manipulation;transition:background .1s;}
+.cal-cell{aspect-ratio:var(--dp-aspect, 0.68);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;border-radius:var(--r8);cursor:pointer;position:relative;touch-action:manipulation;transition:background .1s;}
 .cal-cell:active{background:var(--sf2);}
 .cal-cell.empty{cursor:default;}
 .cal-cell.today .cal-num{background:var(--g0);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;}
@@ -599,6 +599,10 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 
   <!-- 입력 탭 -->
   <div class="page active" id="page-input">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 10px;">
+      <span style="font-size:12px;color:var(--t2);" id="entryDateLabel">오늘  —</span>
+      <button onclick="openDatePicker()" style="font-size:11px;color:var(--g1);background:none;border:0.5px solid var(--g3);border-radius:20px;padding:4px 10px;cursor:pointer;font-family:inherit;font-weight:500;">날짜 변경</button>
+    </div>
     <div style="background:var(--g2);border:0.5px solid var(--g3);border-radius:var(--r12);padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
       <span style="font-size:14px;font-weight:600;color:var(--g0);" id="sessionLabel">1회차 수업</span>
       <div style="display:flex;align-items:center;gap:6px;">
@@ -609,6 +613,8 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       </div>
     </div>
     <input type="hidden" id="iStreak" value="1"/>
+    <input type="hidden" id="iEntryDate" value=""/>
+
 
     <div class="live-bar">
       <div class="live-card">
@@ -1734,6 +1740,8 @@ async function openNewJournal(){
   document.getElementById('iSession').value = hist.length + 1;
   updateSessionLabel();
 
+  setEntryDate(todayISO());
+
   renderParts();
   renderExCards();
   recalcAll();
@@ -1771,6 +1779,8 @@ async function openEditJournal(idx){
   document.getElementById('iStreak').value = e.streak || 1;
   document.getElementById('iSession').value = e.session || e.streak || 1;
   updateSessionLabel();
+
+  setEntryDate(e.dateTime || todayISO());
 
   renderParts();
   renderExCards();
@@ -1879,6 +1889,114 @@ function updateSessionLabel(){
   document.getElementById('iStreak').value = n;
   const el = document.getElementById('sessionLabel');
   if(el) el.textContent = n+'회차 수업';
+}
+
+/* ═══════════════════════════════════════
+   ENTRY DATE (작성 날짜 변경)
+═══════════════════════════════════════ */
+function todayISO(){
+  const d = new Date();
+  d.setHours(12,0,0,0); // 시간대 이슈 방지
+  return d.toISOString();
+}
+
+function setEntryDate(iso){
+  document.getElementById('iEntryDate').value = iso;
+  renderEntryDateLabel();
+}
+
+function renderEntryDateLabel(){
+  const iso = document.getElementById('iEntryDate').value;
+  const d = iso ? new Date(iso) : new Date();
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  const days = ['일','월','화','수','목','금','토'];
+  const dateStr = `${d.getMonth()+1}월 ${d.getDate()}일 ${days[d.getDay()]}요일`;
+  const label = document.getElementById('entryDateLabel');
+  if(label) label.textContent = isToday ? `오늘  ${dateStr}` : dateStr;
+}
+
+function openDatePicker(){
+  const currentIso = document.getElementById('iEntryDate').value || todayISO();
+  const cur = new Date(currentIso);
+  let pickYear = cur.getFullYear();
+  let pickMonth = cur.getMonth();
+  const selectedKey = cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dv2-modal-overlay';
+  overlay.id = 'datePickerOverlay';
+  overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+
+  function buildCalHtml(){
+    const days = ['일','월','화','수','목','금','토'];
+    const first = new Date(pickYear, pickMonth, 1);
+    const last  = new Date(pickYear, pickMonth+1, 0);
+    const startDow = first.getDay();
+    let cells = '';
+    for(let i=0;i<startDow;i++) cells += '<div class="cal-cell empty"></div>';
+    for(let d=1; d<=last.getDate(); d++){
+      const date = new Date(pickYear, pickMonth, d);
+      const key = date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+      const dow = date.getDay();
+      const isFuture = date > new Date(new Date().setHours(23,59,59,999));
+      const classes = ['cal-cell'];
+      if(key === selectedKey) classes.push('selected');
+      if(dow===0) classes.push('sunday');
+      if(dow===6) classes.push('saturday');
+      if(isFuture) classes.push('empty');
+      cells += `<div class="${classes.join(' ')}" ${isFuture?'':`onclick="pickDate(${pickYear},${pickMonth},${d})"`} style="${isFuture?'opacity:.3;cursor:default;':''}">
+        <span class="cal-num">${d}</span>
+      </div>`;
+    }
+    return cells;
+  }
+
+  overlay.innerHTML = `
+    <div class="dv2-modal-box" style="max-height:70vh;">
+      <div class="dv2-modal-handle"></div>
+      <div class="dv2-modal-nav">
+        <span class="dv2-modal-title">작성 날짜 선택</span>
+        <button class="dv2-modal-close" onclick="document.getElementById('datePickerOverlay').remove()">×</button>
+      </div>
+      <div class="dv2-modal-scroll">
+        <div class="cal-nav">
+          <button class="cal-arrow" onclick="dpMove(-1)">‹</button>
+          <span class="cal-title" id="dpTitle">${pickYear}년 ${pickMonth+1}월</span>
+          <button class="cal-arrow" onclick="dpMove(1)">›</button>
+        </div>
+        <div class="cal-dow">
+          <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+        </div>
+        <div class="cal-grid" id="dpGrid" style="--dp-aspect:1;">${buildCalHtml()}</div>
+        <button onclick="pickDateToday()" style="width:100%;margin-top:14px;padding:12px;background:var(--g2);color:var(--g0);border:0.5px solid var(--g3);border-radius:var(--r12);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">오늘로 되돌리기</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  window._dpState = { pickYear, pickMonth, selectedKey, buildCalHtml };
+  window.dpMove = function(dir){
+    window._dpState.pickMonth += dir;
+    if(window._dpState.pickMonth > 11){ window._dpState.pickMonth=0; window._dpState.pickYear++; }
+    if(window._dpState.pickMonth < 0){ window._dpState.pickMonth=11; window._dpState.pickYear--; }
+    pickYear = window._dpState.pickYear;
+    pickMonth = window._dpState.pickMonth;
+    document.getElementById('dpTitle').textContent = pickYear+'년 '+(pickMonth+1)+'월';
+    document.getElementById('dpGrid').innerHTML = buildCalHtml();
+  };
+}
+
+function pickDate(year, month, day){
+  const d = new Date(year, month, day, 12, 0, 0);
+  setEntryDate(d.toISOString());
+  const el = document.getElementById('datePickerOverlay');
+  if(el) el.remove();
+}
+
+function pickDateToday(){
+  setEntryDate(todayISO());
+  const el = document.getElementById('datePickerOverlay');
+  if(el) el.remove();
 }
 
 /* ═══════════════════════════════════════
@@ -2214,6 +2332,7 @@ async function saveJournal(){
   if(!currentMember) return;
   const hist = await getMemberHistory(currentMember.id);
   const bw=70; // 추후 입력 추가 가능
+  const entryDateIso = document.getElementById('iEntryDate').value || todayISO();
 
   const exData = exercises.map(ex=>({
     name:ex.name,
@@ -2230,6 +2349,8 @@ async function saveJournal(){
     const old = hist[editingEntryIdx];
     hist[editingEntryIdx] = {
       ...old,
+      date: getShortDate(entryDateIso),
+      dateTime: entryDateIso,
       parts:[...selectedParts],
       exercises: exData,
       intensity:parseInt(document.getElementById('iIntensity').value)||70,
@@ -2242,8 +2363,8 @@ async function saveJournal(){
   } else {
     const entry={
       id:'e_'+Date.now(),
-      date:getShortDate(),
-      dateTime:new Date().toISOString(),
+      date:getShortDate(entryDateIso),
+      dateTime:entryDateIso,
       bw,
       parts:[...selectedParts],
       exercises: exData,
@@ -2255,6 +2376,8 @@ async function saveJournal(){
       cheer:document.getElementById('iCheer').value.trim(),
     };
     hist.push(entry);
+    // 날짜순 정렬 (과거 날짜로 추가했을 수 있으므로)
+    hist.sort((a,b) => new Date(a.dateTime||a.date) - new Date(b.dateTime||b.date));
   }
 
   await saveMemberHistory(currentMember.id, hist);
@@ -2339,13 +2462,13 @@ async function renderHistory(){
 /* ═══════════════════════════════════════
    TEXT BUILD
 ═══════════════════════════════════════ */
-function getToday(){
-  const d=new Date();
+function getToday(dateInput){
+  const d = dateInput ? new Date(dateInput) : new Date();
   const days=['일','월','화','수','목','금','토'];
   return `${d.getMonth()+1}월 ${d.getDate()}일 ${days[d.getDay()]}요일`;
 }
-function getShortDate(){
-  const d=new Date();
+function getShortDate(dateInput){
+  const d = dateInput ? new Date(dateInput) : new Date();
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
 }
 
@@ -2369,7 +2492,7 @@ async function buildText(){
   const intensityDesc=intensityLevel(intensity).desc;
 
   const L=[];
-  L.push(`🏋️ ${member} 회원님  ${getToday()}`);
+  L.push(`🏋️ ${member} 회원님  ${getToday(document.getElementById('iEntryDate').value)}`);
   L.push(`${session}회차${partStr?'  |  '+partStr:''}`);
   L.push('');
 
