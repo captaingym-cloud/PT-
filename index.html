@@ -2384,11 +2384,8 @@ async function saveJournal(){
   }
 }
 
-async function saveAndCopy(){
+function saveAndCopy(){
   const wasEdit = editingEntryIdx !== null && editingEntryIdx !== undefined;
-  await saveJournal();
-
-  const text = await buildText();
   const btn = document.getElementById('copyBtn');
 
   function markDone(){
@@ -2400,7 +2397,7 @@ async function saveAndCopy(){
       btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 저장하고 복사하기';
     },2000);
   }
-  function fallback(){
+  function fallback(text){
     const ta=document.createElement('textarea');
     ta.value=text;ta.style.cssText='position:fixed;top:0;left:0;width:2em;height:2em;opacity:0;';
     document.body.appendChild(ta);ta.focus();ta.select();
@@ -2408,13 +2405,33 @@ async function saveAndCopy(){
     catch(e){ showModal(text); }
     document.body.removeChild(ta);
   }
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(markDone).catch(fallback);
-  } else { fallback(); }
 
-  if(wasEdit){
-    goBack();
+  // iOS Safari는 클릭 이벤트 핸들러 안에서 동기적으로 호출해야
+  // 클립보드 권한이 허용됨. await로 텀이 생기면 차단됨.
+  // → navigator.clipboard.write(ClipboardItem)으로 Promise 안의 텍스트도 즉시 등록.
+  if(navigator.clipboard && window.ClipboardItem){
+    const textPromise = buildText(); // Promise<string>
+    const item = new ClipboardItem({
+      'text/plain': textPromise.then(t => new Blob([t], {type:'text/plain'}))
+    });
+    navigator.clipboard.write([item]).then(markDone).catch(async () => {
+      const text = await textPromise;
+      fallback(text);
+    });
+  } else {
+    buildText().then(text => {
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(markDone).catch(()=>fallback(text));
+      } else {
+        fallback(text);
+      }
+    });
   }
+
+  // 저장은 복사와 별개로 백그라운드에서 진행
+  saveJournal().then(() => {
+    if(wasEdit) goBack();
+  });
 }
 
 /* ═══════════════════════════════════════
