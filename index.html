@@ -2811,24 +2811,26 @@ async function buildText(){
 
   const L=[];
 
-  // ── 헤더 ──
-  L.push(`🏋️ ${member} 회원님  ${dateStr}`);
-  L.push(`${session}번째 수업${partStr?'  |  '+partStr:''}`);
-  L.push('');
-
   // ── 편지 ──
   if(letter){
     letter.split('\n').forEach(line=>L.push(line));
     L.push('');
+    L.push(`— 트레이너 ${trainer}`);
+    L.push('');
   }
+
+  // ── 헤더 ──
+  L.push(`🏋️ ${member} 회원님  ${dateStr}`);
+  L.push(`✅ ${session}번째 수업${partStr?'  |  '+partStr:''}`);
+  L.push('');
 
   // ── 구분선 + 요약 ──
   L.push('──────────────────────');
-  if(grandMaxW) L.push(`최고 무게  ${grandMaxW}kg`);
-  if(grandVol>0) L.push(`총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
-  if(bwTotalReps>0) L.push(`맨몸 운동  총 ${bwTotalReps}개`);
-  L.push(`소모 칼로리  약 ${cal.toLocaleString()}kcal`);
-  L.push(`운동 강도  ${intensity}점  ${intensityDesc}`);
+  if(grandMaxW) L.push(`🔝 최고 무게  ${grandMaxW}kg`);
+  if(grandVol>0) L.push(`📊 총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
+  if(bwTotalReps>0) L.push(`🤸 맨몸 운동  총 ${bwTotalReps}개`);
+  L.push(`🔥 소모 칼로리  약 ${cal.toLocaleString()}kcal`);
+  L.push(`💥 운동 강도  ${intensity}점  ${intensityDesc}`);
   L.push('');
 
   // ── 종목별 ──
@@ -2839,7 +2841,7 @@ async function buildText(){
     const isPR=!bwEx&&ex.prevMaxW>0&&mw>ex.prevMaxW;
     const diff=vol-(ex.prevVol||0);
     const pct=!bwEx&&ex.prevVol?Math.round((diff/ex.prevVol)*100):null;
-    L.push(`📌 ${ex.name||'종목'}${isPR?'  🏅 신기록':''}`);
+    L.push(`💪 ${ex.name||'종목'}${isPR?'  🏅 신기록':''}`);
     if(bwEx){
       ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.r}개`));
       L.push(`   총 ${totalReps}개`);
@@ -2847,15 +2849,13 @@ async function buildText(){
       ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.w}kg × ${st.r}회`));
       L.push(`   최고 ${mw}kg  볼륨 ${vol.toLocaleString()}kg${pct!==null?`  (${diff>=0?'+':''}${pct}%)`:''}`);
     }
-    // 코멘트 — 엔터 그대로 유지
     if((ex.comment||'').trim()){
       L.push('');
-      ex.comment.trim().split('\n').forEach(line=>L.push(`   ${line}`));
+      ex.comment.trim().split('\n').forEach(line=>L.push(`   💬 ${line}`));
     }
     L.push('');
   });
 
-  L.push(`트레이너  ${trainer}`);
   return L.join('\n');
 }
 
@@ -2892,23 +2892,25 @@ async function doCopyEntry(idx){
 
   const L=[];
 
-  // ── 헤더 ──
-  L.push('🏋️ '+currentMember.name+'님  '+dateStr);
-  L.push(session+'번째 수업'+(partStr?'  |  '+partStr:''));
-  L.push('');
-
   // ── 편지 ──
   if((letterText||'').trim()){
     letterText.trim().split('\n').forEach(line=>L.push(line));
     L.push('');
+    L.push('— 트레이너 '+trainer);
+    L.push('');
   }
+
+  // ── 헤더 ──
+  L.push('🏋️ '+currentMember.name+'님  '+dateStr);
+  L.push('✅ '+session+'번째 수업'+(partStr?'  |  '+partStr:''));
+  L.push('');
 
   // ── 구분선 + 요약 ──
   L.push('──────────────────────');
-  if(grandMaxW) L.push('최고 무게  '+grandMaxW+'kg');
-  if(grandVol>0) L.push('총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
-  if(bwTotalReps>0) L.push('맨몸 운동  총 '+bwTotalReps+'개');
-  L.push('운동 강도  '+iv+'점  '+iDesc(iv));
+  if(grandMaxW) L.push('🔝 최고 무게  '+grandMaxW+'kg');
+  if(grandVol>0) L.push('📊 총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
+  if(bwTotalReps>0) L.push('🤸 맨몸 운동  총 '+bwTotalReps+'개');
+  L.push('🔥 운동 강도  '+iv+'점  '+iDesc(iv));
   L.push('');
 
   // ── 종목별 ──
@@ -2918,7 +2920,7 @@ async function doCopyEntry(idx){
     const diff=ex.vol-(ex.prevVol||0);
     const pct=!bwEx&&ex.prevVol?Math.round((diff/ex.prevVol)*100):null;
     const isPR=!bwEx&&ex.prevMaxW>0&&ex.maxW>ex.prevMaxW;
-    L.push('📌 '+ex.name+(isPR?'  🏅 신기록':''));
+    L.push('💪 '+ex.name+(isPR?'  🏅 신기록':''));
     if(bwEx){
       (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+st.r+'개'));
       L.push('   총 '+totalReps+'개');
@@ -2928,12 +2930,13 @@ async function doCopyEntry(idx){
     }
     if((ex.comment||'').trim()){
       L.push('');
-      ex.comment.trim().split('\n').forEach(line=>L.push('   '+line));
+      ex.comment.trim().split('\n').forEach(line=>L.push('   💬 '+line));
     }
     L.push('');
   });
 
-  L.push('트레이너  '+trainer);
+  // 편지 없을 때만 끝에 트레이너 표시
+  if(!(letterText||'').trim()) L.push('트레이너  '+trainer);
   const text=L.join('\n');
   const btn=document.querySelector('.detail-copy-btn');
   function markDone(){
