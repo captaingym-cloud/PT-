@@ -626,9 +626,9 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         입력
       </button>
-      <button class="nav-tab" id="tab-preview" onclick="switchTab('preview');renderPreview();">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        미리보기
+      <button class="nav-tab" id="tab-memo" onclick="switchTab('memo');renderMemoTab();">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5"/><path d="M17.5 2.5a2.121 2.121 0 013 3L12 14l-4 1 1-4 8.5-8.5z"/></svg>
+        회원 메모
       </button>
     </div>
   </nav>
@@ -701,9 +701,15 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     </div>
   </div>
 
-  <!-- 미리보기 탭 -->
-  <div class="page" id="page-preview">
-    <div class="preview-wrap"><div class="preview-text" id="previewText"></div></div>
+  <!-- 회원 메모 탭 -->
+  <div class="page" id="page-memo">
+    <div style="padding-bottom:100px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="eyebrow" style="margin:0;">회원 메모</div>
+        <button onclick="openAddMemo()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">+ 메모 추가</button>
+      </div>
+      <div id="memoList"></div>
+    </div>
   </div>
 
   <div class="bottom-btns">
@@ -830,13 +836,28 @@ async function saveDietData(mid,d){
   cacheSet(k,d);
   await fsSet('data', k, d);
 }
+async function getMemos(mid){
+  if(!TRAINER_ID) return [];
+  const k = 'memo_'+TRAINER_ID+'_'+mid;
+  if(cacheGet(k)!==null) return cacheGet(k);
+  const v = await fsGet('data', k) || [];
+  cacheSet(k,v); return v;
+}
+async function saveMemos(mid,arr){
+  if(!TRAINER_ID) return;
+  const k = 'memo_'+TRAINER_ID+'_'+mid;
+  cacheSet(k,arr);
+  await fsSet('data', k, arr);
+}
 async function delMemberData(mid){
   if(!TRAINER_ID) return;
   const hk = 'hist_'+TRAINER_ID+'_'+mid;
   const dk = 'diet_'+TRAINER_ID+'_'+mid;
-  cache[hk]=[]; cache[dk]={};
+  const mk = 'memo_'+TRAINER_ID+'_'+mid;
+  cache[hk]=[]; cache[dk]={}; cache[mk]=[];
   await fsDel('data', hk);
   await fsDel('data', dk);
+  await fsDel('data', mk);
 }
 
 
@@ -1067,6 +1088,109 @@ function calMove(dir){
   calSelected = null;
   document.getElementById('calSelectedEntries').style.display = 'none';
   renderCalendar();
+}
+
+/* ═══════════════════════════════════════
+   회원 메모
+═══════════════════════════════════════ */
+async function renderMemoTab(){
+  if(!currentMember) return;
+  const memos = await getMemos(currentMember.id);
+  const container = document.getElementById('memoList');
+  if(!container) return;
+
+  if(memos.length === 0){
+    container.innerHTML = `<div class="empty-state"><div class="e-icon">📝</div><div class="e-text">아직 메모가 없어요<br>수업 중 특이사항을 기록해보세요</div></div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  [...memos].reverse().forEach((m, ri) => {
+    const realIdx = memos.length - 1 - ri;
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;margin-bottom:8px;';
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:11px;font-weight:600;color:var(--t3);">${m.date}</span>
+        <div style="display:flex;gap:8px;">
+          <button onclick="editMemo(${realIdx})" style="font-size:11px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;">수정</button>
+          <button onclick="deleteMemo(${realIdx})" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;">삭제</button>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--t);line-height:1.7;white-space:pre-wrap;">${m.content}</div>`;
+    container.appendChild(card);
+  });
+}
+
+function openAddMemo(){
+  const overlay = document.createElement('div');
+  overlay.className = 'dv2-modal-overlay';
+  overlay.id = 'memoModalOverlay';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="dv2-modal-box">
+      <div class="dv2-modal-handle"></div>
+      <div class="dv2-modal-nav">
+        <span class="dv2-modal-title">메모 추가</span>
+        <button class="dv2-modal-close" onclick="document.getElementById('memoModalOverlay').remove()">×</button>
+      </div>
+      <div class="dv2-modal-scroll">
+        <textarea id="memoContent" rows="6" placeholder="특이사항, 수업 중 대화 내용, 목표 등 자유롭게 기록하세요"
+          style="width:100%;font-size:16px;border:0.5px solid var(--bd2);border-radius:var(--r12);padding:12px 14px;background:var(--sf2);color:var(--t);outline:none;resize:none;font-family:inherit;line-height:1.6;"></textarea>
+        <button onclick="saveMemoEntry(null)" style="width:100%;margin-top:10px;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;">저장</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>document.getElementById('memoContent').focus(), 100);
+}
+
+async function editMemo(idx){
+  const memos = await getMemos(currentMember.id);
+  const m = memos[idx];
+  if(!m) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dv2-modal-overlay';
+  overlay.id = 'memoModalOverlay';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="dv2-modal-box">
+      <div class="dv2-modal-handle"></div>
+      <div class="dv2-modal-nav">
+        <span class="dv2-modal-title">메모 수정</span>
+        <button class="dv2-modal-close" onclick="document.getElementById('memoModalOverlay').remove()">×</button>
+      </div>
+      <div class="dv2-modal-scroll">
+        <textarea id="memoContent" rows="6"
+          style="width:100%;font-size:16px;border:0.5px solid var(--bd2);border-radius:var(--r12);padding:12px 14px;background:var(--sf2);color:var(--t);outline:none;resize:none;font-family:inherit;line-height:1.6;">${m.content}</textarea>
+        <button onclick="saveMemoEntry(${idx})" style="width:100%;margin-top:10px;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;">수정 완료</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>document.getElementById('memoContent').focus(), 100);
+}
+
+async function saveMemoEntry(editIdx){
+  const content = (document.getElementById('memoContent').value || '').trim();
+  if(!content) return;
+  const memos = await getMemos(currentMember.id);
+  if(editIdx !== null && editIdx !== undefined){
+    memos[editIdx].content = content;
+  } else {
+    memos.push({ id:'m_'+Date.now(), date:getShortDate(), dateTime:new Date().toISOString(), content });
+  }
+  await saveMemos(currentMember.id, memos);
+  const el = document.getElementById('memoModalOverlay');
+  if(el) el.remove();
+  renderMemoTab();
+}
+
+async function deleteMemo(idx){
+  if(!confirm('이 메모를 삭제할까요?')) return;
+  const memos = await getMemos(currentMember.id);
+  memos.splice(idx, 1);
+  await saveMemos(currentMember.id, memos);
+  renderMemoTab();
 }
 
 function switchMemberTab(t){
@@ -1577,17 +1701,31 @@ function buildJournalCard(e, realIdx){
   const day   = isNaN(d) ? e.date : d.getDate();
   const dow   = isNaN(d) ? '' : ['일','월','화','수','목','금','토'][d.getDay()];
 
-  const grandVol  = (e.exercises||[]).reduce((s,ex)=>s+ex.vol,0);
-  const grandMaxW = (e.exercises||[]).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
+  const grandVol  = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+ex.vol,0);
+  const grandMaxW = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
   const partTags  = (e.parts||[]).map(p=>'<span class="je-part-tag">'+p+'</span>').join('');
 
   const exBlock = (e.exercises||[]).map(ex => {
-    const setStr = (ex.sets||[]).map(st => st.w+'kg × '+st.r+'개').join(',  ');
+    const bwEx = isBodyweight(ex);
+    const totalReps = (ex.sets||[]).reduce((s,st)=>s+st.r,0);
+    const setStr = bwEx
+      ? (ex.sets||[]).map(st=>st.r+'개').join(',  ')
+      : (ex.sets||[]).map(st=>st.w+'kg × '+st.r+'개').join(',  ');
     return '<div style="margin-bottom:6px;">'
       +'<span style="font-size:13px;font-weight:600;color:var(--t);">'+ex.name+'</span>'
       +'<div style="font-size:12px;color:var(--t2);margin-top:2px;line-height:1.7;">'+setStr+'</div>'
       +'</div>';
   }).join('');
+
+  const statsHtml = grandVol > 0
+    ? '<span>총 볼륨 <strong>'+grandVol.toLocaleString()+'kg</strong></span>'
+      +'<span>최대 <strong>'+grandMaxW+'kg</strong></span>'
+    : '';
+  const bwExs = (e.exercises||[]).filter(ex=>isBodyweight(ex));
+  const bwTotal = bwExs.reduce((s,ex)=>(ex.sets||[]).reduce((a,st)=>a+st.r,0)+s, 0);
+  const bwHtml = bwExs.length
+    ? '<span>총 <strong>'+bwTotal+'개</strong></span>'
+    : '';
 
   const card = document.createElement('div');
   card.className = 'journal-entry-card';
@@ -1600,17 +1738,15 @@ function buildJournalCard(e, realIdx){
         +'<div style="font-size:9px;color:var(--g1);margin-top:1px;">'+dow+'</div>'
       +'</div>'
       +'<div class="je-meta">'
-        +'<div class="je-session">'+(e.session||e.streak)+'회차'+(e.streak?' · 연속 '+e.streak+'회':'')+'</div>'
+        +'<div class="je-session">'+(e.session||e.streak)+'회차'+'</div>'
         +'<div class="je-parts" style="margin-top:4px;">'+(partTags||'<span style="font-size:11px;color:var(--t3);">부위 미입력</span>')+'</div>'
       +'</div>'
     +'</div>'
     +'<div style="margin:10px 0 10px;">'+(exBlock||'<span style="font-size:13px;color:var(--t3);">종목 없음</span>')+'</div>'
     +'<div class="je-stats">'
-      +'<span>총 볼륨 <strong>'+grandVol.toLocaleString()+'kg</strong></span>'
-      +'<span>최대 <strong>'+grandMaxW+'kg</strong></span>'
+      +statsHtml+bwHtml
       +'<span>강도 <strong style="color:'+journalIColor(e.intensity||70)+'">'+( e.intensity||'—')+'점</strong></span>'
-    +'</div>'
-    +(e.note?'<div class="je-note">'+e.note+'</div>':'');
+    +'</div>';
 
   card.onclick = () => openDetailModal(e, realIdx);
   return card;
@@ -1921,7 +2057,7 @@ function goBack(){
    TABS
 ═══════════════════════════════════════ */
 function switchTab(t){
-  ['input','preview'].forEach(id => {
+  ['input','memo'].forEach(id => {
     document.getElementById('tab-'+id).classList.toggle('active', id===t);
     document.getElementById('page-'+id).classList.toggle('active', id===t);
   });
@@ -2080,6 +2216,9 @@ function updateIntensity(v){
 ═══════════════════════════════════════ */
 function exVol(ex){return ex.sets.reduce((s,st)=>s+st.w*st.r,0);}
 function exMaxW(ex){return ex.sets.length?Math.max(...ex.sets.map(st=>st.w)):0;}
+// 전 세트 무게가 0이면 맨몸운동으로 간주
+function isBodyweight(ex){ return ex.sets.length>0 && ex.sets.every(st=>Number(st.w)===0); }
+function exTotalReps(ex){ return ex.sets.reduce((s,st)=>s+st.r,0); }
 
 function recalcAll(){
   // 지난 기록에서 prev 자동 반영
@@ -2111,13 +2250,21 @@ function recalcAll(){
 function updateExFooter(ei){
   const ex=exercises[ei];
   if(!ex) return;
+  const bw=isBodyweight(ex);
   const vol=exVol(ex),mw=exMaxW(ex);
+  const totalReps=exTotalReps(ex);
   const chip=document.getElementById('chip-'+ei);
   const badge=document.getElementById('badge-'+ei);
   const setsum=document.getElementById('setsum-'+ei);
 
-  if(chip) chip.innerHTML=`볼륨 <strong>${vol.toLocaleString()}kg</strong>　최고 <strong>${mw}kg</strong>`;
-  if(badge) badge.style.display=(ex.prevMaxW>0&&mw>ex.prevMaxW)?'inline-block':'none';
+  if(chip){
+    if(bw){
+      chip.innerHTML=`총 <strong>${totalReps}개</strong>`;
+    } else {
+      chip.innerHTML=`총 볼륨 <strong>${vol.toLocaleString()}kg</strong>　최고 <strong>${mw}kg</strong>`;
+    }
+  }
+  if(badge) badge.style.display=(!bw&&ex.prevMaxW>0&&mw>ex.prevMaxW)?'inline-block':'none';
 
   // 세트 요약 칩
   if(setsum){
@@ -2125,8 +2272,8 @@ function updateExFooter(ei){
       setsum.innerHTML='';
     } else {
       setsum.innerHTML=ex.sets.map((st,si)=>{
-        const filled=st.w>0&&st.r>0;
-        const label=filled?`${st.w}kg×${st.r}`:`S${si+1}`;
+        const filled = bw ? st.r>0 : (st.w>0&&st.r>0);
+        const label  = bw ? (st.r?`${st.r}개`:`S${si+1}`) : (filled?`${st.w}kg×${st.r}`:`S${si+1}`);
         return `<span class="ex-set-chip${filled?' filled':''}">${label}</span>`;
       }).join('');
     }
@@ -2134,7 +2281,10 @@ function updateExFooter(ei){
 
   ex.sets.forEach((_,si)=>{
     const el=document.getElementById(`rv-${ei}-${si}`);
-    if(el) el.textContent=(ex.sets[si].w&&ex.sets[si].r)?(ex.sets[si].w*ex.sets[si].r).toLocaleString()+'kg':'';
+    if(el){
+      if(bw) el.textContent='';
+      else el.textContent=(ex.sets[si].w&&ex.sets[si].r)?(ex.sets[si].w*ex.sets[si].r).toLocaleString()+'kg':'';
+    }
   });
 }
 
@@ -2326,12 +2476,12 @@ function renderExCards(){
       <div class="sets-area" id="sets-${ei}"></div>
       <div class="ex-sets-summary" id="setsum-${ei}"></div>
       <div class="ex-footer">
-        <span class="ex-summary" id="chip-${ei}">볼륨 <strong>0kg</strong></span>
+        <span class="ex-summary" id="chip-${ei}">총 볼륨 <strong>0kg</strong></span>
         <span class="pr-badge" id="badge-${ei}">✦ 신기록</span>
         <button class="add-set-btn" onclick="addSet(${ei})">+ 세트</button>
       </div>
       <div class="ex-comment-row">
-        <textarea class="ex-comment-inp" rows="1" placeholder="이 종목에 대한 코멘트 (선택)"
+        <textarea class="ex-comment-inp" rows="1" placeholder="이 종목에 대한 코멘트"
           oninput="exercises[${ei}].comment=this.value;autoGrow(this);">${ex.comment||''}</textarea>
       </div>`;
     container.appendChild(card);
@@ -2550,8 +2700,8 @@ async function buildText(){
   const intensity=parseInt(document.getElementById('iIntensity').value)||70;
   const letter=document.getElementById('iLetter').value.trim();
 
-  const grandVol=exercises.reduce((s,ex)=>s+exVol(ex),0);
-  const grandPrev=exercises.reduce((s,ex)=>s+(ex.prevVol||0),0);
+  const grandVol=exercises.filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+exVol(ex),0);
+  const grandPrev=exercises.filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
   const bw=70;
   const totalSets=exercises.reduce((s,ex)=>s+ex.sets.length,0);
   const cal=Math.round(bw*0.088*totalSets*2.5);
@@ -2566,21 +2716,29 @@ async function buildText(){
   L.push('');
 
   exercises.forEach((ex,ei)=>{
+    const bwEx=isBodyweight(ex);
     const vol=exVol(ex),mw=exMaxW(ex);
-    const isPR=ex.prevMaxW>0&&mw>ex.prevMaxW;
+    const totalReps=exTotalReps(ex);
+    const isPR=!bwEx&&ex.prevMaxW>0&&mw>ex.prevMaxW;
     const diff=vol-(ex.prevVol||0);
-    const pct=ex.prevVol?Math.round((diff/ex.prevVol)*100):null;
+    const pct=!bwEx&&ex.prevVol?Math.round((diff/ex.prevVol)*100):null;
     L.push(`📌 ${ex.name||'종목'}${isPR?'  🏅 신기록':''}`);
-    ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.w}kg × ${st.r}회`));
-    L.push('');
-    L.push(`   볼륨  ${vol.toLocaleString()}kg${pct!==null?`  (지난 대비 ${diff>=0?'+':''}${pct}%)`:''}` );
-    if(ex.prevMaxW) L.push(`   최고 무게  ${mw}kg${mw!==ex.prevMaxW?`  (이전 ${ex.prevMaxW}kg)`:''}`);
+    if(bwEx){
+      ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.r}개`));
+      L.push('');
+      L.push(`   총 ${totalReps}개`);
+    } else {
+      ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.w}kg × ${st.r}회`));
+      L.push('');
+      L.push(`   총 볼륨  ${vol.toLocaleString()}kg${pct!==null?`  (지난 대비 ${diff>=0?'+':''}${pct}%)`:''}` );
+      if(mw) L.push(`   최고 무게  ${mw}kg${ex.prevMaxW&&mw!==ex.prevMaxW?`  (이전 ${ex.prevMaxW}kg)`:''}`);
+    }
     if((ex.comment||'').trim()){ L.push(''); L.push(`   💬 ${ex.comment.trim()}`); }
     L.push('');
   });
 
   L.push('──────────────────────');
-  L.push(`📊 총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
+  if(grandVol>0) L.push(`📊 총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
   L.push(`🔥 소모 칼로리  약 ${cal.toLocaleString()}kcal`);
   L.push(`💥 운동 강도  ${intensity}점 / 100점   ${intensityDesc}`);
 
@@ -2610,8 +2768,8 @@ async function doCopyEntry(idx){
   const dateStr = isNaN(d) ? e.date : (d.getMonth()+1)+'월 '+d.getDate()+'일 '+days[d.getDay()]+'요일';
   const iDesc = v=>{if(v<=20)return '아주 가볍게';if(v<=40)return '워밍업 수준';if(v<=60)return '적당히 땀 흘림';if(v<=75)return '꽤 열심히';if(v<=88)return '많이 힘들었음';return '한계까지';};
   const iv=e.intensity||70;
-  const grandVol=(e.exercises||[]).reduce((s,ex)=>s+ex.vol,0);
-  const grandPrev=(e.exercises||[]).reduce((s,ex)=>s+(ex.prevVol||0),0);
+  const grandVol=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+ex.vol,0);
+  const grandPrev=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
   const volDiff=grandVol-grandPrev;
   const volPct=grandPrev?Math.round((volDiff/grandPrev)*100):null;
   const partStr=(e.parts||[]).join('  ');
@@ -2619,19 +2777,27 @@ async function doCopyEntry(idx){
   L.push('🏋️ '+currentMember.name+' 회원님  '+dateStr);
   L.push((e.session||e.streak)+'회차'+(partStr?'  |  '+partStr:''));L.push('');
   (e.exercises||[]).forEach(ex=>{
+    const bwEx=isBodyweight(ex);
+    const totalReps=(ex.sets||[]).reduce((s,st)=>s+st.r,0);
     const diff=ex.vol-(ex.prevVol||0);
-    const pct=ex.prevVol?Math.round((diff/ex.prevVol)*100):null;
-    const isPR=ex.prevMaxW>0&&ex.maxW>ex.prevMaxW;
+    const pct=!bwEx&&ex.prevVol?Math.round((diff/ex.prevVol)*100):null;
+    const isPR=!bwEx&&ex.prevMaxW>0&&ex.maxW>ex.prevMaxW;
     L.push('📌 '+ex.name+(isPR?'  🏅 신기록':''));
-    (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+st.w+'kg × '+st.r+'회'));
-    L.push('');
-    L.push('   볼륨  '+ex.vol.toLocaleString()+'kg'+(pct!==null?'  (지난 대비 '+(diff>=0?'+':'')+pct+'%)':''));
-    if(ex.prevMaxW) L.push('   최고 무게  '+ex.maxW+'kg'+(ex.maxW!==ex.prevMaxW?'  (이전 '+ex.prevMaxW+'kg)':''));
+    if(bwEx){
+      (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+st.r+'개'));
+      L.push('');
+      L.push('   총 '+totalReps+'개');
+    } else {
+      (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+st.w+'kg × '+st.r+'회'));
+      L.push('');
+      L.push('   총 볼륨  '+ex.vol.toLocaleString()+'kg'+(pct!==null?'  (지난 대비 '+(diff>=0?'+':'')+pct+'%)':''));
+      if(ex.maxW) L.push('   최고 무게  '+ex.maxW+'kg'+(ex.prevMaxW&&ex.maxW!==ex.prevMaxW?'  (이전 '+ex.prevMaxW+'kg)':''));
+    }
     if((ex.comment||'').trim()){ L.push(''); L.push('   💬 '+ex.comment.trim()); }
     L.push('');
   });
   L.push('──────────────────────');
-  L.push('📊 총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
+  if(grandVol>0) L.push('📊 총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
   L.push('💥 운동 강도  '+iv+'점 / 100점   '+iDesc(iv));
   let letterText = e.letter;
   if(letterText === undefined){
