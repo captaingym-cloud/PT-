@@ -545,6 +545,22 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 
       <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
         <div>
+          <div style="font-size:13px;font-weight:500;color:var(--t);">데이터 새로고침</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px;">다른 기기에서 저장한 내용 불러오기</div>
+        </div>
+        <button onclick="refreshData()" style="font-size:12px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">새로고침</button>
+      </div>
+
+      <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--t);">로그아웃</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px;">다른 계정으로 전환할 때</div>
+        </div>
+        <button onclick="doLogout()" style="font-size:12px;color:var(--t2);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">로그아웃</button>
+      </div>
+
+      <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
+        <div>
           <div style="font-size:13px;font-weight:500;color:var(--t);">트레이너 이름 변경</div>
           <div style="font-size:11px;color:var(--t3);margin-top:2px;" id="currentTrainerLabel"></div>
         </div>
@@ -1965,6 +1981,24 @@ async function openSettings(){
   const trainer = await getTrainer()||'';
   document.getElementById('currentTrainerLabel').textContent = '현재: ' + trainer;
   document.getElementById('modal-settings').style.display = 'flex';
+}
+
+async function refreshData(){
+  closeModal('modal-settings');
+  // 메모리 캐시 전체 초기화 → 다음 접근 시 Firestore에서 새로 불러옴
+  Object.keys(cache).forEach(k => delete cache[k]);
+  await renderMemberList();
+}
+
+function doLogout(){
+  closeModal('modal-settings');
+  localStorage.removeItem('trainer_name');
+  localStorage.removeItem('trainer_pin');
+  TRAINER_ID = null;
+  Object.keys(cache).forEach(k => delete cache[k]);
+  showScreen('screen-setup');
+  document.getElementById('setupName').value = '';
+  document.getElementById('setupPin').value = '';
 }
 
 async function openRenameTrainer(){
