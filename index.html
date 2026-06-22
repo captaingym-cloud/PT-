@@ -899,6 +899,11 @@ const INTENSITY_LEVELS = [
    INIT
 ═══════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', async function(){
+  // 앱 시작할 때마다 캐시 초기화 → Firestore에서 최신 데이터 불러옴
+  Object.keys(cache).forEach(k => delete cache[k]);
+  // 앱 시작 시 캐시 초기화 → Firestore에서 항상 최신 데이터 로드
+  Object.keys(cache).forEach(k => delete cache[k]);
+
   const trainer = await getTrainer();
   if(trainer){
     showScreen('screen-members');
@@ -1089,8 +1094,42 @@ function calSelectDate(key, d){
     list.innerHTML = '<div style="font-size:13px;color:var(--t3);padding:8px 0;">이날 수업 기록이 없어요</div>';
   } else {
     list.innerHTML = '';
-    items.forEach(({entry, realIdx}) => {
-      list.appendChild(buildJournalCard(entry, realIdx));
+    items.forEach(({entry: e, realIdx}) => {
+      const partTags = (e.parts||[]).map(p=>`<span class="je-part-tag">${p}</span>`).join('');
+      const exLines = (e.exercises||[]).map(ex => {
+        const bwEx = isBodyweight(ex);
+        const totalReps = (ex.sets||[]).reduce((s,st)=>s+st.r,0);
+        const setStr = bwEx
+          ? `총 ${totalReps}개`
+          : `최고 ${ex.maxW||0}kg · 볼륨 ${(ex.vol||0).toLocaleString()}kg`;
+        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--bd);font-size:13px;">
+          <span style="font-weight:500;color:var(--t);">${ex.name}</span>
+          <span style="color:var(--t2);">${setStr}</span>
+        </div>`;
+      }).join('');
+
+      const grandVol = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+(ex.vol||0),0);
+      const grandMaxW = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
+      const bwTotal = (e.exercises||[]).filter(ex=>isBodyweight(ex)).reduce((s,ex)=>(ex.sets||[]).reduce((a,st)=>a+st.r,0)+s,0);
+
+      const card = document.createElement('div');
+      card.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);overflow:hidden;margin-bottom:10px;cursor:pointer;';
+      card.innerHTML = `
+        <div style="padding:12px 16px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:14px;font-weight:700;color:var(--g0);">${e.session||e.streak}회차</span>
+            <div>${partTags||'<span style="font-size:11px;color:var(--t3);">부위 미입력</span>'}</div>
+          </div>
+          <span style="font-size:11px;color:var(--t3);">강도 ${e.intensity||'—'}점</span>
+        </div>
+        <div style="padding:4px 16px 4px;">${exLines||'<div style="padding:10px 0;font-size:13px;color:var(--t3);">종목 없음</div>'}</div>
+        <div style="padding:10px 16px;display:flex;gap:14px;background:var(--sf2);">
+          ${grandMaxW ? `<span style="font-size:12px;color:var(--t2);">최고 <strong style="color:var(--t);">${grandMaxW}kg</strong></span>` : ''}
+          ${grandVol ? `<span style="font-size:12px;color:var(--t2);">총 볼륨 <strong style="color:var(--t);">${grandVol.toLocaleString()}kg</strong></span>` : ''}
+          ${bwTotal ? `<span style="font-size:12px;color:var(--t2);">맨몸 <strong style="color:var(--t);">${bwTotal}개</strong></span>` : ''}
+        </div>`;
+      card.onclick = () => openDetailModal(e, realIdx);
+      list.appendChild(card);
     });
   }
   sel.style.display = 'block';
@@ -1734,8 +1773,8 @@ function buildJournalCard(e, realIdx){
   }).join('');
 
   const statsHtml = grandVol > 0
-    ? '<span>총 볼륨 <strong>'+grandVol.toLocaleString()+'kg</strong></span>'
-      +'<span>최대 <strong>'+grandMaxW+'kg</strong></span>'
+    ? '<span>최고 <strong>'+grandMaxW+'kg</strong></span>'
+      +'<span>총 볼륨 <strong>'+grandVol.toLocaleString()+'kg</strong></span>'
     : '';
   const bwExs = (e.exercises||[]).filter(ex=>isBodyweight(ex));
   const bwTotal = bwExs.reduce((s,ex)=>(ex.sets||[]).reduce((a,st)=>a+st.r,0)+s, 0);
@@ -2295,7 +2334,7 @@ function updateExFooter(ei){
     if(bw){
       chip.innerHTML=`총 <strong>${totalReps}개</strong>`;
     } else {
-      chip.innerHTML=`총 볼륨 <strong>${vol.toLocaleString()}kg</strong>　최고 <strong>${mw}kg</strong>`;
+      chip.innerHTML=`최고 <strong>${mw}kg</strong>　총 볼륨 <strong>${vol.toLocaleString()}kg</strong>`;
     }
   }
   if(badge) badge.style.display=(!bw&&ex.prevMaxW>0&&mw>ex.prevMaxW)?'inline-block':'none';
@@ -2369,7 +2408,7 @@ function attachDial(el){
   const ei   = parseInt(el.dataset.ei);
   const si   = parseInt(el.dataset.si);
   const type = el.dataset.type; // 'w' or 'r'
-  const step = type==='w' ? 2.5 : 1;
+  const step = type==='w' ? 0.5 : 1;
   const min  = type==='w' ? 0 : 0;
   const max  = type==='w' ? 300 : 100;
   const unit = type==='w' ? 'kg' : '개';
@@ -2408,7 +2447,7 @@ function attachDial(el){
   el.addEventListener('touchmove', e=>{
     if(!dragging) return;
     const dy  = startY - e.touches[0].clientY; // 위로 올리면 +
-    const sens = type==='w' ? 6 : 8; // px per step
+    const sens = type==='w' ? 3 : 8; // px per step
     const delta = Math.round(dy / sens) * step;
     if(Math.abs(dy)>3) moved=true;
     setVal(startVal + delta);
@@ -2433,7 +2472,7 @@ function attachDial(el){
     function onMove(e){
       if(!dragging) return;
       const dy=startY-e.clientY;
-      const sens=type==='w'?6:8;
+      const sens=type==='w'?3:8;
       const delta=Math.round(dy/sens)*step;
       if(Math.abs(dy)>3) moved=true;
       setVal(startVal+delta);
@@ -2509,7 +2548,7 @@ function buildExCard(ei){
       <div class="sets-area" id="sets-${ei}"></div>
       <div class="ex-sets-summary" id="setsum-${ei}"></div>
       <div class="ex-footer">
-        <span class="ex-summary" id="chip-${ei}">총 볼륨 <strong>0kg</strong></span>
+        <span class="ex-summary" id="chip-${ei}">최고 <strong>0kg</strong>　총 볼륨 <strong>0kg</strong></span>
         <span class="pr-badge" id="badge-${ei}">✦ 신기록</span>
         <button class="add-set-btn" onclick="addSet(${ei})">+ 세트</button>
       </div>
@@ -2559,7 +2598,7 @@ async function autoFillPrev(ei, name){
   exercises[ei].prevVol  = prev.vol  || 0;
   if(infoEl) infoEl.innerHTML =
     '지난 기록 &nbsp;최고 <strong>'+(prev.maxW||0)+'kg</strong>'
-    +'&nbsp;·&nbsp;볼륨 <strong>'+(prev.vol||0).toLocaleString()+'kg</strong>';
+    +'&nbsp;·&nbsp;총 볼륨 <strong>'+(prev.vol||0).toLocaleString()+'kg</strong>';
   recalcAll();
 }
 
@@ -2759,6 +2798,8 @@ async function buildText(){
 
   const grandVol=exercises.filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+exVol(ex),0);
   const grandPrev=exercises.filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
+  const grandMaxW=exercises.filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,exMaxW(ex)),0);
+  const bwTotalReps=exercises.filter(ex=>isBodyweight(ex)).reduce((s,ex)=>s+exTotalReps(ex),0);
   const bw=70;
   const totalSets=exercises.reduce((s,ex)=>s+ex.sets.length,0);
   const cal=Math.round(bw*0.088*totalSets*2.5);
@@ -2766,13 +2807,32 @@ async function buildText(){
   const volPct=grandPrev?Math.round((volDiff/grandPrev)*100):null;
   const partStr=selectedParts.length?selectedParts.join('  '):'';
   const intensityDesc=intensityLevel(intensity).desc;
+  const dateStr=getToday(document.getElementById('iEntryDate').value);
 
   const L=[];
-  L.push(`🏋️ ${member} 회원님  ${getToday(document.getElementById('iEntryDate').value)}`);
-  L.push(`${session}회차${partStr?'  |  '+partStr:''}`);
+
+  // ── 헤더 ──
+  L.push(`🏋️ ${member} 회원님  ${dateStr}`);
+  L.push(`${session}번째 수업${partStr?'  |  '+partStr:''}`);
   L.push('');
 
-  exercises.forEach((ex,ei)=>{
+  // ── 편지 ──
+  if(letter){
+    letter.split('\n').forEach(line=>L.push(line));
+    L.push('');
+  }
+
+  // ── 구분선 + 요약 ──
+  L.push('──────────────────────');
+  if(grandMaxW) L.push(`최고 무게  ${grandMaxW}kg`);
+  if(grandVol>0) L.push(`총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
+  if(bwTotalReps>0) L.push(`맨몸 운동  총 ${bwTotalReps}개`);
+  L.push(`소모 칼로리  약 ${cal.toLocaleString()}kcal`);
+  L.push(`운동 강도  ${intensity}점  ${intensityDesc}`);
+  L.push('');
+
+  // ── 종목별 ──
+  exercises.forEach((ex)=>{
     const bwEx=isBodyweight(ex);
     const vol=exVol(ex),mw=exMaxW(ex);
     const totalReps=exTotalReps(ex);
@@ -2782,28 +2842,20 @@ async function buildText(){
     L.push(`📌 ${ex.name||'종목'}${isPR?'  🏅 신기록':''}`);
     if(bwEx){
       ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.r}개`));
-      L.push('');
       L.push(`   총 ${totalReps}개`);
     } else {
       ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.w}kg × ${st.r}회`));
-      L.push('');
-      L.push(`   총 볼륨  ${vol.toLocaleString()}kg${pct!==null?`  (지난 대비 ${diff>=0?'+':''}${pct}%)`:''}` );
-      if(mw) L.push(`   최고 무게  ${mw}kg${ex.prevMaxW&&mw!==ex.prevMaxW?`  (이전 ${ex.prevMaxW}kg)`:''}`);
+      L.push(`   최고 ${mw}kg  볼륨 ${vol.toLocaleString()}kg${pct!==null?`  (${diff>=0?'+':''}${pct}%)`:''}`);
     }
-    if((ex.comment||'').trim()){ L.push(''); L.push(`   💬 ${ex.comment.trim()}`); }
+    // 코멘트 — 엔터 그대로 유지
+    if((ex.comment||'').trim()){
+      L.push('');
+      ex.comment.trim().split('\n').forEach(line=>L.push(`   ${line}`));
+    }
     L.push('');
   });
 
-  L.push('──────────────────────');
-  if(grandVol>0) L.push(`📊 총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
-  L.push(`🔥 소모 칼로리  약 ${cal.toLocaleString()}kcal`);
-  L.push(`💥 운동 강도  ${intensity}점 / 100점   ${intensityDesc}`);
-
-  if(letter){
-    L.push('');L.push('──────────────────────');
-    L.push('');L.push(letter);
-  }
-  L.push('');L.push(`트레이너  ${trainer}`);
+  L.push(`트레이너  ${trainer}`);
   return L.join('\n');
 }
 
@@ -2815,7 +2867,6 @@ async function renderPreview(){
    COPY (3-tier fallback)
 ═══════════════════════════════════════ */
 async function doCopyEntry(idx){
-  // 저장된 일지 엔트리를 텍스트로 복사
   const hist = await getMemberHistory(currentMember.id);
   const e = hist[idx];
   if(!e) return;
@@ -2826,13 +2877,41 @@ async function doCopyEntry(idx){
   const iDesc = v=>{if(v<=20)return '아주 가볍게';if(v<=40)return '워밍업 수준';if(v<=60)return '적당히 땀 흘림';if(v<=75)return '꽤 열심히';if(v<=88)return '많이 힘들었음';return '한계까지';};
   const iv=e.intensity||70;
   const grandVol=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+ex.vol,0);
+  const grandMaxW=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
   const grandPrev=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
+  const bwTotalReps=(e.exercises||[]).filter(ex=>isBodyweight(ex)).reduce((s,ex)=>(ex.sets||[]).reduce((a,st)=>a+st.r,0)+s,0);
   const volDiff=grandVol-grandPrev;
   const volPct=grandPrev?Math.round((volDiff/grandPrev)*100):null;
   const partStr=(e.parts||[]).join('  ');
+  const session=e.session||e.streak;
+
+  let letterText = e.letter;
+  if(letterText === undefined){
+    letterText = [e.note, e.next, e.cheer].filter(Boolean).join('\n\n');
+  }
+
   const L=[];
-  L.push('🏋️ '+currentMember.name+' 회원님  '+dateStr);
-  L.push((e.session||e.streak)+'회차'+(partStr?'  |  '+partStr:''));L.push('');
+
+  // ── 헤더 ──
+  L.push('🏋️ '+currentMember.name+'님  '+dateStr);
+  L.push(session+'번째 수업'+(partStr?'  |  '+partStr:''));
+  L.push('');
+
+  // ── 편지 ──
+  if((letterText||'').trim()){
+    letterText.trim().split('\n').forEach(line=>L.push(line));
+    L.push('');
+  }
+
+  // ── 구분선 + 요약 ──
+  L.push('──────────────────────');
+  if(grandMaxW) L.push('최고 무게  '+grandMaxW+'kg');
+  if(grandVol>0) L.push('총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
+  if(bwTotalReps>0) L.push('맨몸 운동  총 '+bwTotalReps+'개');
+  L.push('운동 강도  '+iv+'점  '+iDesc(iv));
+  L.push('');
+
+  // ── 종목별 ──
   (e.exercises||[]).forEach(ex=>{
     const bwEx=isBodyweight(ex);
     const totalReps=(ex.sets||[]).reduce((s,st)=>s+st.r,0);
@@ -2842,33 +2921,23 @@ async function doCopyEntry(idx){
     L.push('📌 '+ex.name+(isPR?'  🏅 신기록':''));
     if(bwEx){
       (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+st.r+'개'));
-      L.push('');
       L.push('   총 '+totalReps+'개');
     } else {
       (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+st.w+'kg × '+st.r+'회'));
-      L.push('');
-      L.push('   총 볼륨  '+ex.vol.toLocaleString()+'kg'+(pct!==null?'  (지난 대비 '+(diff>=0?'+':'')+pct+'%)':''));
-      if(ex.maxW) L.push('   최고 무게  '+ex.maxW+'kg'+(ex.prevMaxW&&ex.maxW!==ex.prevMaxW?'  (이전 '+ex.prevMaxW+'kg)':''));
+      L.push('   최고 '+ex.maxW+'kg  볼륨 '+ex.vol.toLocaleString()+'kg'+(pct!==null?'  ('+(diff>=0?'+':'')+pct+'%)':''));
     }
-    if((ex.comment||'').trim()){ L.push(''); L.push('   💬 '+ex.comment.trim()); }
+    if((ex.comment||'').trim()){
+      L.push('');
+      ex.comment.trim().split('\n').forEach(line=>L.push('   '+line));
+    }
     L.push('');
   });
-  L.push('──────────────────────');
-  if(grandVol>0) L.push('📊 총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
-  L.push('💥 운동 강도  '+iv+'점 / 100점   '+iDesc(iv));
-  let letterText = e.letter;
-  if(letterText === undefined){
-    letterText = [e.note, e.next, e.cheer].filter(Boolean).join('\n\n');
-  }
-  if((letterText||'').trim()){
-    L.push('');L.push('──────────────────────');
-    L.push('');L.push(letterText.trim());
-  }
-  L.push('');L.push('트레이너  '+trainer);
+
+  L.push('트레이너  '+trainer);
   const text=L.join('\n');
   const btn=document.querySelector('.detail-copy-btn');
   function markDone(){
-    if(btn){btn.textContent='✓ 복사 완료';setTimeout(()=>{btn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 이 일지 복사하기';},2000);}
+    if(btn){btn.textContent='✓ 복사 완료';setTimeout(()=>{btn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 복사';},2000);}
   }
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(markDone).catch(()=>showModal(text));}
   else{const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;top:0;left:0;width:2em;height:2em;opacity:0;';document.body.appendChild(ta);ta.focus();ta.select();try{if(document.execCommand('copy'))markDone();else showModal(text);}catch(e){showModal(text);}document.body.removeChild(ta);}
