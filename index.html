@@ -2494,13 +2494,12 @@ function autoGrow(el){
   el.style.height = el.scrollHeight + 'px';
 }
 
-function renderExCards(){
-  const container=document.getElementById('exCards');
-  container.innerHTML='';
-  exercises.forEach((ex,ei)=>{
-    const card=document.createElement('div');
-    card.className='ex-card';
-    card.innerHTML=`
+function buildExCard(ei){
+  const ex = exercises[ei];
+  const card = document.createElement('div');
+  card.className = 'ex-card';
+  card.id = 'exCard-'+ei;
+  card.innerHTML=`
       <div class="ex-header">
         <input class="ex-name-inp" value="${ex.name}" placeholder="종목명 입력"
           oninput="exercises[${ei}].name=this.value;autoFillPrev(${ei},this.value);"/>
@@ -2518,20 +2517,26 @@ function renderExCards(){
         <textarea class="ex-comment-inp" rows="1" placeholder="이 종목에 대한 코멘트"
           oninput="exercises[${ei}].comment=this.value;autoGrow(this);">${ex.comment||''}</textarea>
       </div>`;
-    container.appendChild(card);
-    buildSetRows(ei);
-    updateExFooter(ei);
-    if(ex.name && editingEntryIdx === null){
-      autoFillPrev(ei, ex.name);
-    } else if(ex.name && (ex.prevMaxW || ex.prevVol)){
-      // 수정 모드 — 저장된 지난 기록 값 그대로 표시
-      const infoEl = document.getElementById('prevInfo-'+ei);
-      if(infoEl) infoEl.innerHTML =
-        '지난 기록 &nbsp;최고 <strong>'+(ex.prevMaxW||0)+'kg</strong>'
-        +'&nbsp;·&nbsp;볼륨 <strong>'+(ex.prevVol||0).toLocaleString()+'kg</strong>';
-    }
-    const commentEl = card.querySelector('.ex-comment-inp');
-    if(commentEl) autoGrow(commentEl);
+  buildSetRows(ei);
+  updateExFooter(ei);
+  if(ex.name && editingEntryIdx === null){
+    autoFillPrev(ei, ex.name);
+  } else if(ex.name && (ex.prevMaxW || ex.prevVol)){
+    const infoEl = document.getElementById('prevInfo-'+ei);
+    if(infoEl) infoEl.innerHTML =
+      '지난 기록 &nbsp;최고 <strong>'+(ex.prevMaxW||0)+'kg</strong>'
+      +'&nbsp;·&nbsp;볼륨 <strong>'+(ex.prevVol||0).toLocaleString()+'kg</strong>';
+  }
+  const commentEl = card.querySelector('.ex-comment-inp');
+  if(commentEl) autoGrow(commentEl);
+  return card;
+}
+
+function renderExCards(){
+  const container=document.getElementById('exCards');
+  container.innerHTML='';
+  exercises.forEach((_,ei)=>{
+    container.appendChild(buildExCard(ei));
   });
 }
 
@@ -2559,8 +2564,13 @@ async function autoFillPrev(ei, name){
 }
 
 function addExercise(){
+  const ei = exercises.length;
   exercises.push({name:'',prevMaxW:0,prevVol:0,comment:'',sets:[{w:0,r:10}]});
-  renderExCards();recalcAll();
+  const container = document.getElementById('exCards');
+  const card = buildExCard(ei);
+  container.appendChild(card);
+  recalcAll();
+  setTimeout(()=>card.scrollIntoView({behavior:'smooth', block:'nearest'}), 50);
 }
 function removeExercise(ei){
   exercises.splice(ei,1);renderExCards();recalcAll();
@@ -2601,21 +2611,34 @@ async function saveJournal(){
       letter:document.getElementById('iLetter').value.trim(),
     };
   } else {
-    const entry={
-      id:'e_'+Date.now(),
-      date:getShortDate(entryDateIso),
-      dateTime:entryDateIso,
+    const entryDate = getShortDate(entryDateIso);
+    const sessionNum = parseInt(document.getElementById('iSession').value)||1;
+
+    // 같은 날짜 + 같은 회차면 덮어쓰기
+    const existIdx = hist.findIndex(e =>
+      getShortDate(e.dateTime||e.date) === entryDate &&
+      (e.session||e.streak) === sessionNum
+    );
+
+    const entry = {
+      id: existIdx >= 0 ? hist[existIdx].id : 'e_'+Date.now(),
+      date: entryDate,
+      dateTime: entryDateIso,
       bw,
       parts:[...selectedParts],
       exercises: exData,
       intensity:parseInt(document.getElementById('iIntensity').value)||70,
       streak:parseInt(document.getElementById('iStreak').value)||1,
-      session:parseInt(document.getElementById('iSession').value)||1,
+      session: sessionNum,
       letter:document.getElementById('iLetter').value.trim(),
     };
-    hist.push(entry);
-    // 날짜순 정렬 (과거 날짜로 추가했을 수 있으므로)
-    hist.sort((a,b) => new Date(a.dateTime||a.date) - new Date(b.dateTime||b.date));
+
+    if(existIdx >= 0){
+      hist[existIdx] = entry; // 덮어쓰기
+    } else {
+      hist.push(entry); // 새로 추가
+      hist.sort((a,b) => new Date(a.dateTime||a.date) - new Date(b.dateTime||b.date));
+    }
   }
 
   await saveMemberHistory(currentMember.id, hist);
