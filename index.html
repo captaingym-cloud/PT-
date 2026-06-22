@@ -696,53 +696,42 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 })();
 
 /* ═══════════════════════════════════════
-   STORAGE — IndexedDB
-   file:// · http:// · https:// 전부 작동
+   STORAGE — Firestore REST API
+   SDK 없음, fetch() 직접 호출
+   어떤 환경에서도 작동 (PWA, Safari, 홈화면)
 ═══════════════════════════════════════ */
 
-const DB_NAME = 'ptjournal';
-const DB_VER  = 1;
-const STORE   = 'kv';
-let _idb = null;
+const FS_PROJECT = 'captaingym-1ccd2';
+const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
 
-function openIDB(){
-  if(_idb) return Promise.resolve(_idb);
-  return new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, DB_VER);
-    req.onupgradeneeded = e => e.target.result.createObjectStore(STORE);
-    req.onsuccess = e => { _idb = e.target.result; res(_idb); };
-    req.onerror   = e => rej(e);
-  });
-}
-async function idbGet(key){
-  const db = await openIDB();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).get(key);
-    req.onsuccess = () => res(req.result ?? null);
-    req.onerror   = e => rej(e);
-  });
-}
-async function idbSet(key, val){
-  const db = await openIDB();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(val, key);
-    tx.oncomplete = () => res();
-    tx.onerror    = e => rej(e);
-  });
-}
-async function idbDel(key){
-  const db = await openIDB();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).delete(key);
-    tx.oncomplete = () => res();
-    tx.onerror    = e => rej(e);
-  });
+// Firestore 문서 경로: col/docId
+async function fsGet(col, docId){
+  try{
+    const res = await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`);
+    if(!res.ok) return null;
+    const doc = await res.json();
+    if(!doc.fields || !doc.fields.v) return null;
+    return JSON.parse(doc.fields.v.stringValue);
+  } catch(e){ return null; }
 }
 
-/* ── 메모리 캐시 ── */
+async function fsSet(col, docId, value){
+  try{
+    const body = {fields: {v: {stringValue: JSON.stringify(value)}}};
+    await fetch(
+      `${FS_BASE}/${col}/${encodeURIComponent(docId)}?updateMask.fieldPaths=v`,
+      {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}
+    );
+  } catch(e){}
+}
+
+async function fsDel(col, docId){
+  try{
+    await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`, {method:'DELETE'});
+  } catch(e){}
+}
+
+/* ── 메모리 캐시 (빠른 UI용) ── */
 const cache = {};
 function cacheGet(k){ return (k in cache) ? cache[k] : null; }
 function cacheSet(k,v){ cache[k]=v; }
@@ -756,6 +745,7 @@ function nameToId(name){
 
 /* ── Storage 함수 ── */
 async function getTrainer(){
+  // localStorage에서 먼저 확인 (빠름)
   const saved = localStorage.getItem('trainer_name');
   if(saved){ TRAINER_ID = nameToId(saved); return saved; }
   return null;
@@ -764,49 +754,55 @@ async function saveTrainer(name){
   if(!name){ localStorage.removeItem('trainer_name'); TRAINER_ID=null; return; }
   TRAINER_ID = nameToId(name);
   localStorage.setItem('trainer_name', name);
+  // Firestore에도 등록 (다른 기기에서 확인용)
+  await fsSet('trainers', TRAINER_ID, {name, updatedAt: new Date().toISOString()});
 }
 async function getMembers(){
   if(!TRAINER_ID) return [];
   const k = 'members_'+TRAINER_ID;
   if(cacheGet(k)!==null) return cacheGet(k);
-  const v = await idbGet(k) || [];
+  const v = await fsGet('data', k) || [];
   cacheSet(k,v); return v;
 }
 async function saveMembers(arr){
   if(!TRAINER_ID) return;
   const k = 'members_'+TRAINER_ID;
-  cacheSet(k,arr); await idbSet(k,arr);
+  cacheSet(k,arr);
+  await fsSet('data', k, arr);
 }
 async function getMemberHistory(mid){
   if(!TRAINER_ID) return [];
   const k = 'hist_'+TRAINER_ID+'_'+mid;
   if(cacheGet(k)!==null) return cacheGet(k);
-  const v = await idbGet(k) || [];
+  const v = await fsGet('data', k) || [];
   cacheSet(k,v); return v;
 }
 async function saveMemberHistory(mid,arr){
   if(!TRAINER_ID) return;
   const k = 'hist_'+TRAINER_ID+'_'+mid;
-  cacheSet(k,arr); await idbSet(k,arr);
+  cacheSet(k,arr);
+  await fsSet('data', k, arr);
 }
 async function getDietData(mid){
   if(!TRAINER_ID) return {};
   const k = 'diet_'+TRAINER_ID+'_'+mid;
   if(cacheGet(k)!==null) return cacheGet(k);
-  const v = await idbGet(k) || {};
+  const v = await fsGet('data', k) || {};
   cacheSet(k,v); return v;
 }
 async function saveDietData(mid,d){
   if(!TRAINER_ID) return;
   const k = 'diet_'+TRAINER_ID+'_'+mid;
-  cacheSet(k,d); await idbSet(k,d);
+  cacheSet(k,d);
+  await fsSet('data', k, d);
 }
 async function delMemberData(mid){
   if(!TRAINER_ID) return;
   const hk = 'hist_'+TRAINER_ID+'_'+mid;
   const dk = 'diet_'+TRAINER_ID+'_'+mid;
   cache[hk]=[]; cache[dk]={};
-  await idbDel(hk); await idbDel(dk);
+  await fsDel('data', hk);
+  await fsDel('data', dk);
 }
 
 
