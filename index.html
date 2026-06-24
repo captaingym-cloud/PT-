@@ -57,6 +57,8 @@ input,textarea,button,select{touch-action:manipulation;}
 .section-label{font-size:10px;font-weight:600;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;}
 .member-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:background .12s;}
 .member-card:active{background:var(--sf2);}
+.member-del-btn{margin-left:auto;width:34px;height:34px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd2);color:var(--red);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .12s;}
+.member-del-btn:active{background:var(--red-l);}
 .member-avatar{width:42px;height:42px;border-radius:50%;background:var(--g2);border:0.5px solid var(--g3);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--g0);flex-shrink:0;}
 .member-info{flex:1;}
 .member-name{font-size:15px;font-weight:600;color:var(--t);margin-bottom:2px;}
@@ -493,6 +495,15 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         새 일지 작성
       </button>
 
+      <!-- 회원 정보 카드 -->
+      <div style="background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--t);" id="memberInfoName"></div>
+          <div style="font-size:12px;color:var(--t3);margin-top:3px;" id="memberInfoSessions"></div>
+        </div>
+        <button onclick="openEditTotalSessions()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">세션 수정</button>
+      </div>
+
       <!-- 달력 -->
       <div class="cal-wrap">
         <div class="cal-nav">
@@ -507,10 +518,11 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         <div class="cal-stats" id="calStats"></div>
       </div>
 
-      <!-- 선택된 날짜 일지 -->
+      <!-- 선택된 날짜 일지 + 메모 -->
       <div class="cal-selected-entries" id="calSelectedEntries" style="display:none;">
         <div class="cal-selected-date" id="calSelectedDate"></div>
         <div id="calSelectedList"></div>
+        <div id="calSelectedMemo"></div>
       </div>
 
       <div class="section-label" id="journalsCountLabel"></div>
@@ -529,6 +541,13 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
   <div class="modal-box">
     <div class="modal-title">회원 추가</div>
     <div class="modal-field"><label>이름</label><input id="newMemberName" placeholder="회원 이름" maxlength="20"/></div>
+    <div class="modal-field">
+      <label>총 PT 세션 수 <span style="font-weight:400;color:var(--t3);">(계약 횟수)</span></label>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input id="newMemberTotal" type="number" min="1" placeholder="예) 20" style="text-align:center;flex:1;"/>
+        <span style="font-size:15px;color:var(--t2);font-weight:500;">회</span>
+      </div>
+    </div>
     <div class="modal-btns">
       <button class="modal-btn cancel" onclick="closeModal('modal-addMember')">취소</button>
       <button class="modal-btn confirm" onclick="doAddMember()">추가</button>
@@ -651,6 +670,9 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 
   <!-- 입력 탭 -->
   <div class="page active" id="page-input">
+    <!-- 최근 메모 바 -->
+    <div id="recentMemoBar" style="display:none;background:var(--g2);border:0.5px solid var(--g3);border-radius:var(--r12);padding:10px 14px;margin-bottom:10px;"></div>
+
     <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 10px;">
       <span style="font-size:12px;color:var(--t2);" id="entryDateLabel">오늘  —</span>
       <button onclick="openDatePicker()" style="font-size:11px;color:var(--g1);background:none;border:0.5px solid var(--g3);border-radius:20px;padding:4px 10px;cursor:pointer;font-family:inherit;font-weight:500;">날짜 변경</button>
@@ -715,14 +737,38 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         <textarea id="iLetter" rows="5" placeholder="오늘 수업은 어땠는지, 다음에 신경 쓸 부분, 응원의 말까지 자유롭게 적어주세요"></textarea>
       </div>
     </div>
+
+    <div class="eyebrow">영상 공유</div>
+    <div class="card">
+      <div class="card-section" style="padding:14px 16px;">
+        <p style="font-size:13px;color:var(--t2);margin:0 0 12px;line-height:1.6;">수업 영상을 찍고 회원님께 바로 공유할 수 있어요</p>
+        <div style="display:flex;gap:10px;">
+          <button onclick="captureVideo()" style="flex:1;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            영상 촬영
+          </button>
+          <button onclick="pickVideo()" style="flex:1;padding:13px;background:var(--sf2);border:0.5px solid var(--bd2);border-radius:var(--r12);font-size:14px;font-weight:600;color:var(--t);cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            앨범에서 선택
+          </button>
+        </div>
+        <input type="file" id="videoInput" accept="video/*" capture="environment" style="display:none;" onchange="onVideoSelected(event)"/>
+        <input type="file" id="videoPickInput" accept="video/*" style="display:none;" onchange="onVideoSelected(event)"/>
+      </div>
+    </div>
   </div>
 
   <!-- 회원 메모 탭 -->
   <div class="page" id="page-memo">
     <div style="padding-bottom:100px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div class="eyebrow" style="margin:0;">회원 메모</div>
-        <button onclick="openAddMemo()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">+ 메모 추가</button>
+      <!-- 인라인 메모 입력 - 탭 열자마자 바로 쓸 수 있게 -->
+      <div style="background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);overflow:hidden;margin-bottom:12px;">
+        <textarea id="inlineMemoInput" rows="3"
+          placeholder="수업 중 특이사항, 대화 내용 등 자유롭게..."
+          style="width:100%;font-size:14px;border:none;outline:none;padding:14px 16px;background:transparent;color:var(--t);font-family:inherit;line-height:1.6;resize:none;"></textarea>
+        <div style="padding:0 12px 10px;display:flex;justify-content:flex-end;">
+          <button onclick="saveInlineMemo()" style="font-size:13px;font-weight:600;color:#fff;background:var(--g0);border:none;border-radius:var(--r8);padding:7px 16px;cursor:pointer;font-family:inherit;">저장</button>
+        </div>
       </div>
       <div id="memoList"></div>
     </div>
@@ -955,32 +1001,106 @@ async function renderMemberList(){
 
   const container = document.getElementById('memberCards');
   container.innerHTML = '';
-  if (members.length === 0) {
+  if(members.length === 0){
     container.innerHTML = `<div class="empty-state"><div class="e-icon">👤</div><div class="e-text">아직 등록된 회원이 없어요</div></div>`;
     return;
   }
-  for(const m of members){
+
+  // 각 회원의 마지막 수업 날짜 수집
+  const memberData = await Promise.all(members.map(async m => {
     const hist = await getMemberHistory(m.id);
     const last = hist.length ? hist[hist.length-1] : null;
-    const lastDate = last ? last.date : '기록 없음';
+    const lastDate = last ? last.date : null;
+    const lastTime = last ? new Date(last.dateTime||last.date).getTime() : 0;
+    // 일지 개수가 아닌 최대 회차 번호 기준
+    const maxSession = hist.length ? Math.max(...hist.map(e => e.session||e.streak||1)) : 0;
+    const isExpired = m.totalSessions && maxSession >= m.totalSessions;
+    return { m, hist, lastDate, lastTime, isExpired, maxSession };
+  }));
+
+  // 분리: 활성 / 만료
+  const active  = memberData.filter(d => !d.isExpired).sort((a,b) => b.lastTime - a.lastTime);
+  const expired = memberData.filter(d =>  d.isExpired).sort((a,b) => b.lastTime - a.lastTime);
+
+  function makeCard({m, hist, lastDate, isExpired, maxSession}){
     const card = document.createElement('div');
     card.className = 'member-card';
+    if(isExpired) card.style.opacity = '0.6';
+    const sessionDisplay = m.totalSessions
+      ? `${maxSession}/${m.totalSessions}회차`
+      : `${maxSession}회차`;
     card.innerHTML = `
       <div class="member-avatar">${m.name[0]}</div>
       <div class="member-info">
-        <div class="member-name">${m.name}</div>
-        <div class="member-meta">마지막 수업 ${lastDate}  ·  총 ${hist.length}회</div>
+        <div class="member-name">${m.name}${isExpired ? ' <span style="font-size:10px;color:var(--red);background:var(--red-l);border-radius:20px;padding:2px 6px;font-weight:600;">만료</span>' : ''}</div>
+        <div class="member-meta">마지막 수업 ${lastDate||'기록 없음'}  ·  ${sessionDisplay}</div>
       </div>
-      <span class="member-arrow">›</span>`;
+      <button class="member-del-btn" onclick="event.stopPropagation();deleteMember('${m.id}','${m.name}')" aria-label="삭제">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </button>`;
     card.onclick = () => openMemberJournals(m);
-    container.appendChild(card);
+    return card;
   }
+
+  active.forEach(d => container.appendChild(makeCard(d)));
+
+  if(expired.length){
+    const divider = document.createElement('div');
+    divider.style.cssText = 'font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.05em;padding:12px 4px 6px;';
+    divider.textContent = '세션 만료';
+    container.appendChild(divider);
+    expired.forEach(d => container.appendChild(makeCard(d)));
+  }
+}
+
+async function updateMemberInfoCard(){
+  if(!currentMember) return;
+  const sessEl = document.getElementById('memberInfoSessions');
+  if(!sessEl) return;
+  const hist = await getMemberHistory(currentMember.id);
+  const maxSession = hist.length ? Math.max(...hist.map(e => e.session||e.streak||1)) : 0;
+  if(currentMember.totalSessions){
+    sessEl.textContent = `${maxSession} / ${currentMember.totalSessions} 회차 진행 중`;
+  } else {
+    sessEl.textContent = `총 ${maxSession}회 수업 · 세션 수 미설정`;
+  }
+}
+
+async function openEditTotalSessions(){
+  if(!currentMember) return;
+  const current = currentMember.totalSessions || '';
+  const val = prompt(`${currentMember.name}님 총 PT 세션 수\n현재: ${current || '미설정'}`, current);
+  if(val === null) return;
+  const n = parseInt(val) || null;
+  const members = await getMembers();
+  const idx = members.findIndex(m => m.id === currentMember.id);
+  if(idx < 0) return;
+  members[idx].totalSessions = n;
+  currentMember = members[idx];
+  await saveMembers(members);
+  updateMemberInfoCard();
+  updateSessionLabel();
+}
+
+async function deleteMember(mid, name){
+  if(!confirm(`${name} 회원님을 삭제할까요?\n모든 일지와 데이터가 함께 삭제돼요.`)) return;
+  const members = await getMembers();
+  const updated = members.filter(m => m.id !== mid);
+  await saveMembers(updated);
+  await delMemberData(mid);
+  renderMemberList();
 }
 
 /* 회원별 일지 목록 화면 */
 async function openMemberJournals(member){
   currentMember = member;
   document.getElementById('journalsTitle').textContent = member.name + '님';
+
+  // 회원 정보 카드 업데이트
+  const nameEl = document.getElementById('memberInfoName');
+  const sessEl = document.getElementById('memberInfoSessions');
+  if(nameEl) nameEl.textContent = member.name + '님';
+  updateMemberInfoCard();
   // 달력 초기화
   calYear  = new Date().getFullYear();
   calMonth = new Date().getMonth();
@@ -1127,12 +1247,37 @@ function calSelectDate(key, d){
           ${grandMaxW ? `<span style="font-size:12px;color:var(--t2);">최고 <strong style="color:var(--t);">${grandMaxW}kg</strong></span>` : ''}
           ${grandVol ? `<span style="font-size:12px;color:var(--t2);">총 볼륨 <strong style="color:var(--t);">${grandVol.toLocaleString()}kg</strong></span>` : ''}
           ${bwTotal ? `<span style="font-size:12px;color:var(--t2);">맨몸 <strong style="color:var(--t);">${bwTotal}개</strong></span>` : ''}
+          <span style="font-size:12px;color:var(--t2);">강도 <strong style="color:${journalIColor(e.intensity||70)};">${e.intensity||'—'}점</strong></span>
         </div>`;
       card.onclick = () => openDetailModal(e, realIdx);
       list.appendChild(card);
     });
   }
   sel.style.display = 'block';
+
+  // 메모 — 같은 날짜의 메모 표시
+  const memoContainer = document.getElementById('calSelectedMemo');
+  memoContainer.innerHTML = '';
+  if(currentMember){
+    getMemos(currentMember.id).then(memos => {
+      const dayMemos = memos.filter(m => {
+        const md = new Date(m.dateTime || m.date);
+        return !isNaN(md) && dateKey(md) === key;
+      });
+      if(dayMemos.length === 0) return;
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-top:8px;';
+      wrap.innerHTML = `<div style="font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.05em;margin-bottom:6px;">📝 이날 메모</div>`;
+      dayMemos.forEach(m => {
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r12);padding:10px 14px;margin-bottom:6px;font-size:13px;color:var(--t);line-height:1.7;white-space:pre-wrap;';
+        box.textContent = m.content;
+        wrap.appendChild(box);
+      });
+      memoContainer.appendChild(wrap);
+    });
+  }
+
   sel.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
@@ -1163,40 +1308,65 @@ async function renderMemoTab(){
   [...memos].reverse().forEach((m, ri) => {
     const realIdx = memos.length - 1 - ri;
     const card = document.createElement('div');
+    card.id = 'memoCard-'+realIdx;
     card.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;margin-bottom:8px;';
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:11px;font-weight:600;color:var(--t3);">${m.date}</span>
         <div style="display:flex;gap:8px;">
-          <button onclick="editMemo(${realIdx})" style="font-size:11px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;">수정</button>
+          <button onclick="inlineEditMemo(${realIdx})" style="font-size:11px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;">수정</button>
           <button onclick="deleteMemo(${realIdx})" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;">삭제</button>
         </div>
       </div>
-      <div style="font-size:13px;color:var(--t);line-height:1.7;white-space:pre-wrap;">${m.content}</div>`;
+      <div id="memoText-${realIdx}" style="font-size:13px;color:var(--t);line-height:1.7;white-space:pre-wrap;">${m.content}</div>`;
     container.appendChild(card);
   });
 }
 
-function openAddMemo(){
-  const overlay = document.createElement('div');
-  overlay.className = 'dv2-modal-overlay';
-  overlay.id = 'memoModalOverlay';
-  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
-  overlay.innerHTML = `
-    <div class="dv2-modal-box">
-      <div class="dv2-modal-handle"></div>
-      <div class="dv2-modal-nav">
-        <span class="dv2-modal-title">메모 추가</span>
-        <button class="dv2-modal-close" onclick="document.getElementById('memoModalOverlay').remove()">×</button>
-      </div>
-      <div class="dv2-modal-scroll">
-        <textarea id="memoContent" rows="6" placeholder="특이사항, 수업 중 대화 내용, 목표 등 자유롭게 기록하세요"
-          style="width:100%;font-size:16px;border:0.5px solid var(--bd2);border-radius:var(--r12);padding:12px 14px;background:var(--sf2);color:var(--t);outline:none;resize:none;font-family:inherit;line-height:1.6;"></textarea>
-        <button onclick="saveMemoEntry(null)" style="width:100%;margin-top:10px;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;">저장</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  setTimeout(()=>document.getElementById('memoContent').focus(), 100);
+function inlineEditMemo(idx){
+  const textEl = document.getElementById('memoText-'+idx);
+  if(!textEl) return;
+  const original = textEl.textContent;
+  const card = document.getElementById('memoCard-'+idx);
+  // 텍스트를 textarea로 교체
+  textEl.style.display = 'none';
+  const ta = document.createElement('textarea');
+  ta.value = original;
+  ta.style.cssText = 'width:100%;font-size:13px;border:0.5px solid var(--g3);border-radius:var(--r8);padding:8px 10px;background:var(--sf2);color:var(--t);outline:none;resize:none;font-family:inherit;line-height:1.6;min-height:60px;';
+  ta.oninput = () => { ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; };
+  card.appendChild(ta);
+  ta.focus();
+  ta.style.height = ta.scrollHeight+'px';
+
+  // 저장/취소 버튼
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:8px;';
+  btns.innerHTML = `
+    <button onclick="cancelInlineEdit(${idx})" style="font-size:12px;color:var(--t2);background:none;border:0.5px solid var(--bd2);border-radius:var(--r8);padding:6px 12px;cursor:pointer;font-family:inherit;">취소</button>
+    <button onclick="saveInlineEdit(${idx})" style="font-size:12px;color:#fff;background:var(--g0);border:none;border-radius:var(--r8);padding:6px 12px;cursor:pointer;font-family:inherit;font-weight:600;">저장</button>`;
+  card.appendChild(btns);
+  card._editTa = ta;
+  card._editBtns = btns;
+}
+
+function cancelInlineEdit(idx){
+  const card = document.getElementById('memoCard-'+idx);
+  if(!card) return;
+  if(card._editTa) card._editTa.remove();
+  if(card._editBtns) card._editBtns.remove();
+  const textEl = document.getElementById('memoText-'+idx);
+  if(textEl) textEl.style.display = '';
+}
+
+async function saveInlineEdit(idx){
+  const card = document.getElementById('memoCard-'+idx);
+  if(!card || !card._editTa) return;
+  const content = card._editTa.value.trim();
+  if(!content){ cancelInlineEdit(idx); return; }
+  const memos = await getMemos(currentMember.id);
+  memos[idx].content = content;
+  await saveMemos(currentMember.id, memos);
+  renderMemoTab();
 }
 
 async function editMemo(idx){
@@ -1951,6 +2121,9 @@ async function openNewJournal(){
 
   setEntryDate(todayISO());
 
+  // 최근 메모 표시
+  renderRecentMemoBar();
+
   renderParts();
   renderExCards();
   recalcAll();
@@ -1962,6 +2135,24 @@ async function openNewJournal(){
   showScreen('screen-journal');
 }
 
+async function renderRecentMemoBar(){
+  const bar = document.getElementById('recentMemoBar');
+  if(!bar || !currentMember) return;
+  const memos = await getMemos(currentMember.id);
+  if(!memos.length){ bar.style.display='none'; return; }
+  const latest = memos[memos.length-1];
+  bar.style.display = 'block';
+  bar.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:8px;">
+      <span style="font-size:14px;flex-shrink:0;">📝</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:11px;color:var(--t3);margin-bottom:3px;">${latest.date} 메모</div>
+        <div style="font-size:13px;color:var(--t);line-height:1.6;white-space:pre-wrap;word-break:break-word;">${latest.content}</div>
+      </div>
+      <button onclick="document.getElementById('recentMemoBar').style.display='none'" style="background:none;border:none;color:var(--t3);font-size:16px;cursor:pointer;padding:0;flex-shrink:0;">×</button>
+    </div>`;
+}
+
 async function openEditJournal(idx){
   if(!currentMember) return;
   const hist = await getMemberHistory(currentMember.id);
@@ -1970,6 +2161,10 @@ async function openEditJournal(idx){
 
   closeDetailModal();
   editingEntryIdx = idx;
+
+  // 수정 모드에서 메모 바 숨기기
+  const bar = document.getElementById('recentMemoBar');
+  if(bar) bar.style.display = 'none';
 
   // 데이터 복원
   selectedParts = [...(e.parts||[])];
@@ -2103,10 +2298,12 @@ async function resetAll(){
 async function doAddMember(){
   const name = document.getElementById('newMemberName').value.trim();
   if (!name) return;
+  const total = parseInt(document.getElementById('newMemberTotal').value) || null;
   const members = await getMembers();
   const id = 'm_' + Date.now();
-  members.push({id, name});
+  members.push({id, name, totalSessions: total});
   await saveMembers(members);
+  document.getElementById('newMemberTotal').value = '';
   closeModal('modal-addMember');
   renderMemberList();
 }
@@ -2134,16 +2331,84 @@ function switchTab(t){
     document.getElementById('tab-'+id).classList.toggle('active', id===t);
     document.getElementById('page-'+id).classList.toggle('active', id===t);
   });
+  if(t==='memo'){
+    renderMemoTab();
+    setTimeout(()=>{
+      const inp = document.getElementById('inlineMemoInput');
+      if(inp) inp.focus();
+    }, 100);
+  }
+}
+
+async function saveInlineMemo(){
+  const inp = document.getElementById('inlineMemoInput');
+  const content = (inp.value || '').trim();
+  if(!content) return;
+  const memos = await getMemos(currentMember.id);
+  memos.push({ id:'m_'+Date.now(), date:getShortDate(), dateTime:new Date().toISOString(), content });
+  await saveMemos(currentMember.id, memos);
+  inp.value = '';
+  inp.style.height = 'auto';
+  renderMemoTab();
 }
 
 /* ═══════════════════════════════════════
    STREAK
 ═══════════════════════════════════════ */
+/* ═══════════════════════════════════════
+   영상 촬영 & 공유
+═══════════════════════════════════════ */
+function captureVideo(){
+  document.getElementById('videoInput').click();
+}
+function pickVideo(){
+  document.getElementById('videoPickInput').click();
+}
+
+function onVideoSelected(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  e.target.value = ''; // 같은 파일 재선택 가능하게 초기화
+
+  // Web Share API — 카카오톡 포함 공유 시트 열림
+  if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+    navigator.share({
+      files: [file],
+      title: currentMember ? currentMember.name+'님 수업 영상' : '수업 영상',
+    }).catch(err => {
+      if(err.name !== 'AbortError') showVideoFallback(file);
+    });
+  } else if(navigator.share){
+    // 파일 공유 미지원 환경 — URL 공유로 폴백
+    const url = URL.createObjectURL(file);
+    navigator.share({
+      title: currentMember ? currentMember.name+'님 수업 영상' : '수업 영상',
+      text: '수업 영상입니다.',
+      url,
+    }).catch(() => showVideoFallback(file));
+  } else {
+    showVideoFallback(file);
+  }
+}
+
+function showVideoFallback(file){
+  // Web Share 미지원 — 다운로드 링크 제공
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (currentMember ? currentMember.name+'_' : '') + '수업영상_' + getShortDate() + '.mp4';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 function updateSessionLabel(){
   const n = parseInt(document.getElementById('iSession').value)||1;
   document.getElementById('iStreak').value = n;
   const el = document.getElementById('sessionLabel');
-  if(el) el.textContent = n+'회차 수업';
+  if(el){
+    const total = currentMember && currentMember.totalSessions;
+    el.textContent = total ? `${n}/${total}회차` : `${n}회차 수업`;
+  }
 }
 
 /* ═══════════════════════════════════════
@@ -2556,19 +2821,24 @@ function buildExCard(ei){
         <textarea class="ex-comment-inp" rows="1" placeholder="이 종목에 대한 코멘트"
           oninput="exercises[${ei}].comment=this.value;autoGrow(this);">${ex.comment||''}</textarea>
       </div>`;
+  // buildSetRows는 카드가 DOM에 붙은 후 initExCard(ei)에서 호출
+  const commentEl = card.querySelector('.ex-comment-inp');
+  if(commentEl) autoGrow(commentEl);
+  return card;
+}
+
+function initExCard(ei){
   buildSetRows(ei);
   updateExFooter(ei);
+  const ex = exercises[ei];
   if(ex.name && editingEntryIdx === null){
     autoFillPrev(ei, ex.name);
   } else if(ex.name && (ex.prevMaxW || ex.prevVol)){
     const infoEl = document.getElementById('prevInfo-'+ei);
     if(infoEl) infoEl.innerHTML =
       '지난 기록 &nbsp;최고 <strong>'+(ex.prevMaxW||0)+'kg</strong>'
-      +'&nbsp;·&nbsp;볼륨 <strong>'+(ex.prevVol||0).toLocaleString()+'kg</strong>';
+      +'&nbsp;·&nbsp;총 볼륨 <strong>'+(ex.prevVol||0).toLocaleString()+'kg</strong>';
   }
-  const commentEl = card.querySelector('.ex-comment-inp');
-  if(commentEl) autoGrow(commentEl);
-  return card;
 }
 
 function renderExCards(){
@@ -2576,6 +2846,7 @@ function renderExCards(){
   container.innerHTML='';
   exercises.forEach((_,ei)=>{
     container.appendChild(buildExCard(ei));
+    initExCard(ei);
   });
 }
 
@@ -2608,6 +2879,7 @@ function addExercise(){
   const container = document.getElementById('exCards');
   const card = buildExCard(ei);
   container.appendChild(card);
+  initExCard(ei);
   recalcAll();
   setTimeout(()=>card.scrollIntoView({behavior:'smooth', block:'nearest'}), 50);
 }
@@ -2821,7 +3093,9 @@ async function buildText(){
 
   // ── 헤더 ──
   L.push(`🏋️ ${member} 회원님  ${dateStr}`);
-  L.push(`✅ ${session}번째 수업${partStr?'  |  '+partStr:''}`);
+  const totalSess = currentMember && currentMember.totalSessions;
+  const sessionStr = totalSess ? `${session}/${totalSess}회차` : `${session}번째 수업`;
+  L.push(`✅ ${sessionStr}${partStr?'  |  '+partStr:''}`);
   L.push('');
 
   // ── 구분선 + 요약 ──
@@ -2831,6 +3105,7 @@ async function buildText(){
   if(bwTotalReps>0) L.push(`🤸 맨몸 운동  총 ${bwTotalReps}개`);
   L.push(`🔥 소모 칼로리  약 ${cal.toLocaleString()}kcal`);
   L.push(`💥 운동 강도  ${intensity}점  ${intensityDesc}`);
+  L.push('──────────────────────');
   L.push('');
 
   // ── 종목별 ──
@@ -2902,7 +3177,9 @@ async function doCopyEntry(idx){
 
   // ── 헤더 ──
   L.push('🏋️ '+currentMember.name+'님  '+dateStr);
-  L.push('✅ '+session+'번째 수업'+(partStr?'  |  '+partStr:''));
+  const totalSessC = currentMember && currentMember.totalSessions;
+  const sessionStrC = totalSessC ? session+'/'+totalSessC+'회차' : session+'번째 수업';
+  L.push('✅ '+sessionStrC+(partStr?'  |  '+partStr:''));
   L.push('');
 
   // ── 구분선 + 요약 ──
@@ -2911,6 +3188,7 @@ async function doCopyEntry(idx){
   if(grandVol>0) L.push('📊 총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
   if(bwTotalReps>0) L.push('🤸 맨몸 운동  총 '+bwTotalReps+'개');
   L.push('🔥 운동 강도  '+iv+'점  '+iDesc(iv));
+  L.push('──────────────────────');
   L.push('');
 
   // ── 종목별 ──
