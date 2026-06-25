@@ -55,10 +55,12 @@ input,textarea,button,select{touch-action:manipulation;}
 .greeting-name{font-size:20px;font-weight:700;color:var(--g0);margin-bottom:3px;}
 .greeting-sub{font-size:13px;color:var(--g1);}
 .section-label{font-size:10px;font-weight:600;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;}
-.member-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:background .12s;}
+.member-card-wrap{position:relative;margin-bottom:8px;border-radius:var(--r16);overflow:hidden;}
+.member-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .2s ease;position:relative;z-index:1;}
 .member-card:active{background:var(--sf2);}
-.member-del-btn{margin-left:auto;width:34px;height:34px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd2);color:var(--red);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .12s;}
-.member-del-btn:active{background:var(--red-l);}
+.member-del-slide{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--red);display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:0 var(--r16) var(--r16) 0;}
+.member-del-slide svg{color:#fff;}
+.member-del-slide span{font-size:11px;color:#fff;font-weight:600;margin-top:3px;}
 .member-avatar{width:42px;height:42px;border-radius:50%;background:var(--g2);border:0.5px solid var(--g3);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--g0);flex-shrink:0;}
 .member-info{flex:1;}
 .member-name{font-size:15px;font-weight:600;color:var(--t);margin-bottom:2px;}
@@ -462,19 +464,19 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
   <div class="setup-wrap">
     <div class="setup-logo">🏋️</div>
     <div class="setup-title">PT 일지</div>
-    <div class="setup-sub">이름과 PIN을 설정하면<br/>어느 기기에서든 같은 데이터를 써요</div>
+    <div class="setup-sub">한 번 설정하면<br/>폰, 패드, 어디서 열어도 내 정보 그대로예요</div>
     <div class="setup-field">
       <label>트레이너 이름</label>
       <input id="setupName" placeholder="예) 이광명" maxlength="20"/>
     </div>
     <div class="setup-field">
-      <label>PIN 번호 (숫자 4자리)</label>
+      <label>비밀번호 (숫자 4자리)</label>
       <input id="setupPin" type="password" inputmode="numeric" placeholder="• • • •" maxlength="4"
         style="letter-spacing:0.3em;text-align:center;font-size:20px;"/>
     </div>
     <div id="setupError" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;"></div>
     <button class="setup-btn" onclick="doSetup()">시작하기</button>
-    <p style="font-size:11px;color:var(--t3);margin-top:16px;text-align:center;max-width:280px;line-height:1.6;">이름 + PIN이 같으면 어디서든 같은 계정으로 접속돼요</p>
+    <p style="font-size:11px;color:var(--t3);margin-top:16px;text-align:center;max-width:280px;line-height:1.6;">같은 이름 + 비밀번호로 로그인하면 어디서든 내 회원 정보가 나와요</p>
   </div>
 </div>
 
@@ -496,10 +498,6 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     </div>
     <div class="section-label">내 회원</div>
     <div id="memberCards"></div>
-    <button class="add-member-btn" onclick="openAddMember()">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      회원 추가
-    </button>
   </div>
 </div>
 
@@ -556,15 +554,13 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         <div class="cal-stats" id="calStats"></div>
       </div>
 
-      <!-- 선택된 날짜 일지 + 메모 -->
+      <!-- 날짜 선택 시 일지 + 메모 -->
       <div class="cal-selected-entries" id="calSelectedEntries" style="display:none;">
         <div class="cal-selected-date" id="calSelectedDate"></div>
         <div id="calSelectedList"></div>
         <div id="calSelectedMemo"></div>
       </div>
 
-      <div class="section-label" id="journalsCountLabel"></div>
-      <div id="journalEntries"></div>
     </div>
   </div>
 
@@ -580,7 +576,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     <div class="modal-title">회원 추가</div>
     <div class="modal-field"><label>이름</label><input id="newMemberName" placeholder="회원 이름" maxlength="20"/></div>
     <div class="modal-field">
-      <label>총 PT 세션 수 <span style="font-weight:400;color:var(--t3);">(계약 횟수)</span></label>
+      <label>총 PT 세션 수 <span style="font-weight:400;color:var(--t3);">(선택)</span></label>
       <div style="display:flex;align-items:center;gap:8px;">
         <input id="newMemberTotal" type="number" min="1" placeholder="예) 20" style="text-align:center;flex:1;"/>
         <span style="font-size:15px;color:var(--t2);font-weight:500;">회</span>
@@ -626,8 +622,8 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 
       <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
         <div>
-          <div style="font-size:13px;font-weight:500;color:var(--t);">PIN 변경</div>
-          <div style="font-size:11px;color:var(--t3);margin-top:2px;">기기 간 로그인에 사용되는 4자리 번호</div>
+          <div style="font-size:13px;font-weight:500;color:var(--t);">비밀번호 변경</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px;">비밀번호 (기기 간 로그인에 사용돼요)</div>
         </div>
         <button onclick="openChangePin()" style="font-size:12px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">변경</button>
       </div>
@@ -666,12 +662,12 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
   </div>
 </div>
 
-<!-- PIN 변경 모달 -->
+<!-- 비밀번호 변경 모달 -->
 <div class="modal-overlay" id="modal-changePin" style="display:none;">
   <div class="modal-box">
-    <div class="modal-title">PIN 변경</div>
+    <div class="modal-title">비밀번호 변경</div>
     <div class="modal-field">
-      <label>새 PIN (숫자 4자리)</label>
+      <label>새 비밀번호 (숫자 4자리)</label>
       <input id="newPin" type="password" inputmode="numeric" placeholder="• • • •" maxlength="4"
         style="letter-spacing:0.3em;text-align:center;font-size:20px;"/>
     </div>
@@ -700,8 +696,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         입력
       </button>
       <button class="nav-tab" id="tab-memo" onclick="switchTab('memo');renderMemoTab();">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5"/><path d="M17.5 2.5a2.121 2.121 0 013 3L12 14l-4 1 1-4 8.5-8.5z"/></svg>
-        회원 메모
+        📝 메모
       </button>
     </div>
   </nav>
@@ -763,7 +758,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       <div class="intensity-track">
         <div class="intensity-bg"></div>
         <div class="intensity-fill" id="intensityFill" style="width:70%"></div>
-        <input type="range" id="iIntensity" min="0" max="100" value="70" oninput="updateIntensity(this.value)"/>
+        <input type="range" id="iIntensity" min="0" max="100" value="70" oninput="updateIntensity(this.value);autoSaveDraft()"/>
       </div>
       <div class="intensity-labels"><span>가볍게</span><span>적당히</span><span>빡세게</span></div>
       <div class="intensity-desc" id="intensityDesc"></div>
@@ -772,7 +767,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     <div class="eyebrow">회원님께 보내는 편지</div>
     <div class="card">
       <div class="card-section">
-        <textarea id="iLetter" rows="5" placeholder="오늘 수업은 어땠는지, 다음에 신경 쓸 부분, 응원의 말까지 자유롭게 적어주세요"></textarea>
+        <textarea id="iLetter" rows="5" placeholder="오늘 수업은 어땠는지, 다음에 신경 쓸 부분, 응원의 말까지 자유롭게 적어주세요" oninput="autoSaveDraft()"></textarea>
       </div>
     </div>
 
@@ -810,8 +805,9 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
   <div class="bottom-btns">
     <button class="btn-copy" id="copyBtn" onclick="saveAndCopy()" style="flex:1;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
-      저장하고 복사하기
+      저장 + 카톡 복사
     </button>
+    <div id="copyHint" style="text-align:center;font-size:11px;color:var(--t3);margin-top:6px;${localStorage.getItem('hint_drag_seen')?'display:none;':''}">회원님께 보낼 내용이 복사돼요</div>
   </div>
 </div>
 
@@ -944,6 +940,21 @@ async function saveMemos(mid,arr){
   cacheSet(k,arr);
   await fsSet('data', k, arr);
 }
+
+// 임시저장 — localStorage만 사용 (빠르고 오프라인도 됨)
+function getDraftKey(mid){ return 'draft_'+TRAINER_ID+'_'+mid; }
+function getDraft(mid){
+  try{ return JSON.parse(localStorage.getItem(getDraftKey(mid))); } catch{ return null; }
+}
+function saveDraft(mid, data){
+  localStorage.setItem(getDraftKey(mid), JSON.stringify(data));
+}
+function clearDraft(mid){
+  localStorage.removeItem(getDraftKey(mid));
+}
+function hasDraft(mid){
+  return !!localStorage.getItem(getDraftKey(mid));
+}
 async function delMemberData(mid){
   if(!TRAINER_ID) return;
   const hk = 'hist_'+TRAINER_ID+'_'+mid;
@@ -1014,7 +1025,7 @@ async function doSetup(){
 
   if(!name){ document.getElementById('setupName').focus(); return; }
   if(!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)){
-    errEl.textContent = 'PIN은 숫자 4자리로 입력해주세요';
+    errEl.textContent = '비밀번호는 숫자 4자리로 입력해주세요';
     errEl.style.display = 'block';
     document.getElementById('setupPin').focus();
     return;
@@ -1043,6 +1054,11 @@ async function renderMemberList(){
   container.innerHTML = '';
   if(members.length === 0){
     container.innerHTML = `<div class="empty-state"><div class="e-icon">👤</div><div class="e-text">아직 등록된 회원이 없어요</div></div>`;
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-member-btn';
+    addBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 회원 추가`;
+    addBtn.onclick = openAddMember;
+    container.appendChild(addBtn);
     return;
   }
 
@@ -1069,20 +1085,64 @@ async function renderMemberList(){
     const sessionDisplay = m.totalSessions
       ? `${maxSession}/${m.totalSessions}회차`
       : `${maxSession}회차`;
+    const wrap = document.createElement('div');
+    wrap.className = 'member-card-wrap';
+
+    // 뒤에 숨겨진 삭제 버튼
+    const delBtn = document.createElement('div');
+    delBtn.className = 'member-del-slide';
+    delBtn.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      <span>삭제</span></div>`;
+    delBtn.onclick = () => deleteMember(m.id, m.name);
+
     card.innerHTML = `
       <div class="member-avatar">${m.name[0]}</div>
       <div class="member-info">
-        <div class="member-name">${m.name}${isExpired ? ' <span style="font-size:10px;color:var(--red);background:var(--red-l);border-radius:20px;padding:2px 6px;font-weight:600;">만료</span>' : ''}</div>
+        <div class="member-name">${m.name}${isExpired ? ' <span style="font-size:10px;color:var(--red);background:var(--red-l);border-radius:20px;padding:2px 6px;font-weight:600;">만료</span>' : ''}${hasDraft(m.id) ? ' <span style="font-size:10px;color:#fff;background:var(--g0);border-radius:20px;padding:2px 6px;font-weight:600;">작성 중</span>' : ''}</div>
         <div class="member-meta">마지막 수업 ${lastDate||'기록 없음'}  ·  ${sessionDisplay}</div>
       </div>
-      <button class="member-del-btn" onclick="event.stopPropagation();deleteMember('${m.id}','${m.name}')" aria-label="삭제">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-      </button>`;
+      <span class="member-arrow">›</span>`;
     card.onclick = () => openMemberJournals(m);
-    return card;
+
+    // 스와이프 이벤트
+    let startX = 0, dx = 0, swiped = false;
+    card.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX;
+      dx = 0; swiped = false;
+    }, {passive:true});
+    card.addEventListener('touchmove', e => {
+      dx = e.touches[0].clientX - startX;
+      if(dx < -10){
+        const move = Math.max(dx, -80);
+        card.style.transform = `translateX(${move}px)`;
+      } else if(dx > 10 && swiped){
+        card.style.transform = 'translateX(0)';
+      }
+    }, {passive:true});
+    card.addEventListener('touchend', () => {
+      if(dx < -40){
+        card.style.transform = 'translateX(-80px)';
+        swiped = true;
+      } else {
+        card.style.transform = 'translateX(0)';
+        swiped = false;
+      }
+    });
+
+    wrap.appendChild(delBtn);
+    wrap.appendChild(card);
+    return wrap;
   }
 
   active.forEach(d => container.appendChild(makeCard(d)));
+
+  // 활성 회원 아래 추가 버튼
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-member-btn';
+  addBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 회원 추가`;
+  addBtn.onclick = openAddMember;
+  container.appendChild(addBtn);
 
   if(expired.length){
     const divider = document.createElement('div');
@@ -1254,7 +1314,12 @@ function renderCalendar(){
   const prevStr = prevMonth.getFullYear()+'-'+String(prevMonth.getMonth()+1).padStart(2,'0');
   const prevMonthKeys = Object.keys(calHistDates).filter(k => k.startsWith(prevStr));
   const stats = document.getElementById('calStats');
-  stats.innerHTML = `<span class="cal-stat">이번 달 <strong>${thisMonthKeys.length}회</strong></span><span class="cal-stat">지난 달 <strong>${prevMonthKeys.length}회</strong></span>`;
+  const totalEntries = Object.keys(calHistDates).length;
+  if(totalEntries === 0){
+    stats.innerHTML = `<span class="cal-stat" style="color:var(--t3);">일지를 작성하면 여기에 기록이 쌓여요</span>`;
+  } else {
+    stats.innerHTML = `<span class="cal-stat">이번 달 <strong>${thisMonthKeys.length}회</strong></span><span class="cal-stat">지난 달 <strong>${prevMonthKeys.length}회</strong></span>`;
+  }
 }
 
 function calSelectDate(key, d){
@@ -1278,46 +1343,11 @@ function calSelectDate(key, d){
   dateLabel.textContent = (calMonth+1)+'월 '+d+'일 '+dows[date.getDay()]+'요일';
 
   if(items.length === 0){
-    list.innerHTML = '<div style="font-size:13px;color:var(--t3);padding:8px 0;">이날 수업 기록이 없어요</div>';
+    list.innerHTML = '<div style="font-size:13px;color:var(--t3);padding:12px 0;">이날 수업 기록이 없어요</div>';
   } else {
     list.innerHTML = '';
     items.forEach(({entry: e, realIdx}) => {
-      const partTags = (e.parts||[]).map(p=>`<span class="je-part-tag">${p}</span>`).join('');
-      const exLines = (e.exercises||[]).map(ex => {
-        const bwEx = isBodyweight(ex);
-        const totalReps = (ex.sets||[]).reduce((s,st)=>s+st.r,0);
-        const setStr = bwEx
-          ? `총 ${totalReps}개`
-          : `최고 ${ex.maxW||0}kg · 볼륨 ${(ex.vol||0).toLocaleString()}kg`;
-        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--bd);font-size:13px;">
-          <span style="font-weight:500;color:var(--t);">${ex.name}</span>
-          <span style="color:var(--t2);">${setStr}</span>
-        </div>`;
-      }).join('');
-
-      const grandVol = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+(ex.vol||0),0);
-      const grandMaxW = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
-      const bwTotal = (e.exercises||[]).filter(ex=>isBodyweight(ex)).reduce((s,ex)=>(ex.sets||[]).reduce((a,st)=>a+st.r,0)+s,0);
-
-      const card = document.createElement('div');
-      card.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);overflow:hidden;margin-bottom:10px;cursor:pointer;';
-      card.innerHTML = `
-        <div style="padding:12px 16px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:14px;font-weight:700;color:var(--g0);">${e.session||e.streak}회차</span>
-            <div>${partTags||'<span style="font-size:11px;color:var(--t3);">부위 미입력</span>'}</div>
-          </div>
-          <span style="font-size:11px;color:var(--t3);">강도 ${e.intensity||'—'}점</span>
-        </div>
-        <div style="padding:4px 16px 4px;">${exLines||'<div style="padding:10px 0;font-size:13px;color:var(--t3);">종목 없음</div>'}</div>
-        <div style="padding:10px 16px;display:flex;gap:14px;background:var(--sf2);">
-          ${grandMaxW ? `<span style="font-size:12px;color:var(--t2);">최고 <strong style="color:var(--t);">${grandMaxW}kg</strong></span>` : ''}
-          ${grandVol ? `<span style="font-size:12px;color:var(--t2);">총 볼륨 <strong style="color:var(--t);">${grandVol.toLocaleString()}kg</strong></span>` : ''}
-          ${bwTotal ? `<span style="font-size:12px;color:var(--t2);">맨몸 <strong style="color:var(--t);">${bwTotal}개</strong></span>` : ''}
-          <span style="font-size:12px;color:var(--t2);">강도 <strong style="color:${journalIColor(e.intensity||70)};">${e.intensity||'—'}점</strong></span>
-        </div>`;
-      card.onclick = () => openDetailModal(e, realIdx);
-      list.appendChild(card);
+      list.appendChild(buildJournalCard(e, realIdx));
     });
   }
   sel.style.display = 'block';
@@ -2046,22 +2076,10 @@ function buildJournalCard(e, realIdx){
 
 async function renderJournalList(){
   if(!currentMember) return;
-  const hist = await getMemberHistory(currentMember.id);
-  const label = document.getElementById('journalsCountLabel');
-  const container = document.getElementById('journalEntries');
-
-  label.textContent = '일지  ' + hist.length + '개';
-  container.innerHTML = '';
-
-  if(hist.length === 0){
-    container.innerHTML = '<div class="empty-state"><div class="e-icon">📋</div><div class="e-text">아직 작성된 일지가 없어요<br>새 일지를 작성해보세요</div></div>';
-    return;
-  }
-
-  [...hist].reverse().forEach((e, ri) => {
-    const realIdx = hist.length - 1 - ri;
-    container.appendChild(buildJournalCard(e, realIdx));
-  });
+  // 달력만 갱신 (일지 목록은 달력 날짜 탭 시 표시)
+  await buildCalHistDates();
+  renderCalendar();
+  await updateMemberInfoCard();
 }
 
 async function deleteEntry(idx){
@@ -2070,7 +2088,23 @@ async function deleteEntry(idx){
   const hist = await getMemberHistory(currentMember.id);
   hist.splice(idx, 1);
   await saveMemberHistory(currentMember.id, hist);
-  renderJournalList();
+  // 선택된 날짜 카드도 갱신
+  if(calSelected){
+    await buildCalHistDates();
+    renderCalendar();
+    const items = calHistDates[calSelected] || [];
+    const list = document.getElementById('calSelectedList');
+    if(list){
+      if(items.length === 0){
+        document.getElementById('calSelectedEntries').style.display = 'none';
+        calSelected = null;
+      } else {
+        list.innerHTML = '';
+        items.forEach(({entry: e, realIdx}) => list.appendChild(buildJournalCard(e, realIdx)));
+      }
+    }
+  }
+  await updateMemberInfoCard();
 }
 
 function closeDetailModal(){
@@ -2173,7 +2207,22 @@ async function openDetailModal(e, idx){
 async function openNewJournal(){
   if(!currentMember) return;
   editingEntryIdx = null;
-  exercises = [{name:'',prevMaxW:0,prevVol:0,comment:'',sets:[{w:0,r:10}]}];
+
+  // 임시저장 복구 확인
+  if(hasDraft(currentMember.id)){
+    const resume = confirm('이어서 작성할까요?\n(취소하면 새로 시작해요)');
+    if(resume){
+      await loadDraftToForm();
+      switchTab('input');
+      showScreen('screen-journal');
+      return;
+    } else {
+      clearDraft(currentMember.id);
+      renderMemberList();
+    }
+  }
+
+  exercises = [{name:'',prevMaxW:0,prevVol:0,comment:'',color:null,sets:[{w:0,r:10}]}];
   selectedParts = [];
 
   document.getElementById('journalMemberName').textContent = currentMember.name + '님';
@@ -2322,7 +2371,7 @@ async function doChangePin(){
   const pin = document.getElementById('newPin').value.trim();
   const errEl = document.getElementById('pinError');
   if(!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)){
-    errEl.textContent = 'PIN은 숫자 4자리로 입력해주세요';
+    errEl.textContent = '비밀번호는 숫자 4자리로 입력해주세요';
     errEl.style.display = 'block';
     return;
   }
@@ -2467,6 +2516,49 @@ function showVideoFallback(file){
   a.download = (currentMember ? currentMember.name+'_' : '') + '수업영상_' + getShortDate() + '.mp4';
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+async function loadDraftToForm(){
+  if(!currentMember) return;
+  const d = getDraft(currentMember.id);
+  if(!d) return;
+
+  selectedParts = d.parts || [];
+  exercises = (d.exercises||[]).map(ex=>({...ex, sets:(ex.sets||[]).map(s=>({...s}))}));
+  if(!exercises.length) exercises = [{name:'',prevMaxW:0,prevVol:0,comment:'',color:null,sets:[{w:0,r:10}]}];
+
+  document.getElementById('journalMemberName').textContent = currentMember.name + '님';
+  document.getElementById('journalFormTitle') && (document.getElementById('journalFormTitle').textContent = '새 일지 작성');
+
+  const hist = await getMemberHistory(currentMember.id);
+  document.getElementById('iStreak').value = d.session || hist.length + 1;
+  document.getElementById('iSession').value = d.session || hist.length + 1;
+  updateSessionLabel();
+
+  setEntryDate(d.entryDate || todayISO());
+  renderRecentMemoBar();
+  renderParts();
+  renderExCards();
+  recalcAll();
+
+  const iv = parseInt(d.intensity)||70;
+  document.getElementById('iIntensity').value = iv;
+  updateIntensity(iv);
+  document.getElementById('iLetter').value = d.letter || '';
+}
+
+function autoSaveDraft(){
+  if(!currentMember || editingEntryIdx !== null) return;
+  const data = {
+    parts: [...selectedParts],
+    exercises: exercises.map(ex=>({...ex, sets:[...ex.sets]})),
+    intensity: document.getElementById('iIntensity')?.value || 70,
+    session: document.getElementById('iSession')?.value || 1,
+    letter: document.getElementById('iLetter')?.value || '',
+    entryDate: document.getElementById('iEntryDate')?.value || '',
+    savedAt: new Date().toISOString(),
+  };
+  saveDraft(currentMember.id, data);
 }
 
 function updateSessionLabel(){
@@ -2627,6 +2719,7 @@ function isBodyweight(ex){ return ex.sets.length>0 && ex.sets.every(st=>Number(s
 function exTotalReps(ex){ return ex.sets.reduce((s,st)=>s+st.r,0); }
 
 function recalcAll(){
+  autoSaveDraft();
   // 지난 기록에서 prev 자동 반영
   const hist = currentMember ? getMemberHistory(currentMember.id) : [];
   const lastEntry = hist.length ? hist[hist.length-1] : null;
@@ -2882,9 +2975,13 @@ function buildExCard(ei){
           oninput="exercises[${ei}].name=this.value;autoFillPrev(${ei},this.value);"/>
         <button class="ex-del-btn" onclick="removeExercise(${ei})">×</button>
       </div>
-      <div class="ex-color-row">${colorDots}</div>
+      <div class="ex-color-row">
+        ${colorDots}
+        <span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;${localStorage.getItem('hint_drag_seen')?'display:none;':''}">달력에서 색으로 구분돼요</span>
+      </div>
       <div class="prev-auto-row" id="prevInfo-${ei}"></div>
       <div class="sets-area" id="sets-${ei}"></div>
+      ${ei===0 && !localStorage.getItem('hint_drag_seen') ? '<div id="dragHint" style="font-size:11px;color:var(--t3);text-align:center;padding:4px 0 6px;">↕ 드래그하거나 탭해서 입력</div>' : ''}
       <div class="ex-sets-summary" id="setsum-${ei}"></div>
       <div class="ex-footer">
         <span class="ex-summary" id="chip-${ei}">최고 <strong>0kg</strong>　총 볼륨 <strong>0kg</strong></span>
@@ -3042,13 +3139,22 @@ async function saveJournal(){
 
   await saveMemberHistory(currentMember.id, hist);
 
-  // 회원 목록 메타도 갱신
-  const lbl = document.getElementById('journalsCountLabel');
-  if(lbl) lbl.textContent = `일지  ${hist.length}개`;
+  // 드래그 힌트 영구 숨김
+  localStorage.setItem('hint_drag_seen', '1');
+  const hint = document.getElementById('dragHint');
+  if(hint) hint.style.display = 'none';
+  const colorHint = document.getElementById('colorHint');
+  if(colorHint) colorHint.style.display = 'none';
+  const copyHint = document.getElementById('copyHint');
+  if(copyHint) copyHint.style.display = 'none';
+
+  // 임시저장 삭제
+  if(!isEdit) clearDraft(currentMember.id);
 
   // 달력 갱신
   await buildCalHistDates();
   renderCalendar();
+  await updateMemberInfoCard();
 
   if(isEdit){
     editingEntryIdx = null;
