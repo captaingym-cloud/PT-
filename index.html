@@ -436,6 +436,23 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
   .bottom-btns{padding-bottom:calc(10px + env(safe-area-inset-bottom));}
   .page,.member-list-wrap{padding-bottom:calc(100px + env(safe-area-inset-bottom));}
 }
+
+/* 폰 (480px 이하) — 달력 칸 작게, 배지/점 축소 */
+@media (max-width: 480px){
+  .cal-cell{aspect-ratio:var(--dp-aspect, 0.78);}
+  .cal-num{font-size:11px;width:20px;height:20px;}
+  .cal-cell.today .cal-num{width:20px;height:20px;}
+  .cal-badge{font-size:8.5px;padding:2px 1px;border-radius:4px;}
+  .cal-ex-desktop{display:none;}
+  .cal-dot-mobile-wrap{display:flex;}
+  .cal-color-dot{width:6px;height:6px;border-radius:1px;}
+}
+/* 패드/컴터 (481px 이상) — 종목 이름 배지, 점 숨김 */
+@media (min-width: 481px){
+  .cal-dot-mobile-wrap{display:none;}
+  .cal-ex-desktop{display:block;}
+  .cal-cell{aspect-ratio:var(--dp-aspect, 0.55);}
+}
 </style>
 </head>
 <body>
@@ -1201,12 +1218,29 @@ function renderCalendar(){
 
       const exList = (first.exercises||[]).filter(ex=>ex.name);
       if(exList.length){
+        // 패드/컴터: 종목 이름 배지 (CSS로 폰에서 숨김)
+        const nameBadges = exList.slice(0,4).map(ex => {
+          const c = EX_COLORS.find(c=>c.id===ex.color);
+          const bg     = c ? c.bg     : 'var(--sf2)';
+          const border = c ? c.border : 'var(--bd2)';
+          const text   = c ? c.text   : 'var(--t2)';
+          return `<span class="cal-ex cal-ex-desktop" style="background:${bg};border-color:${border};color:${text};">${ex.name}</span>`;
+        }).join('');
+        const rest = exList.length - 4;
+        const restBadge = rest > 0 ? `<span class="cal-ex cal-ex-desktop">+${rest}</span>` : '';
+
+        // 폰: 색깔 점만 (CSS로 패드/컴터에서 숨김)
         const dots = exList.slice(0,6).map(ex => {
           const c = EX_COLORS.find(c=>c.id===ex.color);
-          const bg = c ? c.border : '#BBBBBB';
-          return `<span class="cal-color-dot" style="background:${bg};"></span>`;
+          const bg = c ? c.bg : '#BBBBBB';
+          return `<span class="cal-color-dot cal-dot-mobile" style="background:${bg};"></span>`;
         }).join('');
-        badgeHtml += `<div class="cal-color-dots">${dots}</div>`;
+
+        badgeHtml = `<span class="cal-badge">${sessionNum}회차${partLabel ? ' · '+partLabel : ''}</span>`;
+        badgeHtml += nameBadges + restBadge;
+        badgeHtml += `<div class="cal-color-dots cal-dot-mobile-wrap">${dots}</div>`;
+      } else {
+        badgeHtml = `<span class="cal-badge">${sessionNum}회차${partLabel ? ' · '+partLabel : ''}</span>`;
       }
     }
     cell.innerHTML = `<span class="cal-num">${d}</span>${badgeHtml}`;
