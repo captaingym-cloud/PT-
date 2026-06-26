@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.0.3"/>
+<meta name="app-version" content="1.0.4"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -2506,9 +2506,8 @@ async function openSettings(){
 
 async function refreshData(){
   closeModal('modal-settings');
-  // 메모리 캐시 전체 초기화 → 다음 접근 시 Firestore에서 새로 불러옴
-  Object.keys(cache).forEach(k => delete cache[k]);
-  await renderMemberList();
+  // HTML 파일 자체를 다시 받아와서 최신 버전 + 최신 데이터 로드
+  location.reload(true);
 }
 
 function doLogout(){
