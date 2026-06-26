@@ -190,7 +190,7 @@ input,textarea,button,select{touch-action:manipulation;}
 .cal-dow span:first-child{color:#E24B4A;}
 .cal-dow span:last-child{color:#378ADD;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
-.cal-cell{aspect-ratio:var(--dp-aspect, 0.68);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;border-radius:var(--r8);cursor:pointer;position:relative;touch-action:manipulation;transition:background .1s;}
+.cal-cell{aspect-ratio:var(--dp-aspect, 0.68);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;border-radius:var(--r8);cursor:pointer;position:relative;touch-action:manipulation;transition:background .1s;overflow:hidden;min-width:0;}
 .cal-cell:active{background:var(--sf2);}
 .cal-cell.empty{cursor:default;}
 .cal-cell.today .cal-num{background:var(--g0);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;}
@@ -453,7 +453,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 @media (min-width: 481px){
   .cal-dot-mobile-wrap{display:none;}
   .cal-ex-desktop{display:block;}
-  .cal-cell{aspect-ratio:var(--dp-aspect, 0.55);}
+  .cal-cell{aspect-ratio:var(--dp-aspect, 0.55);overflow:hidden;}
 }
 </style>
 </head>
@@ -780,8 +780,13 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
             영상 촬영 후 공유
           </button>
+          <button onclick="pickVideo()" style="flex:1;padding:13px;background:var(--sf2);border:0.5px solid var(--bd2);border-radius:var(--r12);font-size:14px;font-weight:600;color:var(--t);cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            앨범에서 공유
+          </button>
         </div>
         <input type="file" id="videoInput" accept="video/*" capture="environment" style="display:none;" onchange="onVideoSelected(event)"/>
+        <input type="file" id="videoPickInput" accept="video/*" style="display:none;" onchange="onVideoSelected(event)"/>
       </div>
     </div>
   </div>
@@ -803,11 +808,15 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
   </div>
 
   <div class="bottom-btns">
-    <button class="btn-copy" id="copyBtn" onclick="saveAndCopy()" style="flex:1;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
-      저장 + 카톡 복사
+    <button class="btn-save" onclick="saveOnly()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      저장
     </button>
-    <div id="copyHint" style="text-align:center;font-size:11px;color:var(--t3);margin-top:6px;${localStorage.getItem('hint_drag_seen')?'display:none;':''}">회원님께 보낼 내용이 복사돼요</div>
+    <button class="btn-copy" id="copyBtn" onclick="saveAndCopy()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+      저장 + 카톡 전송
+    </button>
+    <div id="copyHint" style="text-align:center;font-size:11px;color:var(--t3);margin-top:6px;">회원님께 보낼 내용이 복사돼요</div>
   </div>
 </div>
 
@@ -984,12 +993,12 @@ const EX_COLORS = [
   {id:'green',  bg:'#52B443', border:'#1E4D0A', text:'#fff'},
 ];
 const INTENSITY_LEVELS = [
-  {max:20, color:'#52b443', desc:'😌  아주 가볍게 움직였어요'},
-  {max:40, color:'#7ec843', desc:'🙂  워밍업 같은 수준이에요'},
-  {max:60, color:'#f5c842', desc:'😤  적당히 땀 흘렸어요'},
-  {max:75, color:'#f5a623', desc:'💪  꽤 열심히 했어요'},
-  {max:88, color:'#e8703a', desc:'🔥  많이 힘들었어요'},
-  {max:100,color:'#e8503a', desc:'🥵  한계까지 밀어붙였어요'},
+  {max:20, color:'#52b443', desc:'😌  몸을 깨우는 데 집중한 날이에요'},
+  {max:40, color:'#7ec843', desc:'🙂  가볍게 움직이며 컨디션을 챙겼어요'},
+  {max:60, color:'#f5c842', desc:'😤  꾸준히 해낸 오늘, 정말 잘하셨어요'},
+  {max:75, color:'#f5a623', desc:'💪  오늘 정말 열심히 하셨어요!'},
+  {max:88, color:'#e8703a', desc:'🔥  힘들었지만 끝까지 해내셨어요, 대단해요'},
+  {max:100,color:'#e8503a', desc:'🥵  오늘 한계를 넘으셨어요, 진심으로 멋있어요'},
 ];
 
 /* ═══════════════════════════════════════
@@ -998,6 +1007,14 @@ const INTENSITY_LEVELS = [
 document.addEventListener('DOMContentLoaded', async function(){
   // 앱 시작할 때마다 캐시 초기화 → Firestore에서 최신 데이터 불러옴
   Object.keys(cache).forEach(k => delete cache[k]);
+
+  // 힌트 초기 상태
+  if(localStorage.getItem('hint_drag_seen')){
+    ['dragHint','colorHint','copyHint'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.style.display = 'none';
+    });
+  }
   // 앱 시작 시 캐시 초기화 → Firestore에서 항상 최신 데이터 로드
   Object.keys(cache).forEach(k => delete cache[k]);
 
@@ -2033,9 +2050,13 @@ function buildJournalCard(e, realIdx){
     const setStr = bwEx
       ? (ex.sets||[]).map(st=>st.r+'개').join(',  ')
       : (ex.sets||[]).map(st=>st.w+'kg × '+st.r+'개').join(',  ');
-    return '<div style="margin-bottom:6px;">'
-      +'<span style="font-size:13px;font-weight:600;color:var(--t);">'+ex.name+'</span>'
-      +'<div style="font-size:12px;color:var(--t2);margin-top:2px;line-height:1.7;">'+setStr+'</div>'
+    const c = EX_COLORS.find(c=>c.id===ex.color);
+    const nameStyle = c
+      ? `display:inline-block;background:${c.bg};border:1px solid ${c.border};color:${c.text};border-radius:6px;padding:3px 10px;font-size:13px;font-weight:600;margin-bottom:4px;`
+      : `display:inline-block;font-size:13px;font-weight:600;color:var(--t);margin-bottom:4px;`;
+    return '<div style="margin-bottom:10px;">'
+      +'<span style="'+nameStyle+'">'+ex.name+'</span>'
+      +'<div style="font-size:12px;color:var(--t2);line-height:1.7;padding-left:2px;">'+setStr+'</div>'
       +'</div>';
   }).join('');
 
@@ -2126,9 +2147,9 @@ async function openDetailModal(e, idx){
     if(v<=88) return '#e8703a'; return '#e8503a';
   };
   const iDesc = v => {
-    if(v<=20) return '아주 가볍게'; if(v<=40) return '워밍업 수준';
-    if(v<=60) return '적당히 땀 흘림'; if(v<=75) return '꽤 열심히';
-    if(v<=88) return '많이 힘들었음'; return '한계까지';
+    if(v<=20) return '몸을 깨운 날'; if(v<=40) return '컨디션 관리';
+    if(v<=60) return '꾸준히 해냄'; if(v<=75) return '정말 열심히';
+    if(v<=88) return '끝까지 해냄'; return '한계를 넘음';
   };
 
   const grandVol  = (e.exercises||[]).reduce((s,ex)=>s+ex.vol,0);
@@ -2715,7 +2736,7 @@ function updateIntensity(v){
 function exVol(ex){return ex.sets.reduce((s,st)=>s+st.w*st.r,0);}
 function exMaxW(ex){return ex.sets.length?Math.max(...ex.sets.map(st=>st.w)):0;}
 // 전 세트 무게가 0이면 맨몸운동으로 간주
-function isBodyweight(ex){ return ex.sets.length>0 && ex.sets.every(st=>Number(st.w)===0); }
+function isBodyweight(ex){ const sets=ex.sets||[]; return sets.length>0 && sets.every(st=>Number(st.w)===0); }
 function exTotalReps(ex){ return ex.sets.reduce((s,st)=>s+st.r,0); }
 
 function recalcAll(){
@@ -2977,7 +2998,7 @@ function buildExCard(ei){
       </div>
       <div class="ex-color-row">
         ${colorDots}
-        <span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;${localStorage.getItem('hint_drag_seen')?'display:none;':''}">달력에서 색으로 구분돼요</span>
+        <span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">달력에서 색으로 구분돼요</span>
       </div>
       <div class="prev-auto-row" id="prevInfo-${ei}"></div>
       <div class="sets-area" id="sets-${ei}"></div>
@@ -3155,10 +3176,31 @@ async function saveJournal(){
   await buildCalHistDates();
   renderCalendar();
   await updateMemberInfoCard();
+  await renderMemberList(); // 회원 목록 갱신 (만료 체크 등)
 
-  if(isEdit){
-    editingEntryIdx = null;
+  editingEntryIdx = null;
+}
+
+// 저장만 하고 화면 나가기
+async function saveOnly(){
+  await saveJournal();
+  goBack();
+}
+
+// 전송 기록 저장 — 일지 ID별 카운트
+async function recordSent(mid, entryId){
+  if(!TRAINER_ID || !mid || !entryId) return;
+  const k = 'sent_'+TRAINER_ID;
+  const records = await fsGet('data', k) || {};
+  const key = mid+'_'+entryId;
+  if(!records[key]){
+    records[key] = { mid, entryId, count:0, firstAt:'', lastAt:'' };
   }
+  records[key].count = (records[key].count||0) + 1;
+  records[key].lastAt = new Date().toISOString();
+  if(!records[key].firstAt) records[key].firstAt = records[key].lastAt;
+  records[key].date = getShortDate();
+  await fsSet('data', k, records);
 }
 
 function saveAndCopy(){
@@ -3167,12 +3209,16 @@ function saveAndCopy(){
 
   function markDone(){
     btn.classList.add('done');
-    btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 저장 + 복사 완료';
-    setTimeout(()=>{
-      if(wasEdit) return; // 수정 모드면 화면 전환되므로 버튼 복원 불필요
-      btn.classList.remove('done');
-      btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 저장하고 복사하기';
-    },2000);
+    btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 전송 완료!';
+    // 저장 + 전송 기록 + 화면 나가기
+    saveJournal().then(async () => {
+      if(currentMember){
+        const hist = await getMemberHistory(currentMember.id);
+        const last = hist[hist.length-1];
+        if(last) await recordSent(currentMember.id, last.id);
+      }
+      setTimeout(()=>goBack(), 800);
+    });
   }
   function fallback(text){
     const ta=document.createElement('textarea');
@@ -3205,10 +3251,6 @@ function saveAndCopy(){
     });
   }
 
-  // 저장은 복사와 별개로 백그라운드에서 진행
-  saveJournal().then(() => {
-    if(wasEdit) goBack();
-  });
 }
 
 /* ═══════════════════════════════════════
@@ -3293,13 +3335,13 @@ async function buildText(){
   L.push('');
 
   // ── 구분선 + 요약 ──
-  L.push('──────────────────────');
+  L.push('─────────────');
   if(grandMaxW) L.push(`🔝 최고 무게  ${grandMaxW}kg`);
   if(grandVol>0) L.push(`📊 총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
   if(bwTotalReps>0) L.push(`🤸 맨몸 운동  총 ${bwTotalReps}개`);
   L.push(`🔥 소모 칼로리  약 ${cal.toLocaleString()}kcal`);
   L.push(`💥 운동 강도  ${intensity}점  ${intensityDesc}`);
-  L.push('──────────────────────');
+  L.push('─────────────');
   L.push('');
 
   // ── 종목별 ──
@@ -3343,7 +3385,7 @@ async function doCopyEntry(idx){
   const d = new Date(e.dateTime||e.date);
   const days=['일','월','화','수','목','금','토'];
   const dateStr = isNaN(d) ? e.date : (d.getMonth()+1)+'월 '+d.getDate()+'일 '+days[d.getDay()]+'요일';
-  const iDesc = v=>{if(v<=20)return '아주 가볍게';if(v<=40)return '워밍업 수준';if(v<=60)return '적당히 땀 흘림';if(v<=75)return '꽤 열심히';if(v<=88)return '많이 힘들었음';return '한계까지';};
+  const iDesc = v=>{if(v<=20)return '몸을 깨운 날';if(v<=40)return '컨디션 관리';if(v<=60)return '꾸준히 해냄';if(v<=75)return '정말 열심히';if(v<=88)return '끝까지 해냄';return '한계를 넘음';};
   const iv=e.intensity||70;
   const grandVol=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+ex.vol,0);
   const grandMaxW=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
@@ -3377,12 +3419,12 @@ async function doCopyEntry(idx){
   L.push('');
 
   // ── 구분선 + 요약 ──
-  L.push('──────────────────────');
+  L.push('─────────────');
   if(grandMaxW) L.push('🔝 최고 무게  '+grandMaxW+'kg');
   if(grandVol>0) L.push('📊 총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
   if(bwTotalReps>0) L.push('🤸 맨몸 운동  총 '+bwTotalReps+'개');
   L.push('🔥 운동 강도  '+iv+'점  '+iDesc(iv));
-  L.push('──────────────────────');
+  L.push('─────────────');
   L.push('');
 
   // ── 종목별 ──
@@ -3412,10 +3454,18 @@ async function doCopyEntry(idx){
   const text=L.join('\n');
   const btn=document.querySelector('.detail-copy-btn');
   function markDone(){
-    if(btn){btn.textContent='✓ 복사 완료';setTimeout(()=>{btn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 복사';},2000);}
+    if(btn){btn.textContent='✓ 전송 완료';setTimeout(()=>{btn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 복사';},2000);}
+    // 전송 기록
+    if(currentMember && e.id) recordSent(currentMember.id, e.id);
   }
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(markDone).catch(()=>showModal(text));}
-  else{const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;top:0;left:0;width:2em;height:2em;opacity:0;';document.body.appendChild(ta);ta.focus();ta.select();try{if(document.execCommand('copy'))markDone();else showModal(text);}catch(e){showModal(text);}document.body.removeChild(ta);}
+  function fallback2(){
+    const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;top:0;left:0;width:2em;height:2em;opacity:0;';
+    document.body.appendChild(ta);ta.focus();ta.select();
+    try{if(document.execCommand('copy'))markDone();else showModal(text);}catch(e){showModal(text);}
+    document.body.removeChild(ta);
+  }
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(markDone).catch(()=>fallback2());}
+  else{ fallback2(); }
 }
 
 async function doCopy(){
