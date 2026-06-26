@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="app-version" content="1.0.0"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -1015,6 +1016,9 @@ const INTENSITY_LEVELS = [
 document.addEventListener('DOMContentLoaded', async function(){
   // 앱 시작할 때마다 캐시 초기화 → Firestore에서 최신 데이터 불러옴
   Object.keys(cache).forEach(k => delete cache[k]);
+
+  // 버전 체크
+  checkAppVersion();
 
   // 힌트 초기 상태
   if(localStorage.getItem('hint_drag_seen')){
@@ -2596,6 +2600,37 @@ function autoSaveDraft(){
     savedAt: new Date().toISOString(),
   };
   saveDraft(currentMember.id, data);
+}
+
+/* ═══════════════════════════════════════
+   버전 체크
+═══════════════════════════════════════ */
+async function checkAppVersion(){
+  try{
+    const currentVersion = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
+    const serverData = await fsGet('admin', 'app_version');
+
+    if(!serverData){
+      // 서버에 버전 없으면 현재 버전으로 등록
+      await fsSet('admin', 'app_version', { version: currentVersion, updatedAt: new Date().toISOString() });
+      return;
+    }
+
+    const serverVersion = serverData.version;
+    if(serverVersion && serverVersion !== currentVersion){
+      // 버전 다르면 업데이트 팝업
+      showUpdateBanner(serverVersion);
+    }
+  } catch(e){}
+}
+
+function showUpdateBanner(newVersion){
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;z-index:9999;padding:10px 16px;background:var(--g0);display:flex;align-items:center;justify-content:space-between;gap:10px;';
+  banner.innerHTML = `
+    <span style="font-size:13px;color:#fff;font-weight:500;">🆕 새 버전이 있어요 (v${newVersion})</span>
+    <button onclick="location.reload(true)" style="font-size:12px;font-weight:700;color:var(--g0);background:#fff;border:none;border-radius:20px;padding:4px 12px;cursor:pointer;font-family:inherit;">확인</button>`;
+  document.body.appendChild(banner);
 }
 
 function updateSessionLabel(){
