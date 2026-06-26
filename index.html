@@ -896,6 +896,16 @@ async function saveTrainer(name, pin){
   localStorage.setItem('trainer_name', name);
   localStorage.setItem('trainer_pin', p);
   await fsSet('trainers', TRAINER_ID, {name, updatedAt: new Date().toISOString()});
+  // 대표님 대시보드용 공유 목록에 등록
+  await registerToDirectory(name, TRAINER_ID);
+}
+
+async function registerToDirectory(name, trainerId){
+  try{
+    const dir = await fsGet('admin', 'trainer_directory') || {};
+    dir[trainerId] = { name, trainerId, registeredAt: new Date().toISOString() };
+    await fsSet('admin', 'trainer_directory', dir);
+  } catch(e){}
 }
 async function getMembers(){
   if(!TRAINER_ID) return [];
