@@ -730,8 +730,6 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         <div class="live-delta" id="sumDelta"></div>
       </div>
       <div class="live-card">
-        <div class="live-label">소모 칼로리</div>
-        <div class="live-val" id="sumCal">0<span>kcal</span></div>
         <div class="live-delta" style="font-size:10px;color:var(--t3);">체중 기반 추정</div>
       </div>
     </div>
@@ -2056,7 +2054,8 @@ function buildJournalCard(e, realIdx){
   const grandMaxW = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
   const partTags  = (e.parts||[]).map(p=>'<span class="je-part-tag">'+p+'</span>').join('');
 
-  const exBlock = (e.exercises||[]).map(ex => {
+  const exList = (e.exercises||[]).filter(ex=>ex.name);
+  const exBlock = exList.map((ex, i) => {
     const bwEx = isBodyweight(ex);
     const totalReps = (ex.sets||[]).reduce((s,st)=>s+st.r,0);
     const setStr = bwEx
@@ -2066,7 +2065,9 @@ function buildJournalCard(e, realIdx){
     const nameStyle = c
       ? `display:inline-block;background:${c.bg};border:1px solid ${c.border};color:${c.text};border-radius:6px;padding:3px 10px;font-size:13px;font-weight:600;margin-bottom:4px;`
       : `display:inline-block;font-size:13px;font-weight:600;color:var(--t);margin-bottom:4px;`;
-    return '<div style="margin-bottom:10px;">'
+    const divider = i > 0 ? '<div style="border-top:0.5px solid var(--bd);margin-bottom:8px;"></div>' : '';
+    return divider
+      +'<div style="margin-bottom:8px;">'
       +'<span style="'+nameStyle+'">'+ex.name+'</span>'
       +'<div style="font-size:12px;color:var(--t2);line-height:1.7;padding-left:2px;">'+setStr+'</div>'
       +'</div>';
@@ -2179,19 +2180,22 @@ async function openDetailModal(e, idx){
   html += '<div class="detail-row"><span class="detail-row-label">총 볼륨</span><span class="detail-row-val">'+grandVol.toLocaleString()+'kg</span></div>';
   html += '<div class="detail-row"><span class="detail-row-label">최대 무게</span><span class="detail-row-val">'+grandMaxW+'kg</span></div>';
   html += '<div class="detail-row"><span class="detail-row-label">운동 강도</span><span class="detail-row-val"><span style="color:'+iColor(iv)+';font-weight:700;">'+iv+'점</span> <span style="color:var(--t3);font-size:12px;font-weight:400;">'+iDesc(iv)+'</span></span></div>';
-  html += '<div class="detail-row"><span class="detail-row-label">소모 칼로리</span><span class="detail-row-val">약 '+((e.exercises||[]).reduce((s,ex)=>(ex.sets||[]).length+s,0)*Math.round(70*0.088*2.5)).toLocaleString()+'kcal</span></div>';
   html += '</div></div>';
 
   // 종목별 세트
   if((e.exercises||[]).length > 0){
     html += '<div class="detail-section">';
     html += '<div class="detail-eyebrow">세트 기록</div>';
-    e.exercises.forEach(ex => {
+    e.exercises.forEach((ex, i) => {
       const diff = ex.vol - (ex.prevVol||0);
       const pct  = ex.prevVol ? Math.round((diff/ex.prevVol)*100) : null;
-      html += '<div class="detail-card" style="margin-bottom:8px;">';
+      const c = (typeof EX_COLORS !== 'undefined') ? EX_COLORS.find(c=>c.id===ex.color) : null;
+      const nameColor = c ? c.text : 'var(--t)';
+      const nameBg = c ? `background:${c.bg};border:1px solid ${c.border};border-radius:6px;padding:2px 8px;` : '';
+      if(i > 0) html += '<div style="border-top:0.5px solid var(--bd);margin:4px 0 10px;"></div>';
+      html += '<div class="detail-card" style="margin-bottom:4px;">';
       html += '<div class="detail-ex-header">'
-        +'<span class="detail-ex-name">'+ex.name+'</span>'
+        +'<span class="detail-ex-name" style="'+nameBg+'color:'+nameColor+';">'+ex.name+'</span>'
         +'<span class="detail-ex-chip">볼륨 '+ex.vol.toLocaleString()+'kg'+(pct!==null?' ('+(diff>=0?'+':'')+pct+'%)':'')+'</span>'
         +'</div>';
       (ex.sets||[]).forEach((st,si) => {
@@ -2764,7 +2768,6 @@ function recalcAll(){
   const cal = Math.round(bw*0.088*totalSets*2.5);
 
   document.getElementById('sumVol').innerHTML=grandVol.toLocaleString()+'<span>kg</span>';
-  document.getElementById('sumCal').innerHTML=cal.toLocaleString()+'<span>kcal</span>';
 
   if(grandPrev>0){
     const diff=grandVol-grandPrev;
@@ -3351,7 +3354,6 @@ async function buildText(){
   if(grandMaxW) L.push(`🔝 최고 무게  ${grandMaxW}kg`);
   if(grandVol>0) L.push(`📊 총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
   if(bwTotalReps>0) L.push(`🤸 맨몸 운동  총 ${bwTotalReps}개`);
-  L.push(`🔥 소모 칼로리  약 ${cal.toLocaleString()}kcal`);
   L.push(`💥 운동 강도  ${intensity}점  ${intensityDesc}`);
   L.push('─────────────');
   L.push('');
