@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.0.1"/>
+<meta name="app-version" content="1.0.0"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -648,6 +648,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     </div>
 
     <button class="modal-btn cancel" style="width:100%;" onclick="closeModal('modal-settings')">닫기</button>
+    <div style="text-align:center;font-size:11px;color:var(--t3);margin-top:10px;">버전 <span id="appVersionLabel"></span></div>
   </div>
 </div>
 
@@ -2373,6 +2374,9 @@ async function openSettings(){
   const trainer = await getTrainer()||'';
   document.getElementById('currentTrainerLabel').textContent = '현재: ' + trainer;
   document.getElementById('modal-settings').style.display = 'flex';
+  const v = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
+  const vEl = document.getElementById('appVersionLabel');
+  if(vEl) vEl.textContent = v;
 }
 
 async function refreshData(){
@@ -3403,18 +3407,20 @@ async function buildText(){
   if(grandMaxW) L.push(`🔝 최고 무게  ${grandMaxW}kg`);
   if(grandVol>0) L.push(`📊 총 볼륨  ${grandVol.toLocaleString()}kg${volPct!==null?`  (지난 대비 ${volDiff>=0?'+':''}${volPct}%)`:''}` );
   if(bwTotalReps>0) L.push(`🤸 맨몸 운동  총 ${bwTotalReps}개`);
-  L.push(`💥 운동 강도  ${intensity}점  ${intensityDesc}`);
+  L.push(`💥 운동 강도  ${intensity}점`);
+  L.push(`   ${intensityLevel(intensity).desc.replace(/^[^\s]+\s+/,'')}`);
   L.push('─────────────');
   L.push('');
 
   // ── 종목별 ──
-  exercises.forEach((ex)=>{
+  exercises.forEach((ex, ei)=>{
     const bwEx=isBodyweight(ex);
     const vol=exVol(ex),mw=exMaxW(ex);
     const totalReps=exTotalReps(ex);
     const isPR=!bwEx&&ex.prevMaxW>0&&mw>ex.prevMaxW;
     const diff=vol-(ex.prevVol||0);
     const pct=!bwEx&&ex.prevVol?Math.round((diff/ex.prevVol)*100):null;
+    if(ei > 0) L.push('─────────────');
     L.push(`💪 ${ex.name||'종목'}${isPR?'  🏅 신기록':''}`);
     if(bwEx){
       ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.r}개`));
@@ -3486,17 +3492,19 @@ async function doCopyEntry(idx){
   if(grandMaxW) L.push('🔝 최고 무게  '+grandMaxW+'kg');
   if(grandVol>0) L.push('📊 총 볼륨  '+grandVol.toLocaleString()+'kg'+(volPct!==null?'  (지난 대비 '+(volDiff>=0?'+':'')+volPct+'%)':''));
   if(bwTotalReps>0) L.push('🤸 맨몸 운동  총 '+bwTotalReps+'개');
-  L.push('🔥 운동 강도  '+iv+'점  '+iDesc(iv));
+  L.push('💥 운동 강도  '+iv+'점');
+  L.push('   '+iDesc(iv).replace(/^[^\s]+\s+/,''));
   L.push('─────────────');
   L.push('');
 
   // ── 종목별 ──
-  (e.exercises||[]).forEach(ex=>{
+  (e.exercises||[]).forEach((ex,ei)=>{
     const bwEx=isBodyweight(ex);
     const totalReps=(ex.sets||[]).reduce((s,st)=>s+st.r,0);
     const diff=ex.vol-(ex.prevVol||0);
     const pct=!bwEx&&ex.prevVol?Math.round((diff/ex.prevVol)*100):null;
     const isPR=!bwEx&&ex.prevMaxW>0&&ex.maxW>ex.prevMaxW;
+    if(ei > 0) L.push('─────────────');
     L.push('💪 '+ex.name+(isPR?'  🏅 신기록':''));
     if(bwEx){
       (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+st.r+'개'));
