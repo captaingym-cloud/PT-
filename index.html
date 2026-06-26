@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.0.2"/>
+<meta name="app-version" content="1.0.3"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -2981,8 +2981,10 @@ function openDashDetail(storeKey){
 
 async function openDashDeploy(){
   const config = await fsGet('admin', 'app_version');
-  document.getElementById('dashCurrentVerInfo').textContent = '현재 배포 버전: '+(config?config.version:'없음');
-  document.getElementById('dashDeployVer').value = '';
+  const currentFirebase = config ? config.version : '없음';
+  const currentApp = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
+  document.getElementById('dashCurrentVerInfo').textContent = `Firebase: ${currentFirebase}  →  앱: ${currentApp}`;
+  document.getElementById('dashDeployVer').value = currentApp;
   document.getElementById('dashDeployErr').style.display = 'none';
   document.getElementById('modal-dash-deploy').style.display = 'flex';
   setTimeout(()=>document.getElementById('dashDeployVer').focus(),100);
