@@ -126,8 +126,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <nav class="nav">
   <span class="nav-title">🏋️ PT 일지 대시보드</span>
-  <span class="nav-badge" id="navDate"></span>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span class="nav-badge" id="navDate"></span>
+    <button id="settingsBtn" onclick="openPinChange()" style="display:none;background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">⚙️ PIN 변경</button>
+  </div>
 </nav>
+
+<!-- PIN 변경 모달 -->
+<div id="pinChangeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:none;align-items:center;justify-content:center;">
+  <div style="background:var(--sf);border-radius:var(--r16);padding:28px 24px;width:320px;max-width:90vw;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px;">마스터 PIN 변경</div>
+    <div class="field"><label>현재 PIN</label><input id="currentPinInput" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10"/></div>
+    <div class="field"><label>새 PIN</label><input id="newPinInput" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10"/></div>
+    <div class="field"><label>새 PIN 확인</label><input id="newPinConfirm" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10"/></div>
+    <div id="pinChangeErr" style="font-size:12px;color:var(--red);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="closePinChange()" style="flex:1;padding:11px;background:none;border:0.5px solid var(--bd);border-radius:var(--r8);font-size:14px;cursor:pointer;font-family:inherit;color:var(--t2);">취소</button>
+      <button onclick="doChangeMasterPin()" style="flex:1;padding:11px;background:var(--g0);border:none;border-radius:var(--r8);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;">변경</button>
+    </div>
+  </div>
+</div>
 
 <div id="loginSection">
   <div class="login-wrap">
@@ -255,6 +273,7 @@ async function doMasterLogin(){
   showErr(false);
   sessionStorage.setItem('master_authed', '1');
   document.getElementById('loginSection').style.display = 'none';
+  document.getElementById('settingsBtn').style.display = 'block';
   showTrainerList();
 }
 
@@ -311,7 +330,40 @@ function doLogout(){
   sessionStorage.removeItem('master_authed');
   document.getElementById('trainerSelectSection').style.display = 'none';
   document.getElementById('loginSection').style.display = 'block';
+  document.getElementById('settingsBtn').style.display = 'none';
   document.getElementById('masterPin').value = '';
+}
+
+function openPinChange(){
+  document.getElementById('currentPinInput').value = '';
+  document.getElementById('newPinInput').value = '';
+  document.getElementById('newPinConfirm').value = '';
+  document.getElementById('pinChangeErr').style.display = 'none';
+  document.getElementById('pinChangeModal').style.display = 'flex';
+}
+
+function closePinChange(){
+  document.getElementById('pinChangeModal').style.display = 'none';
+}
+
+async function doChangeMasterPin(){
+  const current = document.getElementById('currentPinInput').value.trim();
+  const next    = document.getElementById('newPinInput').value.trim();
+  const confirm = document.getElementById('newPinConfirm').value.trim();
+  const errEl   = document.getElementById('pinChangeErr');
+
+  const config = await fsGet('admin', 'config');
+  if(!config || config.masterPin !== current){
+    errEl.textContent = '현재 PIN이 맞지 않아요'; errEl.style.display='block'; return;
+  }
+  if(!next){ errEl.textContent = '새 PIN을 입력해주세요'; errEl.style.display='block'; return; }
+  if(next !== confirm){ errEl.textContent = '새 PIN이 일치하지 않아요'; errEl.style.display='block'; return; }
+
+  config.masterPin = next;
+  config.updatedAt = new Date().toISOString();
+  await fsSet('admin', 'config', config);
+  closePinChange();
+  alert('PIN이 변경됐어요.');
 }
 
 async function doLogin(){} // 구버전 호환용 빈 함수
