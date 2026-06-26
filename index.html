@@ -1030,6 +1030,8 @@ document.addEventListener('DOMContentLoaded', async function(){
 
   const trainer = await getTrainer();
   if(trainer){
+    // 기존 트레이너도 대시보드 디렉토리에 자동 등록
+    registerToDirectory(trainer, TRAINER_ID);
     showScreen('screen-members');
     renderMemberList();
   } else {
