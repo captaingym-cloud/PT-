@@ -93,7 +93,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .intensity-bar{height:4px;border-radius:2px;background:var(--bd);width:60px;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:6px;}
 .intensity-fill{height:100%;border-radius:2px;}
 
-/* LOADING */
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-end;justify-content:center;}
+.modal-box{background:var(--sf);border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;}
+.modal-handle{width:36px;height:4px;background:var(--bd);border-radius:2px;margin:12px auto 0;}
+.modal-nav{display:flex;align-items:center;justify-content:space-between;padding:12px 18px 10px;}
+.modal-title-text{font-size:16px;font-weight:700;}
+.modal-close{background:none;border:none;font-size:22px;color:var(--t3);cursor:pointer;line-height:1;}
+.modal-scroll{overflow-y:auto;padding:0 18px 32px;}
+.detail-section{margin-bottom:18px;}
+.detail-eyebrow{font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.06em;margin-bottom:8px;}
+.detail-ex-card{background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r12);margin-bottom:8px;overflow:hidden;}
+.detail-ex-name{padding:10px 14px 6px;font-size:14px;font-weight:700;}
+.detail-set-row{display:flex;align-items:center;padding:5px 14px;font-size:13px;gap:8px;border-top:0.5px solid var(--bd);}
+.detail-set-idx{color:var(--t3);width:36px;flex-shrink:0;}
+.detail-set-main{flex:1;color:var(--t);}
+.detail-set-vol{color:var(--t3);font-size:11px;}
+.detail-ex-comment{padding:8px 14px;font-size:12px;color:var(--t2);border-top:0.5px solid var(--bd);line-height:1.6;}
+.detail-letter{background:var(--g2);border:0.5px solid var(--g3,#cde8b0);border-radius:var(--r12);padding:14px;font-size:13px;color:var(--t);line-height:1.8;white-space:pre-wrap;}
+.detail-stats-row{display:flex;gap:12px;flex-wrap:wrap;}
+.detail-stat{background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r8);padding:8px 12px;text-align:center;}
+.detail-stat-num{font-size:16px;font-weight:700;color:var(--t);}
+.detail-stat-label{font-size:10px;color:var(--t3);margin-top:2px;}
+
 .loading{text-align:center;padding:60px 20px;color:var(--t3);font-size:14px;}
 
 /* EMPTY */
@@ -132,6 +154,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="section-title">트레이너별 현황</div>
     <div class="trainer-list" id="trainerList"></div>
+  </div>
+</div>
+
+<!-- 일지 상세 모달 -->
+<div class="modal-overlay" id="journalModal" style="display:none;" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-nav">
+      <span class="modal-title-text" id="modalTitle"></span>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-scroll" id="modalBody"></div>
   </div>
 </div>
 
@@ -355,15 +389,81 @@ function renderMemberRows(m, filtered, sent){
     const intensityV = e.intensity||0;
     const intensityBar = `<span class="intensity-bar"><span class="intensity-fill" style="width:${intensityV}%;background:${intensityColor(intensityV)};"></span></span>`;
     const parts = (e.parts||[]).join(' · ');
-    return `<div class="member-row">
+    const eJson = encodeURIComponent(JSON.stringify(e));
+    const mName = encodeURIComponent(m.name);
+    return `<div class="member-row" style="cursor:pointer;" onclick="openJournalModal('${mName}','${eJson}')">
       <div class="member-name-col">${e.session||e.streak||'?'}회차</div>
       <div class="member-date">${e.date||''}${parts?' · '+parts:''}</div>
       <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--t2);">
         ${intensityV}점${intensityBar}
       </div>
-      <div style="display:flex;align-items:center;">${sentLabel}</div>
+      <div style="display:flex;align-items:center;gap:6px;">${sentLabel}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
     </div>`;
   }).join('');
+}
+
+function openJournalModal(mNameEnc, eJsonEnc){
+  const mName = decodeURIComponent(mNameEnc);
+  const e = JSON.parse(decodeURIComponent(eJsonEnc));
+  const session = e.session||e.streak||'?';
+  const parts = (e.parts||[]).join(' · ');
+
+  document.getElementById('modalTitle').textContent = `${mName} · ${session}회차  ${e.date||''}`;
+
+  const grandVol = (e.exercises||[]).filter(ex=>{
+    const sets=ex.sets||[];return sets.length>0&&!sets.every(s=>Number(s.w)===0);
+  }).reduce((s,ex)=>s+(ex.vol||0),0);
+  const grandMaxW = (e.exercises||[]).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
+
+  let html = '';
+
+  // 부위 + 강도 요약
+  html += `<div class="detail-section"><div class="detail-stats-row">
+    ${parts ? `<div class="detail-stat"><div class="detail-stat-num">${parts}</div><div class="detail-stat-label">운동 부위</div></div>` : ''}
+    ${grandMaxW ? `<div class="detail-stat"><div class="detail-stat-num">${grandMaxW}kg</div><div class="detail-stat-label">최고 무게</div></div>` : ''}
+    ${grandVol ? `<div class="detail-stat"><div class="detail-stat-num">${grandVol.toLocaleString()}kg</div><div class="detail-stat-label">총 볼륨</div></div>` : ''}
+    <div class="detail-stat"><div class="detail-stat-num" style="color:${intensityColor(e.intensity||0)};">${e.intensity||'—'}점</div><div class="detail-stat-label">운동 강도</div></div>
+  </div></div>`;
+
+  // 종목별
+  if(e.exercises && e.exercises.length){
+    html += `<div class="detail-section"><div class="detail-eyebrow">운동 종목</div>`;
+    e.exercises.forEach(ex => {
+      html += `<div class="detail-ex-card">
+        <div class="detail-ex-name">${ex.name||'종목'}</div>`;
+      (ex.sets||[]).forEach((st,si) => {
+        const vol = st.w * st.r;
+        const isBodyweight = Number(st.w) === 0;
+        html += `<div class="detail-set-row">
+          <span class="detail-set-idx">${si+1}세트</span>
+          <span class="detail-set-main">${isBodyweight ? st.r+'개' : st.w+'kg × '+st.r+'개'}</span>
+          ${!isBodyweight ? `<span class="detail-set-vol">${vol.toLocaleString()}kg</span>` : ''}
+        </div>`;
+      });
+      if((ex.comment||'').trim()){
+        html += `<div class="detail-ex-comment">💬 ${ex.comment.trim().replace(/\n/g,'<br>')}</div>`;
+      }
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  // 편지
+  const letter = e.letter || [e.note,e.next,e.cheer].filter(Boolean).join('\n\n');
+  if((letter||'').trim()){
+    html += `<div class="detail-section">
+      <div class="detail-eyebrow">회원님께 보내는 편지</div>
+      <div class="detail-letter">${letter.trim().replace(/\n/g,'<br>')}</div>
+      <div style="text-align:right;font-size:11px;color:var(--t3);margin-top:6px;">트레이너 전송 일지</div>
+    </div>`;
+  }
+
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('journalModal').style.display = 'flex';
+}
+
+function closeModal(){
+  document.getElementById('journalModal').style.display = 'none';
 }
 
 function toggleBody(header){
