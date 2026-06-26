@@ -132,14 +132,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="loginSection">
   <div class="login-wrap">
     <div class="login-card">
-      <div class="login-title">대표님 로그인</div>
-      <div class="login-sub">트레이너 계정 정보를 입력하면 해당 트레이너의 현황을 볼 수 있어요</div>
-      <div class="field"><label>트레이너 이름</label><input id="loginName" placeholder="예) 이광명" maxlength="20"/></div>
-      <div class="field"><label>비밀번호 (숫자 4자리)</label><input id="loginPin" type="password" inputmode="numeric" placeholder="• • • •" maxlength="4"/></div>
-      <div class="err" id="loginErr">이름 또는 비밀번호를 확인해주세요</div>
-      <button class="btn-login" onclick="doLogin()">확인</button>
-      <p style="font-size:11px;color:var(--t3);margin-top:16px;text-align:center;">트레이너 이름과 비밀번호로 해당 트레이너의 현황을 볼 수 있어요</p>
+      <div class="login-title">🏋️ 대표님 로그인</div>
+      <div class="login-sub">마스터 비밀번호를 입력하면 트레이너 현황을 볼 수 있어요</div>
+      <div class="field"><label>마스터 비밀번호</label><input id="masterPin" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10"/></div>
+      <div class="err" id="loginErr">비밀번호를 확인해주세요</div>
+      <button class="btn-login" onclick="doMasterLogin()">확인</button>
     </div>
+  </div>
+</div>
+
+<div id="trainerSelectSection" style="display:none;">
+  <div class="main" style="max-width:480px;">
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px;">트레이너 선택</div>
+    <div style="font-size:13px;color:var(--t3);margin-bottom:18px;">확인할 트레이너를 선택하세요</div>
+    <div id="trainerSelectList"></div>
+    <button onclick="doLogout()" style="width:100%;margin-top:14px;padding:11px;background:none;border:0.5px solid var(--bd);border-radius:var(--r12);font-size:13px;color:var(--t3);cursor:pointer;font-family:inherit;">로그아웃</button>
   </div>
 </div>
 
@@ -193,6 +200,16 @@ async function fsGet(col, docId){
   } catch(e){ return null; }
 }
 
+async function fsSet(col, docId, value){
+  try{
+    const body = {fields: {v: {stringValue: JSON.stringify(value)}}};
+    await fetch(
+      `${FS_BASE}/${col}/${encodeURIComponent(docId)}?updateMask.fieldPaths=v`,
+      {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}
+    );
+  } catch(e){}
+}
+
 function nameToId(name, pin){
   const safeName = name.trim().replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_가-힣]/g,'');
   return safeName + '_' + (pin||'0000');
@@ -218,20 +235,86 @@ function isThisMonth(dateStr){
   return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
 }
 
-async function doLogin(){
-  const name = document.getElementById('loginName').value.trim();
-  const pin  = document.getElementById('loginPin').value.trim();
-  if(!name || pin.length !== 4){ showErr(true); return; }
+const MASTER_PIN_KEY = 'admin_master_pin';
 
-  TRAINER_ID = nameToId(name, pin);
-  const trainer = await fsGet('trainers', TRAINER_ID);
-  if(!trainer){ showErr(true); return; }
+// 마스터 비밀번호 — Firestore admin/config에 저장
+// 없으면 최초 설정
+async function doMasterLogin(){
+  const pin = document.getElementById('masterPin').value.trim();
+  if(!pin){ showErr(true); return; }
+
+  // admin/config에서 마스터 PIN 확인
+  let config = await fsGet('admin', 'config');
+  if(!config){
+    // 최초 설정 — 지금 입력한 게 마스터 PIN이 됨
+    config = { masterPin: pin, createdAt: new Date().toISOString() };
+    await fsSet('admin', 'config', config);
+  }
+  if(config.masterPin !== pin){ showErr(true); return; }
 
   showErr(false);
+  sessionStorage.setItem('master_authed', '1');
   document.getElementById('loginSection').style.display = 'none';
+  showTrainerList();
+}
+
+async function showTrainerList(){
+  document.getElementById('trainerSelectSection').style.display = 'block';
+  const listEl = document.getElementById('trainerSelectList');
+  listEl.innerHTML = '<div class="loading">트레이너 목록 불러오는 중...</div>';
+
+  const dir = await fsGet('admin', 'trainer_directory') || {};
+  const trainers = Object.values(dir).sort((a,b)=>a.name.localeCompare(b.name));
+
+  if(trainers.length === 0){
+    listEl.innerHTML = '<div class="empty">아직 등록된 트레이너가 없어요<br><br>트레이너 앱에서 로그인하면 자동으로 등록돼요</div>';
+    return;
+  }
+
+  listEl.innerHTML = '';
+  trainers.forEach(t => {
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:background .12s;';
+    card.innerHTML = `
+      <div style="width:42px;height:42px;border-radius:50%;background:var(--g2);border:0.5px solid #cde8b0;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--g0);flex-shrink:0;">${t.name[0]}</div>
+      <div style="flex:1;">
+        <div style="font-size:15px;font-weight:600;color:var(--t);">${t.name} 트레이너</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:2px;">탭해서 현황 보기</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>`;
+    card.onmouseenter = ()=>card.style.background='var(--sf2)';
+    card.onmouseleave = ()=>card.style.background='var(--sf)';
+    card.onclick = () => selectTrainer(t);
+    listEl.appendChild(card);
+  });
+}
+
+function selectTrainer(t){
+  TRAINER_ID = t.trainerId;
+  document.getElementById('trainerSelectSection').style.display = 'none';
   document.getElementById('mainSection').style.display = 'block';
+  // 네비 뒤로가기 버튼 추가
+  document.getElementById('navDate').innerHTML = `<button onclick="backToList()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">← 목록</button>`;
   loadDashboard();
 }
+
+function backToList(){
+  document.getElementById('mainSection').style.display = 'none';
+  document.getElementById('trainerSelectSection').style.display = 'block';
+  const now = new Date();
+  const days = ['일','월','화','수','목','금','토'];
+  document.getElementById('navDate').textContent = `${now.getMonth()+1}월 ${now.getDate()}일 ${days[now.getDay()]}요일`;
+  TRAINER_ID = null;
+}
+
+function doLogout(){
+  sessionStorage.removeItem('master_authed');
+  document.getElementById('trainerSelectSection').style.display = 'none';
+  document.getElementById('loginSection').style.display = 'block';
+  document.getElementById('masterPin').value = '';
+}
+
+async function doLogin(){} // 구버전 호환용 빈 함수
 
 function showErr(show){
   document.getElementById('loginErr').style.display = show ? 'block' : 'none';
@@ -376,11 +459,21 @@ function renderDashboard(){
   });
 }
 
+let _modalEntry = null;
+let _modalMember = null;
+
 function renderMemberRows(m, filtered, sent){
   if(filtered.length === 0) return '<div class="empty" style="padding:16px;">수업 기록이 없어요</div>';
 
+  // 전역 저장소에 데이터 보관
+  if(!window._entryStore) window._entryStore = {};
+  filtered.forEach(e => {
+    window._entryStore[m.id+'__'+e.id] = { e, mName: m.name };
+  });
+
   return [...filtered].reverse().map(e => {
     const key = m.id+'_'+e.id;
+    const storeKey = m.id+'__'+e.id;
     const sentInfo = sent[key];
     const isSent = sentInfo && sentInfo.count > 0;
     const sentLabel = isSent
@@ -389,9 +482,7 @@ function renderMemberRows(m, filtered, sent){
     const intensityV = e.intensity||0;
     const intensityBar = `<span class="intensity-bar"><span class="intensity-fill" style="width:${intensityV}%;background:${intensityColor(intensityV)};"></span></span>`;
     const parts = (e.parts||[]).join(' · ');
-    const eJson = encodeURIComponent(JSON.stringify(e));
-    const mName = encodeURIComponent(m.name);
-    return `<div class="member-row" style="cursor:pointer;" onclick="openJournalModal('${mName}','${eJson}')">
+    return `<div class="member-row" style="cursor:pointer;" onclick="openJournalModal('${storeKey}')">
       <div class="member-name-col">${e.session||e.streak||'?'}회차</div>
       <div class="member-date">${e.date||''}${parts?' · '+parts:''}</div>
       <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--t2);">
@@ -402,9 +493,10 @@ function renderMemberRows(m, filtered, sent){
   }).join('');
 }
 
-function openJournalModal(mNameEnc, eJsonEnc){
-  const mName = decodeURIComponent(mNameEnc);
-  const e = JSON.parse(decodeURIComponent(eJsonEnc));
+function openJournalModal(storeKey){
+  const stored = window._entryStore && window._entryStore[storeKey];
+  if(!stored) return;
+  const { e, mName } = stored;
   const session = e.session||e.streak||'?';
   const parts = (e.parts||[]).join(' · ');
 
@@ -433,11 +525,11 @@ function openJournalModal(mNameEnc, eJsonEnc){
         <div class="detail-ex-name">${ex.name||'종목'}</div>`;
       (ex.sets||[]).forEach((st,si) => {
         const vol = st.w * st.r;
-        const isBodyweight = Number(st.w) === 0;
+        const bw = Number(st.w) === 0;
         html += `<div class="detail-set-row">
           <span class="detail-set-idx">${si+1}세트</span>
-          <span class="detail-set-main">${isBodyweight ? st.r+'개' : st.w+'kg × '+st.r+'개'}</span>
-          ${!isBodyweight ? `<span class="detail-set-vol">${vol.toLocaleString()}kg</span>` : ''}
+          <span class="detail-set-main">${bw ? st.r+'개' : st.w+'kg × '+st.r+'개'}</span>
+          ${!bw ? `<span class="detail-set-vol">${vol.toLocaleString()}kg</span>` : ''}
         </div>`;
       });
       if((ex.comment||'').trim()){
@@ -448,13 +540,15 @@ function openJournalModal(mNameEnc, eJsonEnc){
     html += `</div>`;
   }
 
-  // 편지
-  const letter = e.letter || [e.note,e.next,e.cheer].filter(Boolean).join('\n\n');
+  // 편지 — letter 필드 우선, 없으면 구버전 note/next/cheer 합치기
+  const letter = e.letter !== undefined
+    ? e.letter
+    : [e.note, e.next, e.cheer].filter(Boolean).join('\n\n');
+
   if((letter||'').trim()){
     html += `<div class="detail-section">
       <div class="detail-eyebrow">회원님께 보내는 편지</div>
       <div class="detail-letter">${letter.trim().replace(/\n/g,'<br>')}</div>
-      <div style="text-align:right;font-size:11px;color:var(--t3);margin-top:6px;">트레이너 전송 일지</div>
     </div>`;
   }
 
@@ -472,11 +566,8 @@ function toggleBody(header){
 }
 
 // 엔터로 로그인
-document.getElementById('loginPin').addEventListener('keydown', e => {
-  if(e.key === 'Enter') doLogin();
-});
-document.getElementById('loginName').addEventListener('keydown', e => {
-  if(e.key === 'Enter') document.getElementById('loginPin').focus();
+document.getElementById('masterPin').addEventListener('keydown', e => {
+  if(e.key === 'Enter') doMasterLogin();
 });
 </script>
 </body>
