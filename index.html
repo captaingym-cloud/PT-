@@ -240,6 +240,23 @@ input,textarea,button,select{touch-action:manipulation;}
 .ex-color-dot:active{transform:scale(.88);}
 .ex-color-dot.selected{border-color:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.25);transform:scale(1.1);opacity:1;}
 
+/* DASHBOARD */
+.filter-btn{padding:6px 14px;border-radius:20px;border:0.5px solid var(--bd);background:var(--sf);font-size:12px;font-weight:600;color:var(--t2);cursor:pointer;font-family:inherit;}
+.filter-btn.active{background:var(--g0);color:#fff;border-color:var(--g0);}
+.dash-summary-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;}
+.dash-summary-label{font-size:11px;font-weight:600;color:var(--t3);margin-bottom:4px;}
+.dash-summary-value{font-size:24px;font-weight:700;color:var(--t);}
+.dash-summary-sub{font-size:11px;color:var(--t3);margin-top:2px;}
+.dash-member-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);overflow:hidden;margin-bottom:10px;}
+.dash-member-header{padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;}
+.dash-member-body{border-top:0.5px solid var(--bd);display:none;}
+.dash-member-body.open{display:block;}
+.dash-entry-row{padding:10px 16px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;gap:8px;cursor:pointer;}
+.dash-entry-row:last-child{border-bottom:none;}
+.sent-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;}
+.sent-badge.sent{background:var(--g2);color:var(--g0);}
+.sent-badge.unsent{background:#FDECEA;color:var(--red);}
+
 /* JOURNAL LIST SCREEN */
 .journal-list-wrap{padding:16px;padding-bottom:100px;}
 .new-journal-btn{width:100%;padding:15px 16px;background:var(--g0);border:none;border-radius:var(--r16);font-size:15px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px;box-shadow:0 4px 14px rgba(30,77,10,.25);}
@@ -478,6 +495,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     <div id="setupError" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;"></div>
     <button class="setup-btn" onclick="doSetup()">시작하기</button>
     <p style="font-size:11px;color:var(--t3);margin-top:16px;text-align:center;max-width:280px;line-height:1.6;">같은 이름 + 비밀번호로 로그인하면 어디서든 내 회원 정보가 나와요</p>
+    <button onclick="showScreen('screen-dashboard-login')" style="margin-top:20px;background:none;border:none;font-size:11px;color:var(--t3);cursor:pointer;font-family:inherit;text-decoration:underline;">대표님이세요?</button>
   </div>
 </div>
 
@@ -820,6 +838,100 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
   </div>
 </div>
 
+<!-- 대표님 로그인 화면 -->
+<div class="screen" id="screen-dashboard-login">
+  <div class="setup-wrap">
+    <div class="setup-logo">📊</div>
+    <div class="setup-title">대표님 로그인</div>
+    <div class="setup-sub">마스터 비밀번호를 입력하면<br/>트레이너 현황을 볼 수 있어요</div>
+    <div class="setup-field">
+      <input id="dashMasterPin" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10" style="letter-spacing:0.2em;text-align:center;font-size:20px;"/>
+    </div>
+    <div id="dashLoginErr" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;">비밀번호를 확인해주세요</div>
+    <button class="setup-btn" onclick="doDashLogin()">확인</button>
+    <button onclick="showScreen('screen-setup')" style="margin-top:16px;background:none;border:none;font-size:11px;color:var(--t3);cursor:pointer;font-family:inherit;text-decoration:underline;">← 트레이너 로그인으로</button>
+  </div>
+</div>
+
+<!-- 트레이너 선택 화면 -->
+<div class="screen" id="screen-trainer-select">
+  <nav class="nav">
+    <div class="nav-inner">
+      <span class="nav-title">트레이너 현황</span>
+      <div style="display:flex;gap:6px;">
+        <button id="dashDeployBtn" onclick="openDashDeploy()" style="background:var(--g0);border:none;border-radius:20px;padding:3px 10px;font-size:11px;color:#fff;cursor:pointer;font-family:inherit;font-weight:600;">🚀 배포</button>
+        <button onclick="openDashPinChange()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">⚙️</button>
+        <button onclick="doDashLogout()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">로그아웃</button>
+      </div>
+    </div>
+  </nav>
+  <div style="padding:16px;max-width:420px;margin:0 auto;">
+    <div id="dashTrainerList"></div>
+  </div>
+</div>
+
+<!-- 트레이너 상세 대시보드 화면 -->
+<div class="screen" id="screen-dashboard-main">
+  <nav class="nav">
+    <div class="nav-inner">
+      <button class="nav-back" onclick="showScreen('screen-trainer-select')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        목록
+      </button>
+      <span class="nav-title" id="dashTrainerTitle"></span>
+    </div>
+  </nav>
+  <div style="padding:16px;padding-bottom:60px;max-width:420px;margin:0 auto;">
+    <div id="dashSummaryGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;"></div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;" id="dashFilterRow">
+      <button class="filter-btn active" onclick="dashSetFilter('all',this)">전체</button>
+      <button class="filter-btn" onclick="dashSetFilter('week',this)">이번 주</button>
+      <button class="filter-btn" onclick="dashSetFilter('month',this)">이번 달</button>
+      <button class="filter-btn" onclick="dashSetFilter('unsent',this)">미전송만</button>
+    </div>
+    <div id="dashMemberList"></div>
+  </div>
+</div>
+
+<!-- 대시보드 모달들 -->
+<div class="modal-overlay" id="modal-dash-detail" style="display:none;">
+  <div class="dv2-modal-box">
+    <div class="dv2-modal-handle"></div>
+    <div class="dv2-modal-nav">
+      <span class="dv2-modal-title" id="dashDetailTitle"></span>
+      <button class="dv2-modal-close" onclick="closeModal('modal-dash-detail')">×</button>
+    </div>
+    <div class="dv2-modal-scroll" id="dashDetailBody"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-dash-deploy" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-title">🚀 앱 버전 배포</div>
+    <div style="font-size:13px;color:var(--t3);margin-bottom:14px;" id="dashCurrentVerInfo"></div>
+    <div class="modal-field"><label>배포할 버전</label><input id="dashDeployVer" placeholder="예) 1.0.2" maxlength="10"/></div>
+    <div id="dashDeployErr" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeModal('modal-dash-deploy')">취소</button>
+      <button class="modal-btn confirm" onclick="doDashDeploy()">배포하기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-dash-pin" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-title">마스터 PIN 변경</div>
+    <div class="modal-field"><label>현재 PIN</label><input id="dashCurPin" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10"/></div>
+    <div class="modal-field"><label>새 PIN</label><input id="dashNewPin" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10"/></div>
+    <div class="modal-field"><label>새 PIN 확인</label><input id="dashNewPinConfirm" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10"/></div>
+    <div id="dashPinErr" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeModal('modal-dash-pin')">취소</button>
+      <button class="modal-btn confirm" onclick="doDashPinChange()">변경</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* iOS PWA 더블탭 확대 차단 */
 (function(){
@@ -1017,6 +1129,19 @@ const INTENSITY_LEVELS = [
 document.addEventListener('DOMContentLoaded', async function(){
   // 앱 시작할 때마다 캐시 초기화 → Firestore에서 최신 데이터 불러옴
   Object.keys(cache).forEach(k => delete cache[k]);
+
+  // 2시간 자동 로그아웃 체크
+  const TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2시간
+  const lastActive = localStorage.getItem('last_active');
+  if(lastActive && Date.now() - parseInt(lastActive) > TIMEOUT_MS){
+    localStorage.removeItem('trainer_name');
+    localStorage.removeItem('trainer_pin');
+  }
+  // 활동할 때마다 타임스탬프 갱신
+  function updateActivity(){ localStorage.setItem('last_active', Date.now()); }
+  document.addEventListener('touchstart', updateActivity, {passive:true});
+  document.addEventListener('click', updateActivity);
+  updateActivity();
 
   // 버전 체크
   checkAppVersion();
@@ -2651,6 +2776,265 @@ function showUpdateBanner(newVersion){
   document.body.appendChild(overlay);
 }
 
+/* ═══════════════════════════════════════
+   대표님 대시보드
+═══════════════════════════════════════ */
+let dashFilter = 'all';
+let dashTrainerId = null;
+let dashEntryStore = {};
+
+async function doDashLogin(){
+  const pin = document.getElementById('dashMasterPin').value.trim();
+  if(!pin){ document.getElementById('dashLoginErr').style.display='block'; return; }
+  let config = await fsGet('admin', 'config');
+  if(!config){
+    config = { masterPin: pin, createdAt: new Date().toISOString() };
+    await fsSet('admin', 'config', config);
+  }
+  if(config.masterPin !== pin){ document.getElementById('dashLoginErr').style.display='block'; return; }
+  document.getElementById('dashLoginErr').style.display='none';
+  showScreen('screen-trainer-select');
+  loadDashTrainerList();
+}
+
+async function loadDashTrainerList(){
+  const listEl = document.getElementById('dashTrainerList');
+  listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
+  const dir = await fsGet('admin', 'trainer_directory') || {};
+  const trainers = Object.values(dir).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!trainers.length){
+    listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">트레이너 앱에서 로그인하면 자동 등록돼요</div>';
+    return;
+  }
+  listEl.innerHTML = '';
+  trainers.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'member-card';
+    card.style.marginBottom = '8px';
+    card.innerHTML = `
+      <div class="member-avatar">${t.name[0]}</div>
+      <div class="member-info">
+        <div class="member-name">${t.name} 트레이너</div>
+        <div class="member-meta">탭해서 현황 보기</div>
+      </div>
+      <span class="member-arrow">›</span>`;
+    card.onclick = () => openDashTrainer(t);
+    listEl.appendChild(card);
+  });
+}
+
+async function openDashTrainer(t){
+  dashTrainerId = t.trainerId;
+  document.getElementById('dashTrainerTitle').textContent = t.name + ' 트레이너';
+  dashFilter = 'all';
+  document.querySelectorAll('#dashFilterRow .filter-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('#dashFilterRow .filter-btn').classList.add('active');
+  showScreen('screen-dashboard-main');
+  loadDashData();
+}
+
+async function loadDashData(){
+  document.getElementById('dashMemberList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
+  const members = await fsGet('data', 'members_'+dashTrainerId) || [];
+  const sent = await fsGet('data', 'sent_'+dashTrainerId) || {};
+  const memberData = await Promise.all(members.map(async m => {
+    const hist = await fsGet('data', 'hist_'+dashTrainerId+'_'+m.id) || [];
+    return {...m, hist};
+  }));
+  renderDashboard(memberData, sent);
+}
+
+function dashSetFilter(f, btn){
+  dashFilter = f;
+  document.querySelectorAll('#dashFilterRow .filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  // 데이터 다시 불러오기
+  loadDashData();
+}
+
+function dashFilterEntries(hist){
+  const now = new Date();
+  if(dashFilter==='week'){
+    const start = new Date(now); start.setDate(now.getDate()-now.getDay()); start.setHours(0,0,0,0);
+    return hist.filter(e=>new Date(e.dateTime||e.date)>=start);
+  }
+  if(dashFilter==='month') return hist.filter(e=>{const d=new Date(e.dateTime||e.date);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
+  return hist;
+}
+
+function dashIntensityColor(v){
+  if(v<=40) return '#52b443'; if(v<=60) return '#f5c842';
+  if(v<=75) return '#f5a623'; if(v<=88) return '#e8703a'; return '#e8503a';
+}
+
+function renderDashboard(members, sent){
+  dashEntryStore = {};
+  const allFiltered = members.flatMap(m => dashFilterEntries(m.hist).map(e=>({e,m})));
+  const totalSent = allFiltered.filter(({e,m})=>{ const k=m.id+'_'+e.id; return sent[k]&&sent[k].count>0; }).length;
+  const totalUnsent = allFiltered.length - totalSent;
+  const avgI = allFiltered.filter(({e})=>e.intensity).length
+    ? Math.round(allFiltered.filter(({e})=>e.intensity).reduce((s,{e})=>s+e.intensity,0)/allFiltered.filter(({e})=>e.intensity).length)
+    : 0;
+
+  // 요약
+  document.getElementById('dashSummaryGrid').innerHTML = `
+    <div class="dash-summary-card">
+      <div class="dash-summary-label">총 일지</div>
+      <div class="dash-summary-value" style="color:var(--g0);">${allFiltered.length}</div>
+      <div class="dash-summary-sub">회원 ${members.length}명</div>
+    </div>
+    <div class="dash-summary-card">
+      <div class="dash-summary-label">전송 완료</div>
+      <div class="dash-summary-value" style="color:var(--g0);">${totalSent}</div>
+      <div class="dash-summary-sub">전송률 ${allFiltered.length?Math.round(totalSent/allFiltered.length*100):0}%</div>
+    </div>
+    <div class="dash-summary-card">
+      <div class="dash-summary-label">미전송</div>
+      <div class="dash-summary-value" style="color:${totalUnsent>0?'var(--red)':'var(--g0)'};">${totalUnsent}</div>
+      <div class="dash-summary-sub">${totalUnsent>0?'확인 필요':'모두 전송됨'}</div>
+    </div>
+    <div class="dash-summary-card">
+      <div class="dash-summary-label">평균 강도</div>
+      <div class="dash-summary-value" style="color:${dashIntensityColor(avgI)};">${avgI}<span style="font-size:14px;">점</span></div>
+    </div>`;
+
+  // 회원별
+  const listEl = document.getElementById('dashMemberList');
+  listEl.innerHTML = '';
+  members.forEach(m => {
+    const filtered = dashFilterEntries(m.hist);
+    if(dashFilter==='unsent' && filtered.every(e=>{const k=m.id+'_'+e.id;return sent[k]&&sent[k].count>0;})) return;
+    const sentCount = filtered.filter(e=>{const k=m.id+'_'+e.id;return sent[k]&&sent[k].count>0;}).length;
+    const unsentCount = filtered.length - sentCount;
+
+    filtered.forEach(e=>{ dashEntryStore[m.id+'__'+e.id]={e, mName:m.name}; });
+
+    const card = document.createElement('div');
+    card.className = 'dash-member-card';
+    const rows = [...filtered].reverse().map(e=>{
+      const k = m.id+'_'+e.id;
+      const si = sent[k];
+      const isSent = si&&si.count>0;
+      const parts = (e.parts||[]).join(' · ');
+      return `<div class="dash-entry-row" onclick="openDashDetail('${m.id}__${e.id}')">
+        <div style="font-size:13px;font-weight:600;color:var(--t);width:50px;flex-shrink:0;">${e.session||e.streak||'?'}회차</div>
+        <div style="flex:1;font-size:12px;color:var(--t3);">${e.date||''}${parts?' · '+parts:''}</div>
+        <div style="font-size:12px;color:${dashIntensityColor(e.intensity||0)};">${e.intensity||0}점</div>
+        <div style="margin-left:6px;">${isSent?`<span class="sent-badge sent">✓ 전송${si.count>1?' '+si.count+'회':''}</span>`:'<span class="sent-badge unsent">미전송</span>'}</div>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2" style="margin-left:4px;flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="dash-member-header" onclick="this.nextElementSibling.classList.toggle('open')">
+        <div class="member-avatar">${m.name[0]}</div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;color:var(--t);">${m.name}</div>
+          <div style="font-size:12px;color:var(--t3);">수업 ${filtered.length}회  ·  전송 ${sentCount}  ·  미전송 <span style="color:${unsentCount>0?'var(--red)':'var(--t3)'};">${unsentCount}</span></div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="dash-member-body">${rows||'<div style="padding:14px 16px;font-size:13px;color:var(--t3);">수업 기록이 없어요</div>'}</div>`;
+    listEl.appendChild(card);
+  });
+  if(!listEl.children.length) listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">해당 조건의 일지가 없어요</div>';
+}
+
+function openDashDetail(storeKey){
+  const stored = dashEntryStore[storeKey];
+  if(!stored) return;
+  const {e, mName} = stored;
+  document.getElementById('dashDetailTitle').textContent = mName+' · '+(e.session||e.streak||'?')+'회차  '+e.date;
+  const grandVol = (e.exercises||[]).filter(ex=>{const s=ex.sets||[];return s.length&&!s.every(st=>Number(st.w)===0);}).reduce((s,ex)=>s+(ex.vol||0),0);
+  const grandMaxW = (e.exercises||[]).reduce((mx,ex)=>Math.max(mx,ex.maxW||0),0);
+  let html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    ${(e.parts||[]).length?`<div class="dash-summary-card" style="padding:8px 12px;"><div class="dash-summary-label">부위</div><div style="font-size:13px;font-weight:600;">${(e.parts||[]).join(' · ')}</div></div>`:''}
+    ${grandMaxW?`<div class="dash-summary-card" style="padding:8px 12px;"><div class="dash-summary-label">최고 무게</div><div style="font-size:13px;font-weight:600;">${grandMaxW}kg</div></div>`:''}
+    ${grandVol?`<div class="dash-summary-card" style="padding:8px 12px;"><div class="dash-summary-label">총 볼륨</div><div style="font-size:13px;font-weight:600;">${grandVol.toLocaleString()}kg</div></div>`:''}
+    <div class="dash-summary-card" style="padding:8px 12px;"><div class="dash-summary-label">운동 강도</div><div style="font-size:13px;font-weight:600;color:${dashIntensityColor(e.intensity||0)};">${e.intensity||0}점</div></div>
+  </div>`;
+  if((e.exercises||[]).length){
+    html += '<div style="font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.05em;margin-bottom:8px;">운동 종목</div>';
+    e.exercises.forEach(ex=>{
+      html += `<div style="background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r12);margin-bottom:8px;overflow:hidden;">
+        <div style="padding:10px 14px;font-size:14px;font-weight:700;">${ex.name||'종목'}</div>`;
+      (ex.sets||[]).forEach((st,si)=>{
+        const bw=Number(st.w)===0;
+        html+=`<div style="display:flex;align-items:center;padding:6px 14px;border-top:0.5px solid var(--bd);font-size:13px;gap:8px;">
+          <span style="color:var(--t3);width:36px;">${si+1}세트</span>
+          <span style="flex:1;">${bw?st.r+'개':st.w+'kg × '+st.r+'개'}</span>
+          ${!bw?`<span style="font-size:11px;color:var(--t3);">${(st.w*st.r).toLocaleString()}kg</span>`:''}
+        </div>`;
+      });
+      if((ex.comment||'').trim()) html+=`<div style="padding:8px 14px;font-size:12px;color:var(--t2);border-top:0.5px solid var(--bd);">💬 ${ex.comment.trim()}</div>`;
+      html+='</div>';
+    });
+  }
+  const letter = e.letter!==undefined?e.letter:[e.note,e.next,e.cheer].filter(Boolean).join('\n\n');
+  if((letter||'').trim()){
+    html+=`<div style="font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.05em;margin:12px 0 8px;">회원님께 보내는 편지</div>
+    <div style="background:var(--g2);border:0.5px solid var(--g3,#cde8b0);border-radius:var(--r12);padding:14px;font-size:13px;line-height:1.8;white-space:pre-wrap;">${letter.trim()}</div>`;
+  }
+  document.getElementById('dashDetailBody').innerHTML = html;
+  document.getElementById('modal-dash-detail').style.display = 'flex';
+}
+
+async function openDashDeploy(){
+  const config = await fsGet('admin', 'app_version');
+  document.getElementById('dashCurrentVerInfo').textContent = '현재 배포 버전: '+(config?config.version:'없음');
+  document.getElementById('dashDeployVer').value = '';
+  document.getElementById('dashDeployErr').style.display = 'none';
+  document.getElementById('modal-dash-deploy').style.display = 'flex';
+  setTimeout(()=>document.getElementById('dashDeployVer').focus(),100);
+}
+
+async function doDashDeploy(){
+  const v = document.getElementById('dashDeployVer').value.trim();
+  const errEl = document.getElementById('dashDeployErr');
+  if(!v){errEl.textContent='버전을 입력해주세요';errEl.style.display='block';return;}
+  if(!/^\d+\.\d+\.\d+$/.test(v)){errEl.textContent='1.0.2 형식으로 입력해주세요';errEl.style.display='block';return;}
+  await fsSet('admin','app_version',{version:v,updatedAt:new Date().toISOString()});
+  closeModal('modal-dash-deploy');
+  alert('✅ v'+v+' 배포 완료!\n트레이너들이 앱을 열면 업데이트 알림이 떠요.');
+}
+
+function openDashPinChange(){
+  document.getElementById('dashCurPin').value='';
+  document.getElementById('dashNewPin').value='';
+  document.getElementById('dashNewPinConfirm').value='';
+  document.getElementById('dashPinErr').style.display='none';
+  document.getElementById('modal-dash-pin').style.display='flex';
+}
+
+async function doDashPinChange(){
+  const cur=document.getElementById('dashCurPin').value.trim();
+  const nxt=document.getElementById('dashNewPin').value.trim();
+  const cfm=document.getElementById('dashNewPinConfirm').value.trim();
+  const errEl=document.getElementById('dashPinErr');
+  const config=await fsGet('admin','config');
+  if(!config||config.masterPin!==cur){errEl.textContent='현재 PIN이 맞지 않아요';errEl.style.display='block';return;}
+  if(!nxt){errEl.textContent='새 PIN을 입력해주세요';errEl.style.display='block';return;}
+  if(nxt!==cfm){errEl.textContent='새 PIN이 일치하지 않아요';errEl.style.display='block';return;}
+  config.masterPin=nxt;
+  await fsSet('admin','config',config);
+  closeModal('modal-dash-pin');
+  alert('PIN이 변경됐어요.');
+}
+
+function doDashLogout(){
+  showScreen('screen-setup');
+  document.getElementById('dashMasterPin').value='';
+  dashTrainerId=null;
+}
+
+// 엔터키
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter'){
+    const active = document.querySelector('.screen.active');
+    if(active&&active.id==='screen-dashboard-login') doDashLogin();
+  }
+});
+
 function updateSessionLabel(){
   const n = parseInt(document.getElementById('iSession').value)||1;
   document.getElementById('iStreak').value = n;
@@ -3392,6 +3776,7 @@ async function buildText(){
     letter.split('\n').forEach(line=>L.push(line));
     L.push('');
     L.push(`— 트레이너 ${trainer}`);
+    L.push('─────────────');
     L.push('');
   }
 
@@ -3477,6 +3862,7 @@ async function doCopyEntry(idx){
     letterText.trim().split('\n').forEach(line=>L.push(line));
     L.push('');
     L.push('— 트레이너 '+trainer);
+    L.push('─────────────');
     L.push('');
   }
 
