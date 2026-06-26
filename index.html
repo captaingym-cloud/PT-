@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.0.1"/>
+<meta name="app-version" content="1.0.0"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -2617,20 +2617,34 @@ async function checkAppVersion(){
     }
 
     const serverVersion = serverData.version;
-    if(serverVersion && serverVersion !== currentVersion){
-      // 버전 다르면 업데이트 팝업
+    // 서버 버전이 앱 버전보다 높을 때만 업데이트 안내
+    if(serverVersion && serverVersion !== currentVersion && isNewerVersion(serverVersion, currentVersion)){
       showUpdateBanner(serverVersion);
     }
   } catch(e){}
 }
 
+function isNewerVersion(server, current){
+  const s = server.split('.').map(Number);
+  const c = current.split('.').map(Number);
+  for(let i = 0; i < 3; i++){
+    if((s[i]||0) > (c[i]||0)) return true;
+    if((s[i]||0) < (c[i]||0)) return false;
+  }
+  return false;
+}
+
 function showUpdateBanner(newVersion){
-  const banner = document.createElement('div');
-  banner.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;z-index:9999;padding:10px 16px;background:var(--g0);display:flex;align-items:center;justify-content:space-between;gap:10px;';
-  banner.innerHTML = `
-    <span style="font-size:13px;color:#fff;font-weight:500;">🆕 새 버전이 있어요 (v${newVersion})</span>
-    <button onclick="location.reload(true)" style="font-size:12px;font-weight:700;color:var(--g0);background:#fff;border:none;border-radius:20px;padding:4px 12px;cursor:pointer;font-family:inherit;">확인</button>`;
-  document.body.appendChild(banner);
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
+  overlay.innerHTML = `
+    <div style="background:var(--sf);border-radius:var(--r16);padding:28px 24px;max-width:300px;width:90%;text-align:center;">
+      <div style="font-size:24px;margin-bottom:12px;">🆕</div>
+      <div style="font-size:16px;font-weight:700;color:var(--t);margin-bottom:6px;">새 버전이 있어요</div>
+      <div style="font-size:13px;color:var(--t3);margin-bottom:20px;">v${newVersion} 업데이트가 있어요.<br>확인을 눌러 최신 버전으로 업데이트하세요.</div>
+      <button onclick="location.reload(true)" style="width:100%;padding:13px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 function updateSessionLabel(){
