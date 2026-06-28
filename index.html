@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.2.3"/>
+<meta name="app-version" content="1.3.1"/>
 <title>PT 일지</title>
 <style>
 :root {
@@ -1822,91 +1822,301 @@ async function renderDietPage(){
   const c = document.getElementById('dietContent');
   c.innerHTML = '';
 
-  const latestInbody = d.inbodyHistory.length ? d.inbodyHistory[d.inbodyHistory.length-1] : null;
-  const prevInbody    = d.inbodyHistory.length > 1 ? d.inbodyHistory[d.inbodyHistory.length-2] : null;
+  const latestInbody = d.inbodyHistory?.length ? d.inbodyHistory[d.inbodyHistory.length-1] : null;
+  const hasGoal = !!d.goal && !!d.targetKcal;
 
-  /* ── 인바디 분석 섹션 ── */
-  const sec1 = document.createElement('div');
-  sec1.className = 'dv2-section';
-  let inbodyInner = '';
-
-  if(latestInbody){
-    inbodyInner += buildInbodyCard(latestInbody, prevInbody, true);
-  } else {
-    inbodyInner += `<div class="dv2-empty">
-      <div class="dv2-empty-icon">📋</div>
-      <div class="dv2-empty-text">아직 등록된 인바디가 없어요</div>
-    </div>`;
+  // 온보딩 미완료 → 단계별 진행
+  if(!latestInbody || !hasGoal){
+    renderDietOnboarding(c, d, latestInbody);
+    return;
   }
 
-  sec1.innerHTML = `
-    <div class="dv2-section-head">
-      <span class="dv2-section-title"><span class="ic">📋</span>인바디 분석</span>
-      <button class="dv2-add-btn" onclick="openInbodyModal()">${latestInbody ? '+ 새로 등록' : '+ 등록하기'}</button>
-    </div>
-    ${inbodyInner}
-    ${d.inbodyHistory.length > 1 ? `<div style="text-align:center;margin-top:4px;"><button onclick="toggleInbodyHistory()" style="font-size:11px;color:var(--t3);background:none;border:none;cursor:pointer;font-family:inherit;" id="inbodyHistToggle">지난 기록 ${d.inbodyHistory.length-1}개 더보기</button></div><div id="inbodyHistList" style="display:none;margin-top:8px;"></div>` : ''}
-  `;
-  c.appendChild(sec1);
+  // 온보딩 완료 → 메인 식단 화면
+  renderDietMain(c, d, latestInbody);
+}
 
-  /* ── 목표 설정 섹션 ── */
-  const sec2 = document.createElement('div');
-  sec2.className = 'dv2-section';
-  const bmr = latestInbody ? latestInbody.bmr : 0;
-  const goalMeta = {
-    diet:     {emoji:'🔥', name:'다이어트'},
-    maintain: {emoji:'⚖️', name:'유지'},
-    bulk:     {emoji:'💪', name:'벌크업'},
+function renderDietOnboarding(c, d, latestInbody){
+  const step = !latestInbody ? 1 : 2;
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:16px;max-width:420px;margin:0 auto;';
+
+  // 진행 표시
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px;">
+      <div style="flex:1;height:4px;border-radius:2px;background:${step>=1?'var(--g0)':'var(--bd)'};"></div>
+      <div style="flex:1;height:4px;border-radius:2px;background:${step>=2?'var(--g0)':'var(--bd)'};"></div>
+    </div>
+
+    ${step===1 ? `
+    <!-- 1단계: 인바디 입력 -->
+    <div style="font-size:22px;font-weight:700;margin-bottom:6px;">📋 인바디 정보</div>
+    <div style="font-size:14px;color:var(--t3);margin-bottom:24px;">인바디 사진을 올리면 AI가 자동으로 읽어드려요</div>
+
+    <!-- 인바디 사진 업로드 -->
+    <div id="ob-photo-area" onclick="document.getElementById('ob-inbody-file').click()" style="border:1.5px dashed var(--bd);border-radius:var(--r12);padding:20px;text-align:center;cursor:pointer;margin-bottom:16px;background:var(--sf2);">
+      <input type="file" id="ob-inbody-file" accept="image/*" style="display:none;" onchange="analyzeInbodyPhoto(event)"/>
+      <div style="font-size:28px;margin-bottom:6px;">📄</div>
+      <div style="font-size:13px;font-weight:600;color:var(--t2);">인바디 사진 올리기</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:4px;">탭하면 사진 선택 · AI가 수치를 자동으로 읽어요</div>
+    </div>
+    <div id="ob-ai-status" style="display:none;font-size:12px;color:var(--g0);text-align:center;margin-bottom:12px;"></div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:6px;">체중 (kg)</label>
+        <input id="ob-weight" type="number" step="0.1" placeholder="예) 70.5" style="width:100%;padding:12px 14px;border:0.5px solid var(--bd);border-radius:var(--r8);font-size:16px;font-family:inherit;outline:none;background:var(--sf2);" oninput="calcBMR()"/>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:6px;">키 (cm)</label>
+        <input id="ob-height" type="number" step="0.1" placeholder="예) 175" style="width:100%;padding:12px 14px;border:0.5px solid var(--bd);border-radius:var(--r8);font-size:16px;font-family:inherit;outline:none;background:var(--sf2);" oninput="calcBMR()"/>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:6px;">나이</label>
+        <input id="ob-age" type="number" placeholder="예) 30" style="width:100%;padding:12px 14px;border:0.5px solid var(--bd);border-radius:var(--r8);font-size:16px;font-family:inherit;outline:none;background:var(--sf2);" oninput="calcBMR()"/>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--t2);display:block;margin-bottom:6px;">성별</label>
+        <div style="display:flex;gap:8px;">
+          <button id="ob-male" onclick="selectGender('male')" style="flex:1;padding:12px;border:0.5px solid var(--bd);border-radius:var(--r8);font-size:14px;font-family:inherit;cursor:pointer;background:var(--sf2);color:var(--t);">남성</button>
+          <button id="ob-female" onclick="selectGender('female')" style="flex:1;padding:12px;border:0.5px solid var(--bd);border-radius:var(--r8);font-size:14px;font-family:inherit;cursor:pointer;background:var(--sf2);color:var(--t);">여성</button>
+        </div>
+      </div>
+      <div id="ob-bmr-preview" style="background:var(--g2);border-radius:var(--r8);padding:10px 14px;font-size:13px;color:var(--g0);display:none;"></div>
+    </div>
+    <button onclick="submitInbodyOnboarding()" style="width:100%;padding:14px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">다음 →</button>
+
+    ` : `
+    <!-- 2단계: 목표 선택 -->
+    <div style="font-size:22px;font-weight:700;margin-bottom:6px;">🎯 목표 설정</div>
+    <div style="font-size:14px;color:var(--t3);margin-bottom:24px;">회원님의 목표를 선택해주세요</div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">
+      ${['diet','maintain','bulk'].map(type => {
+        const meta = {diet:{emoji:'🔥',name:'다이어트',desc:'체지방 감소, 칼로리 적자'},maintain:{emoji:'⚖️',name:'유지',desc:'현재 체중 유지'},bulk:{emoji:'💪',name:'근비대',desc:'근육량 증가, 칼로리 흑자'}};
+        const bmr = latestInbody?.bmr || 0;
+        const kcal = {diet:bmr-400,maintain:bmr,bulk:bmr+400}[type];
+        return `<div onclick="selectObGoal('${type}')" id="ob-goal-${type}" style="border:1.5px solid var(--bd);border-radius:var(--r12);padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;">
+          <div style="font-size:28px;">${meta[type].emoji}</div>
+          <div style="flex:1;">
+            <div style="font-size:15px;font-weight:700;">${meta[type].name}</div>
+            <div style="font-size:12px;color:var(--t3);margin-top:2px;">${meta[type].desc}</div>
+          </div>
+          <div style="font-size:13px;font-weight:600;color:var(--g0);">${bmr?(kcal).toLocaleString()+'kcal':'—'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button onclick="submitGoalOnboarding()" style="width:100%;padding:14px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">시작하기 🎉</button>
+    `}`;
+
+  c.appendChild(wrap);
+}
+
+let obGender = null;
+let obGoal = null;
+
+function selectGender(g){
+  obGender = g;
+  document.getElementById('ob-male').style.background = g==='male'?'var(--g0)':'var(--sf2)';
+  document.getElementById('ob-male').style.color = g==='male'?'#fff':'var(--t)';
+  document.getElementById('ob-male').style.borderColor = g==='male'?'var(--g0)':'var(--bd)';
+  document.getElementById('ob-female').style.background = g==='female'?'var(--g0)':'var(--sf2)';
+  document.getElementById('ob-female').style.color = g==='female'?'#fff':'var(--t)';
+  document.getElementById('ob-female').style.borderColor = g==='female'?'var(--g0)':'var(--bd)';
+  calcBMR();
+}
+
+function calcBMR(){
+  const w = parseFloat(document.getElementById('ob-weight')?.value)||0;
+  const h = parseFloat(document.getElementById('ob-height')?.value)||0;
+  const a = parseInt(document.getElementById('ob-age')?.value)||0;
+  const g = obGender;
+  if(!w||!h||!a||!g) return;
+  const bmr = g==='male'
+    ? Math.round(88.362 + 13.397*w + 4.799*h - 5.677*a)
+    : Math.round(447.593 + 9.247*w + 3.098*h - 4.330*a);
+  const prev = document.getElementById('ob-bmr-preview');
+  if(prev){ prev.style.display='block'; prev.textContent=`기초대사량 약 ${bmr.toLocaleString()}kcal`; }
+}
+
+function selectObGoal(type){
+  obGoal = type;
+  ['diet','maintain','bulk'].forEach(t=>{
+    const el = document.getElementById('ob-goal-'+t);
+    if(!el) return;
+    el.style.borderColor = t===type?'var(--g0)':'var(--bd)';
+    el.style.background = t===type?'var(--g2)':'var(--sf)';
+  });
+}
+
+// 원 그래프 빌더
+function buildDonutChart(label, value, max, unit, color){
+  const pct = max ? Math.min(Math.round((value/max)*100), 100) : 0;
+  const r = 60, stroke = 12;
+  const circ = 2 * Math.PI * r;
+  const dash = max ? (pct/100)*circ : 0;
+  const centerTop = value + (unit?unit:'');
+  const centerBot = max ? `/ ${max}${unit}` : '';
+  return `<div style="text-align:center;padding:4px 2px;">
+    <div style="font-size:clamp(10px,2.5vw,13px);color:var(--t3);font-weight:700;margin-bottom:8px;">${label}</div>
+    <div style="position:relative;width:clamp(90px,28vw,160px);height:clamp(90px,28vw,160px);margin:0 auto;">
+      <svg width="100%" height="100%" viewBox="0 0 144 144">
+        <circle cx="72" cy="72" r="${r}" fill="none" stroke="var(--sf2)" stroke-width="${stroke}"/>
+        <circle cx="72" cy="72" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
+          stroke-dasharray="${dash.toFixed(1)} ${circ.toFixed(1)}"
+          stroke-dashoffset="${(circ/4).toFixed(1)}"
+          stroke-linecap="round"/>
+      </svg>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <div style="font-size:clamp(14px,4vw,22px);font-weight:800;color:var(--t);line-height:1.2;">${centerTop}</div>
+        ${centerBot?`<div style="font-size:clamp(9px,2.2vw,12px);color:var(--t3);line-height:1.4;">${centerBot}</div>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+
+async function analyzeInbodyPhoto(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('ob-ai-status');
+  const photoArea = document.getElementById('ob-photo-area');
+  if(statusEl){ statusEl.style.display='block'; statusEl.textContent='AI가 인바디 수치를 읽는 중...'; }
+  if(photoArea) photoArea.style.opacity='0.5';
+
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const b64 = ev.target.result.split(',')[1];
+    try{
+      const res = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-6', max_tokens:300,
+          system:'인바디 사진에서 수치를 읽어서 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"weight":체중숫자,"height":키숫자,"age":나이숫자} 없는 항목은 null로. 숫자만 반환(단위 제외).',
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+            {type:'text',text:'이 인바디 결과지에서 체중(kg), 키(cm), 나이를 읽어서 JSON으로 반환해줘.'}
+          ]}]
+        })
+      });
+      const data = await res.json();
+      const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+      const parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
+
+      if(parsed.weight){ const el=document.getElementById('ob-weight'); if(el){el.value=parsed.weight;} }
+      if(parsed.height){ const el=document.getElementById('ob-height'); if(el){el.value=parsed.height;} }
+      if(parsed.age){ const el=document.getElementById('ob-age'); if(el){el.value=parsed.age;} }
+      calcBMR();
+
+      if(statusEl){ statusEl.textContent='✓ 수치를 읽었어요. 확인 후 수정해주세요.'; statusEl.style.color='var(--g0)'; }
+      if(photoArea){ photoArea.style.opacity='1'; photoArea.innerHTML=`<div style="font-size:13px;color:var(--g0);">✓ 인바디 사진 분석 완료</div>`; }
+    } catch(err){
+      if(statusEl){ statusEl.textContent='사진을 읽지 못했어요. 직접 입력해주세요.'; statusEl.style.color='var(--red)'; }
+      if(photoArea) photoArea.style.opacity='1';
+    }
   };
-  sec2.innerHTML = `
-    <div class="dv2-section-head">
-      <span class="dv2-section-title"><span class="ic">🎯</span>목표 설정</span>
-    </div>
-    <div class="diet-goal-chips" style="padding:0;${!latestInbody ? 'opacity:.45;pointer-events:none;' : ''}">
-      <div class="diet-goal-chip${d.goal==='diet'?' sel':''}" onclick="setGoal('diet',${bmr})">
-        <div class="dgc-emoji">🔥</div>
-        <div class="dgc-title">다이어트</div>
-        <div class="dgc-kcal">${bmr ? (bmr-400).toLocaleString()+'kcal' : '—'}</div>
-      </div>
-      <div class="diet-goal-chip${d.goal==='maintain'?' sel':''}" onclick="setGoal('maintain',${bmr})">
-        <div class="dgc-emoji">⚖️</div>
-        <div class="dgc-title">유지</div>
-        <div class="dgc-kcal">${bmr ? bmr.toLocaleString()+'kcal' : '—'}</div>
-      </div>
-      <div class="diet-goal-chip${d.goal==='bulk'?' sel':''}" onclick="setGoal('bulk',${bmr})">
-        <div class="dgc-emoji">💪</div>
-        <div class="dgc-title">벌크업</div>
-        <div class="dgc-kcal">${bmr ? (bmr+400).toLocaleString()+'kcal' : '—'}</div>
-      </div>
-    </div>
-    ${!latestInbody ? '<div style="font-size:11px;color:var(--t3);margin-top:8px;">인바디를 먼저 등록하면 목표를 정할 수 있어요</div>' : ''}
-  `;
-  c.appendChild(sec2);
+  reader.readAsDataURL(file);
+}
 
-  /* ── 식단 기록 섹션 ── */
-  const sec3 = document.createElement('div');
-  sec3.className = 'dv2-section';
-  const canAddMeal = !!d.targetKcal;
-  let mealListHtml = '';
-  if(d.mealHistory.length === 0){
-    mealListHtml = `<div class="dv2-empty">
-      <div class="dv2-empty-icon">🍱</div>
-      <div class="dv2-empty-text">${canAddMeal ? '아직 기록된 식단이 없어요' : '목표를 먼저 설정해주세요'}</div>
-    </div>`;
+async function submitInbodyOnboarding(){
+  const w = parseFloat(document.getElementById('ob-weight')?.value)||0;
+  const h = parseFloat(document.getElementById('ob-height')?.value)||0;
+  const a = parseInt(document.getElementById('ob-age')?.value)||0;
+  if(!w||!h||!a||!obGender){ alert('모든 항목을 입력해주세요.'); return; }
+  const bmr = obGender==='male'
+    ? Math.round(88.362 + 13.397*w + 4.799*h - 5.677*a)
+    : Math.round(447.593 + 9.247*w + 3.098*h - 4.330*a);
+  const entry = { id:'i_'+Date.now(), date:getShortDate(), dateTime:new Date().toISOString(), weight:w, height:h, age:a, gender:obGender, bmr };
+  const saved = await getDietData(currentMember.id);
+  if(!saved.inbodyHistory) saved.inbodyHistory = [];
+  saved.inbodyHistory.push(entry);
+  await saveDietData(currentMember.id, saved);
+  renderDietPage();
+}
+
+async function submitGoalOnboarding(){
+  if(!obGoal){ alert('목표를 선택해주세요.'); return; }
+  const d = dietState.data;
+  const bmr = d.inbodyHistory?.length ? d.inbodyHistory[d.inbodyHistory.length-1].bmr : 0;
+  const map = {diet:bmr-400, maintain:bmr, bulk:bmr+400};
+  const saved = await getDietData(currentMember.id);
+  saved.goal = obGoal;
+  saved.targetKcal = map[obGoal];
+  await saveDietData(currentMember.id, saved);
+  obGoal = null;
+  renderDietPage();
+}
+
+function renderDietMain(c, d, latestInbody){
+  const weight = latestInbody.weight || 0;
+  const goal = d.goal || 'maintain';
+  const targetKcal = d.targetKcal || 0;
+  const carbPct = goal==='diet'?45:goal==='bulk'?55:50;
+  const proteinGoal = weight ? Math.round(weight*2) : 0;
+  const carbGoal = targetKcal ? Math.round(targetKcal*(carbPct/100)/4) : 0;
+  const recent7 = (d.mealHistory||[]).slice(-7);
+  const avgKcal = recent7.length ? Math.round(recent7.reduce((s,m)=>s+(m.calories||m.kcal||0),0)/recent7.length) : 0;
+  const avgProtein = recent7.length ? Math.round(recent7.reduce((s,m)=>s+(m.protein||0),0)/recent7.length) : 0;
+  const avgCarb = recent7.length ? Math.round(recent7.reduce((s,m)=>s+(m.carb||0),0)/recent7.length) : 0;
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:16px;';
+
+  // 원 그래프
+  const chartsEl = document.createElement('div');
+  chartsEl.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-bottom:20px;';
+  chartsEl.innerHTML =
+    buildDonutChart('칼로리', avgKcal, targetKcal, 'kcal', 'var(--g0)') +
+    buildDonutChart('단백질', avgProtein, proteinGoal, 'g', '#3A8AE8') +
+    buildDonutChart('탄수화물', avgCarb, carbGoal, 'g', '#F5A623');
+  wrap.appendChild(chartsEl);
+
+  // 인바디 요약 + 수정 버튼
+  const infoRow = document.createElement('div');
+  infoRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:10px 14px;background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r12);';
+  const goalName = {diet:'다이어트',maintain:'유지',bulk:'근비대'}[goal]||'';
+  infoRow.innerHTML = `
+    <div style="font-size:13px;color:var(--t2);">
+      <strong style="color:var(--t);">${weight}kg</strong>  ·  목표 <strong style="color:var(--g0);">${goalName}</strong>  ·  ${targetKcal.toLocaleString()}kcal
+    </div>
+    <button onclick="resetDietOnboarding()" style="font-size:11px;color:var(--t3);background:none;border:none;cursor:pointer;font-family:inherit;">수정</button>`;
+  wrap.appendChild(infoRow);
+
+  // 식단 추가 버튼
+  const addBtn = document.createElement('button');
+  addBtn.style.cssText = 'width:100%;padding:14px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px;';
+  addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 오늘 식단 분석하기';
+  addBtn.onclick = openMealModal;
+  wrap.appendChild(addBtn);
+
+  // 식단 리스트
+  const listLabel = document.createElement('div');
+  listLabel.className = 'section-label';
+  listLabel.textContent = '식단 기록';
+  wrap.appendChild(listLabel);
+
+  if(!d.mealHistory?.length){
+    wrap.innerHTML += `<div class="dv2-empty"><div class="dv2-empty-icon">🥗</div><div class="dv2-empty-text">아직 식단 기록이 없어요</div></div>`;
   } else {
     [...d.mealHistory].reverse().forEach((m, ri) => {
-      const realIdx = d.mealHistory.length - 1 - ri;
-      mealListHtml += buildMealCard(m, realIdx);
+      const realIdx = d.mealHistory.length-1-ri;
+      wrap.innerHTML += buildMealCard(m, realIdx);
     });
   }
-  sec3.innerHTML = `
-    <div class="dv2-section-head">
-      <span class="dv2-section-title"><span class="ic">🍱</span>식단 기록</span>
-      <button class="dv2-add-btn" onclick="openMealModal()" ${!canAddMeal?'style="opacity:.4;pointer-events:none;"':''}>+ 식단 추가</button>
-    </div>
-    ${mealListHtml}
-  `;
-  c.appendChild(sec3);
+
+  c.appendChild(wrap);
+}
+
+async function resetDietOnboarding(){
+  if(!confirm('인바디 정보와 목표를 다시 설정할까요?')) return;
+  const saved = await getDietData(currentMember.id);
+  saved.inbodyHistory = [];
+  saved.goal = null;
+  saved.targetKcal = null;
+  await saveDietData(currentMember.id, saved);
+  obGender = null; obGoal = null;
+  renderDietPage();
 }
 
 function buildInbodyCard(entry, prev, isLatest){
@@ -1945,17 +2155,25 @@ function buildInbodyCard(entry, prev, isLatest){
 }
 
 function buildMealCard(m, idx){
-  const over = m.gap > 0;
-  const barPct = Math.min(Math.round((m.kcal / (m.targetKcal||m.kcal)) * 100), 100);
-  const barColor = over ? '#e8503a' : barPct > 80 ? 'var(--g0)' : '#f5a623';
-  const itemsStr = (m.items||[]).join('  ·  ');
-  return `<div class="dv2-meal-card" onclick="openMealDetail(${idx})">
-    <div class="dv2-meal-top">
-      <span class="dv2-meal-date">${m.date}</span>
-      <span class="dv2-meal-gap ${over?'over':'under'}">${over?'+':''}${m.gap.toLocaleString()}kcal</span>
+  const kcal = m.calories || m.kcal || 0;
+  const protein = m.protein || 0;
+  const targetKcal = m.targetKcal || 0;
+  const barPct = targetKcal ? Math.min(Math.round((kcal/targetKcal)*100), 100) : 0;
+  const barColor = barPct > 100 ? 'var(--red)' : barPct > 80 ? 'var(--g0)' : '#f5a623';
+  const foodsStr = (m.foods||m.items||[]).join('  ·  ');
+  return `<div class="dv2-meal-card" onclick="openMealDetail(${idx})" style="background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px;margin-bottom:8px;cursor:pointer;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <span style="font-size:11px;color:var(--t3);font-weight:600;">${m.date}</span>
+      <span style="font-size:13px;font-weight:700;color:var(--t);">${kcal.toLocaleString()} kcal</span>
     </div>
-    <div class="dv2-meal-items">${itemsStr || '식단 내역'}</div>
-    <div class="dv2-meal-bar-track"><div class="dv2-meal-bar-fill" style="width:${barPct}%;background:${barColor};"></div></div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:8px;line-height:1.6;">${foodsStr||'식단 내역'}</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <span style="font-size:11px;color:var(--t3);">단백질 <strong style="color:var(--t);">${protein}g</strong></span>
+      ${m.carb?`<span style="font-size:11px;color:var(--t3);">탄수화물 <strong style="color:var(--t);">${m.carb}g</strong></span>`:''}
+    </div>
+    ${targetKcal?`<div style="height:4px;background:var(--sf2);border-radius:2px;overflow:hidden;">
+      <div style="height:100%;width:${barPct}%;background:${barColor};border-radius:2px;"></div>
+    </div>`:''}
   </div>`;
 }
 
@@ -2090,10 +2308,6 @@ async function analyzeInbody(){
    식단 등록 모달
 ═══════════════════════════════════════ */
 function openMealModal(){
-  if(!dietState.data || !dietState.data.targetKcal){
-    alert('먼저 인바디를 등록하고 목표를 설정해주세요.');
-    return;
-  }
   dietState.mealB64List = [];
   const overlay = document.createElement('div');
   overlay.className = 'dv2-modal-overlay';
@@ -2109,9 +2323,9 @@ function openMealModal(){
       <div class="dv2-modal-scroll">
         <div class="diet-upload-area" id="mealUploadArea" onclick="document.getElementById('mealFile').click()">
           <input type="file" id="mealFile" accept="image/*" multiple onchange="onMealFile(event)" onclick="event.stopPropagation()"/>
-          <div class="diet-upload-icon">🍱</div>
-          <div class="diet-upload-text">식단 사진</div>
-          <div class="diet-upload-hint">여러 장 선택 가능 — 탭해서 사진 선택</div>
+          <div class="diet-upload-icon">🥗</div>
+          <div class="diet-upload-text">오늘 먹은 식단 사진</div>
+          <div class="diet-upload-hint">여러 장 선택 가능 — AI가 한 번에 분석해요</div>
         </div>
         <div id="mealPreview"></div>
         <div id="mealModalResult"></div>
@@ -2172,11 +2386,12 @@ function removeMealImg(idx){
 }
 
 async function analyzeMeal(){
-  const targetKcal = dietState.data.targetKcal;
   if(!dietState.mealB64List.length){ alert('식단 사진을 먼저 올려주세요.'); return; }
   const btn = document.getElementById('mealAnalyzeBtn');
   if(btn){ btn.disabled=true; btn.textContent='분석 중...'; }
-  document.getElementById('mealModalResult').innerHTML = '<div class="diet-result-loading">칼로리 계산 중...</div>';
+  document.getElementById('mealModalResult').innerHTML = '<div class="diet-result-loading">AI가 식단을 분석하고 있어요...</div>';
+
+  const targetKcal = dietState.data?.targetKcal || 0;
 
   try{
     const imageBlocks = dietState.mealB64List.map(b64 => ({
@@ -2187,11 +2402,11 @@ async function analyzeMeal(){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:800,
-        system:'여러 장의 식단 사진을 분석해서 반드시 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"kcal":총칼로리숫자,"items":["음식1","음식2"],"gap":목표대비차이숫자(초과면양수부족이면음수),"foods":[{"name":"음식이름","amount":"1공기","kcal":300}]} 사진 전체를 합쳐서 하루 식단으로 보고 총 칼로리를 계산해. gap은 섭취-목표. foods는 부족할 때만 채울 수 있는 음식 3개.',
+        model:'claude-sonnet-4-6', max_tokens:1000,
+        system:'식단 사진을 분석해서 반드시 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"calories":총칼로리숫자,"protein":단백질g숫자,"carb":탄수화물g숫자,"fat":지방g숫자,"foods":["음식1 약 300g","음식2"],"comment":"한줄코멘트"}',
         messages:[{role:'user',content:[
           ...imageBlocks,
-          {type:'text',text:`이 ${imageBlocks.length}장의 사진은 오늘 먹은 식단이야. 전체 합산 칼로리를 추정하고, 목표 칼로리 ${targetKcal}kcal 대비 얼마나 차이나는지 JSON으로 반환해줘. 부족하면 채울 음식도 추천해줘.`}
+          {type:'text',text:`이 ${imageBlocks.length}장의 사진은 오늘 하루 먹은 식단이야. 전체를 합산해서 총 칼로리, 단백질, 탄수화물, 지방을 추정해줘. JSON으로만 반환해.`}
         ]}]
       })
     });
@@ -2200,26 +2415,81 @@ async function analyzeMeal(){
     const clean = text.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
 
-    const entry = {
-      id: 'm_' + Date.now(),
-      date: getShortDate(),
-      dateTime: new Date().toISOString(),
-      kcal: parsed.kcal, items: parsed.items || [],
-      gap: parsed.gap, foods: parsed.foods || [],
-      targetKcal: targetKcal,
-    };
-
-    const saved = await getDietData(currentMember.id);
-    if(!saved.mealHistory) saved.mealHistory = [];
-    saved.mealHistory.push(entry);
-    await saveDietData(currentMember.id, saved);
-
-    closeMealModal();
-    renderDietPage();
+    // 트레이너 확인 화면 표시
+    showMealConfirm(parsed, targetKcal);
+    if(btn){ btn.disabled=false; }
   } catch(err){
-    document.getElementById('mealModalResult').innerHTML = '<div class="diet-result" style="color:var(--red);padding:14px;">분석 실패. 사진을 다시 올려주세요.</div>';
+    document.getElementById('mealModalResult').innerHTML = '<div style="color:var(--red);padding:14px;font-size:13px;">분석 실패. 사진을 다시 올려주세요.</div>';
     if(btn){ btn.disabled=false; btn.textContent='다시 시도'; }
   }
+}
+
+function showMealConfirm(parsed, targetKcal){
+  const d = dietState.data;
+  const weight = d.inbodyHistory?.length ? d.inbodyHistory[d.inbodyHistory.length-1].weight : 0;
+  const proteinGoal = weight ? Math.round(weight * 2) : 0;
+  const proteinOk = proteinGoal && parsed.protein >= proteinGoal;
+
+  const resultEl = document.getElementById('mealModalResult');
+  resultEl.innerHTML = `
+    <div style="background:var(--sf2);border-radius:var(--r12);padding:14px;margin-top:12px;">
+      <div style="font-size:13px;font-weight:700;color:var(--t);margin-bottom:12px;">AI 분석 결과</div>
+
+      <!-- 음식 목록 -->
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;line-height:1.8;">${(parsed.foods||[]).join(' · ')}</div>
+
+      <!-- 핵심 수치 -->
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px;">
+        <div style="background:var(--sf);border-radius:var(--r8);padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:var(--t);">${(parsed.calories||0).toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--t3);margin-top:2px;">칼로리 kcal${targetKcal?` / ${targetKcal.toLocaleString()}`:''}</div>
+        </div>
+        <div style="background:var(--sf);border-radius:var(--r8);padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:${proteinOk?'var(--g0)':'#E8703A'};">${parsed.protein||0}g</div>
+          <div style="font-size:10px;color:var(--t3);margin-top:2px;">단백질${proteinGoal?` / ${proteinGoal}g 목표`:''}  ${proteinOk?'✓':proteinGoal?'⚠️ 부족':''}</div>
+        </div>
+        <div style="background:var(--sf);border-radius:var(--r8);padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:var(--t);">${parsed.carb||0}g</div>
+          <div style="font-size:10px;color:var(--t3);margin-top:2px;">탄수화물</div>
+        </div>
+        <div style="background:var(--sf);border-radius:var(--r8);padding:10px;text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:var(--t);">${parsed.fat||0}g</div>
+          <div style="font-size:10px;color:var(--t3);margin-top:2px;">지방</div>
+        </div>
+      </div>
+
+      <!-- AI 코멘트 -->
+      ${parsed.comment?`<div style="font-size:12px;color:var(--t2);background:var(--sf);border-radius:var(--r8);padding:10px;margin-bottom:10px;">💬 ${parsed.comment}</div>`:''}
+
+      <!-- 확인/취소 버튼 -->
+      <div style="display:flex;gap:8px;">
+        <button onclick="closeMealModal()" style="flex:1;padding:11px;background:none;border:0.5px solid var(--bd);border-radius:var(--r8);font-size:13px;color:var(--t2);cursor:pointer;font-family:inherit;">취소</button>
+        <button onclick="saveMealResult(${JSON.stringify(parsed).replace(/"/g,'&quot;')},${targetKcal})" style="flex:2;padding:11px;background:var(--g0);border:none;border-radius:var(--r8);font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;">저장하기</button>
+      </div>
+    </div>`;
+}
+
+async function saveMealResult(parsed, targetKcal){
+  const entry = {
+    id: 'm_' + Date.now(),
+    date: getShortDate(),
+    dateTime: new Date().toISOString(),
+    calories: parsed.calories || 0,
+    protein: parsed.protein || 0,
+    carb: parsed.carb || 0,
+    fat: parsed.fat || 0,
+    foods: parsed.foods || [],
+    comment: parsed.comment || '',
+    targetKcal,
+    confirmedByTrainer: true,
+  };
+  const saved = await getDietData(currentMember.id);
+  if(!saved.mealHistory) saved.mealHistory = [];
+  saved.mealHistory.push(entry);
+  await saveDietData(currentMember.id, saved);
+  closeMealModal();
+  renderDietPage();
+  showToast('식단 저장 완료 ✓');
 }
 
 /* ── 저장된 식단 기록 상세 보기 ── */
