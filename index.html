@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.1.7"/>
+<meta name="app-version" content="1.1.9"/>
 <title>PT 일지</title>
 <style>
 :root {
@@ -874,6 +874,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       <div style="display:flex;gap:6px;">
         <button id="dashDeployBtn" onclick="openDashDeploy()" style="background:var(--g0);border:none;border-radius:20px;padding:3px 10px;font-size:11px;color:#fff;cursor:pointer;font-family:inherit;font-weight:600;">🚀 배포</button>
         <button onclick="openDashPinChange()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">⚙️</button>
+        <button onclick="markAllSent()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">✓ 전체 전송됨</button>
         <button onclick="doDashLogout()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">로그아웃</button>
       </div>
     </div>
@@ -2962,10 +2963,11 @@ async function loadDashTrainerList(){
             ${allDone?'✓ 오늘 전송 완료':hasUnsent?`미전송 ${todayTotal-todaySent}건 남음`:'오늘 수업 없음'}
           </div>
         </div>
-        <div style="text-align:right;">
+        <div style="text-align:right;margin-right:8px;">
           <div style="font-size:20px;font-weight:800;color:${allDone?'var(--g0)':hasUnsent?'var(--red)':'var(--t3)'};">${todayTotal?todaySent+'/'+todayTotal:'—'}</div>
           <div style="font-size:10px;color:var(--t3);">전송</div>
         </div>
+        <button onclick="event.stopPropagation();deleteTrainerFromDir('${t.trainerId}','${t.name}')" style="background:none;border:0.5px solid var(--red);border-radius:20px;padding:4px 10px;font-size:11px;color:var(--red);cursor:pointer;font-family:inherit;flex-shrink:0;">삭제</button>
       </div>
       ${todayTotal?`
       <div style="height:8px;background:var(--sf2);border-radius:4px;overflow:hidden;margin-bottom:4px;">
@@ -3156,6 +3158,44 @@ async function openDashDeploy(){
   document.getElementById('dashDeployErr').style.display = 'none';
   document.getElementById('modal-dash-deploy').style.display = 'flex';
   setTimeout(()=>document.getElementById('dashDeployVer').focus(),100);
+}
+
+async function deleteTrainerFromDir(trainerId, name){
+  if(!confirm(`${name} 트레이너를 목록에서 삭제할까요?\n(트레이너 데이터는 유지돼요)`)) return;
+  const dir = await fsGet('admin', 'trainer_directory') || {};
+  delete dir[trainerId];
+  await fsSet('admin', 'trainer_directory', dir);
+  loadDashTrainerList();
+}
+
+async function markAllSent(){
+  if(!dashTrainerId){ alert('트레이너를 먼저 선택해주세요.'); return; }
+  if(!confirm('이 트레이너의 모든 일지를 전송됨으로 처리할까요?')) return;
+
+  const members = await fsGet('data', 'members_'+dashTrainerId) || [];
+  const sent = await fsGet('data', 'sent_'+dashTrainerId) || {};
+
+  await Promise.all(members.map(async m => {
+    const hist = await fsGet('data', 'hist_'+dashTrainerId+'_'+m.id) || [];
+    hist.forEach(e => {
+      if(!e.id) return;
+      const key = m.id+'_'+e.id;
+      if(!sent[key] || sent[key].count === 0){
+        sent[key] = {
+          mid: m.id,
+          entryId: e.id,
+          count: 1,
+          firstAt: e.dateTime || new Date().toISOString(),
+          lastAt: e.dateTime || new Date().toISOString(),
+          date: e.date || ''
+        };
+      }
+    });
+  }));
+
+  await fsSet('data', 'sent_'+dashTrainerId, sent);
+  alert('✅ 전체 전송됨으로 처리됐어요.');
+  loadDashData();
 }
 
 async function doDashDeploy(){
