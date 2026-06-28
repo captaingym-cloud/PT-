@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.1.9"/>
+<meta name="app-version" content="1.2.3"/>
 <title>PT 일지</title>
 <style>
 :root {
@@ -1346,7 +1346,9 @@ async function renderMemberList(){
     card.onclick = () => openMemberJournals(m);
 
     // 스와이프 이벤트
-    let startX = 0, dx = 0, swiped = false;
+    let startX = 0, dx = 0, swiped = false, dragging = false;
+
+    // 터치 (모바일)
     card.addEventListener('touchstart', e => {
       startX = e.touches[0].clientX;
       dx = 0; swiped = false;
@@ -1368,6 +1370,26 @@ async function renderMemberList(){
         card.style.transform = 'translateX(0)';
         swiped = false;
       }
+    });
+
+    // 마우스 (컴퓨터)
+    card.addEventListener('mousedown', e => {
+      startX = e.clientX; dx = 0; dragging = true;
+    });
+    window.addEventListener('mousemove', e => {
+      if(!dragging) return;
+      dx = e.clientX - startX;
+      if(dx < -10){
+        card.style.transform = `translateX(${Math.max(dx,-80)}px)`;
+      } else if(dx > 10 && swiped){
+        card.style.transform = 'translateX(0)';
+      }
+    });
+    window.addEventListener('mouseup', () => {
+      if(!dragging) return;
+      dragging = false;
+      if(dx < -40){ card.style.transform = 'translateX(-80px)'; swiped = true; }
+      else { card.style.transform = 'translateX(0)'; swiped = false; }
     });
 
     wrap.appendChild(delBtn);
@@ -2919,6 +2941,11 @@ async function loadDashTrainerList(){
     return { t, todayTotal, todaySent };
   }));
 
+  // 미전송 트레이너 이름 수집
+  const unsentTrainers = trainerStats
+    .filter(({todayTotal, todaySent}) => todayTotal > 0 && todaySent < todayTotal)
+    .map(({t}) => t.name);
+
   // 요약 카드
   const msgEl = document.getElementById('dashSummaryMsg');
   const numsEl = document.getElementById('dashSummaryNums');
@@ -2926,7 +2953,7 @@ async function loadDashTrainerList(){
     let msg = '';
     if(totalToday === 0) msg = '대표님, 오늘 아직 수업 기록이 없어요 😊';
     else if(totalUnsent === 0) msg = `대표님, 오늘 수업 ${totalToday}건 모두 전송 완료됐어요 ✅`;
-    else msg = `대표님, 미전송 일지 ${totalUnsent}건이 있어요 ⚠️`;
+    else msg = `대표님, ${unsentTrainers.join(', ')} 트레이너 미전송 일지가 있어요 ⚠️`;
     msgEl.textContent = msg;
     numsEl.innerHTML = `
       <div style="background:rgba(255,255,255,.15);border-radius:var(--r8);padding:10px;text-align:center;">
@@ -2967,7 +2994,7 @@ async function loadDashTrainerList(){
           <div style="font-size:20px;font-weight:800;color:${allDone?'var(--g0)':hasUnsent?'var(--red)':'var(--t3)'};">${todayTotal?todaySent+'/'+todayTotal:'—'}</div>
           <div style="font-size:10px;color:var(--t3);">전송</div>
         </div>
-        <button onclick="event.stopPropagation();deleteTrainerFromDir('${t.trainerId}','${t.name}')" style="background:none;border:0.5px solid var(--red);border-radius:20px;padding:4px 10px;font-size:11px;color:var(--red);cursor:pointer;font-family:inherit;flex-shrink:0;">삭제</button>
+        <button onclick="event.stopPropagation();deleteTrainerFromDir('${t.trainerId}','${t.name}')" style="background:none;border:none;padding:4px 6px;font-size:11px;color:var(--t3);cursor:pointer;font-family:inherit;flex-shrink:0;opacity:0.5;">✕</button>
       </div>
       ${todayTotal?`
       <div style="height:8px;background:var(--sf2);border-radius:4px;overflow:hidden;margin-bottom:4px;">
@@ -3280,6 +3307,15 @@ function nextSlide(){
 function finishOnboarding(){
   localStorage.setItem('onboarding_done', '1');
   showScreen('screen-setup');
+}
+
+function showToast(msg){
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#1A1A1A;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;white-space:nowrap;';
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>{ t.style.opacity='1'; });
+  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, 2000);
 }
 
 function updateSessionLabel(){
@@ -4159,11 +4195,14 @@ async function doCopyEntry(idx){
   // 편지 없을 때만 끝에 트레이너 표시
   if(!(letterText||'').trim()) L.push('트레이너  '+trainer);
   const text=L.join('\n');
-  const btn=document.querySelector('.detail-copy-btn');
+  const btns=document.querySelectorAll('.detail-copy-btn');
+  const btn=btns[btns.length-1]; // 마지막 버튼 = 복사 버튼
   function markDone(){
     if(btn){btn.textContent='✓ 전송 완료';setTimeout(()=>{btn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 복사';},2000);}
     // 전송 기록
     if(currentMember && e.id) recordSent(currentMember.id, e.id);
+    // 토스트
+    showToast('일지 복사 완료 ✓');
   }
   function fallback2(){
     const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;top:0;left:0;width:2em;height:2em;opacity:0;';
