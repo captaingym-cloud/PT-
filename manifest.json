@@ -1,11 +1,11 @@
 {
-  "name": "캡틴짐 PT 일지",
-  "short_name": "캡틴짐",
+  "name": "PT 일지",
+  "short_name": "PT 일지",
   "description": "캡틴짐 트레이너 전용 PT 일지 서비스",
-  "start_url": "./captaingym.html",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#FFE600",
-  "theme_color": "#FFE600",
+  "background_color": "#F7F7F5",
+  "theme_color": "#3D8A2A",
   "orientation": "portrait",
   "icons": [
     {

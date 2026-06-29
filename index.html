@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.3.1"/>
+<meta name="app-version" content="1.3.5"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
 <style>
 :root {
@@ -3745,6 +3747,23 @@ function exMaxW(ex){return ex.sets.length?Math.max(...ex.sets.map(st=>st.w)):0;}
 function isAssist(ex){ return (ex.name||'').includes('어시스트'); }
 function wDisplay(ex, w){ return (isAssist(ex) && Number(w)>0) ? '-'+w : w; }
 
+const ISOMETRIC_KEYWORDS = ['플랭크','홀드','버티기','월싯','월 싯','데드행','행잉','버드독','글루트브릿지홀드','홀딩','정적','isometric'];
+function isIsometric(ex){
+  const name = (ex.name||'').toLowerCase();
+  return ex.timeMode || ISOMETRIC_KEYWORDS.some(k=>name.includes(k));
+}
+function toggleTimeMode(ei){
+  exercises[ei]._manualTimeMode = true; // 수동 전환 표시
+  exercises[ei].timeMode = !exercises[ei].timeMode;
+  if(exercises[ei].timeMode){
+    exercises[ei].sets.forEach(s=>{ s.w=0; s.r=30; delete s.drops; });
+  } else {
+    exercises[ei]._manualTimeMode = false; // 일반으로 돌아오면 초기화
+    exercises[ei].sets.forEach(s=>{ s.r=10; });
+  }
+  buildSetRows(ei); updateExFooter(ei); recalcAll();
+}
+
 function isBodyweight(ex){ const sets=ex.sets||[]; return sets.length>0 && sets.every(st=>Number(st.w)===0); }
 function exTotalReps(ex){ return ex.sets.reduce((s,st)=>s+st.r,0); }
 
@@ -3819,42 +3838,98 @@ function updateExFooter(ei){
 /* ═══════════════════════════════════════
    SETS
 ═══════════════════════════════════════ */
+function addDrop(ei, si){
+  if(!exercises[ei].sets[si].drops) exercises[ei].sets[si].drops=[];
+  const s=exercises[ei].sets[si];
+  const lastDrop=s.drops.slice(-1)[0]||s;
+  s.drops.push({w:Math.max(0,(lastDrop.w||0)-5), r:lastDrop.r||10});
+  buildSetRows(ei);updateExFooter(ei);recalcAll();
+}
+function removeDrop(ei, si, di){
+  exercises[ei].sets[si].drops.splice(di,1);
+  buildSetRows(ei);updateExFooter(ei);recalcAll();
+}
+
 function buildSetRows(ei){
   const c=document.getElementById('sets-'+ei);
   if(!c) return;
   c.innerHTML='';
+  const timeMode = !!exercises[ei].timeMode;
   const hdr=document.createElement('div');
   hdr.className='sets-header';
-  hdr.innerHTML='<span></span><span>무게</span><span>횟수</span><span class="th-r">볼륨</span><span></span>';
+  hdr.innerHTML = timeMode
+    ? '<span></span><span>시간</span><span></span><span class="th-r"></span><span></span>'
+    : '<span></span><span>무게</span><span>횟수</span><span class="th-r">볼륨</span><span></span>';
   c.appendChild(hdr);
   exercises[ei].sets.forEach((s,si)=>{
     const row=document.createElement('div');
     row.className='set-row';
     const wId=`dial-w-${ei}-${si}`;
     const rId=`dial-r-${ei}-${si}`;
-    row.innerHTML=`
-      <span class="set-idx">${si+1}</span>
-      <div class="dial-wrap">
-        <div class="dial-display${s.w?'':' empty'}" id="${wId}" data-ei="${ei}" data-si="${si}" data-type="w">
-          ${s.w?s.w+'<span class="dial-unit">kg</span>':'kg'}
-          <div class="dial-arrows"><span>▲</span><span>▼</span></div>
+    if(timeMode){
+      // 초 모드: 시간(r)만 표시, 무게 없음
+      row.innerHTML=`
+        <span class="set-idx">${si+1}</span>
+        <div class="dial-wrap" style="grid-column:span 2;">
+          <div class="dial-display${s.r?'':' empty'}" id="${rId}" data-ei="${ei}" data-si="${si}" data-type="r">
+            ${s.r?s.r+'<span class="dial-unit">초</span>':'초'}
+            <div class="dial-arrows"><span>▲</span><span>▼</span></div>
+          </div>
         </div>
-      </div>
-      <div class="dial-wrap">
-        <div class="dial-display${s.r?'':' empty'}" id="${rId}" data-ei="${ei}" data-si="${si}" data-type="r">
-          ${s.r?s.r+'<span class="dial-unit">개</span>':'개수'}
-          <div class="dial-arrows"><span>▲</span><span>▼</span></div>
+        <span class="set-vol"></span>
+        <button class="set-del" onclick="removeSet(${ei},${si})">×</button>`;
+      c.appendChild(row);
+      const el=row.querySelector('#'+rId); if(el) attachDial(el);
+    } else {
+      row.innerHTML=`
+        <span class="set-idx">${si+1}</span>
+        <div class="dial-wrap">
+          <div class="dial-display${s.w?'':' empty'}" id="${wId}" data-ei="${ei}" data-si="${si}" data-type="w">
+            ${s.w?s.w+'<span class="dial-unit">kg</span>':'kg'}
+            <div class="dial-arrows"><span>▲</span><span>▼</span></div>
+          </div>
         </div>
-      </div>
-      <span class="set-vol" id="rv-${ei}-${si}">${s.w&&s.r?(s.w*s.r).toLocaleString()+'kg':''}</span>
-      <button class="set-del" onclick="removeSet(${ei},${si})">×</button>`;
-    c.appendChild(row);
+        <div class="dial-wrap">
+          <div class="dial-display${s.r?'':' empty'}" id="${rId}" data-ei="${ei}" data-si="${si}" data-type="r">
+            ${s.r?s.r+'<span class="dial-unit">개</span>':'개수'}
+            <div class="dial-arrows"><span>▲</span><span>▼</span></div>
+          </div>
+        </div>
+        <span class="set-vol" id="rv-${ei}-${si}">${s.w&&s.r?(s.w*s.r).toLocaleString()+'kg':''}</span>
+        <button onclick="addDrop(${ei},${si})" style="font-size:10px;color:var(--red);background:none;border:1px solid var(--red);border-radius:4px;cursor:pointer;font-family:inherit;padding:1px 5px;white-space:nowrap;">↓드롭</button>
+        <button class="set-del" onclick="removeSet(${ei},${si})">×</button>`;
+      c.appendChild(row);
+      [wId, rId].forEach(id => { const el=row.querySelector('#'+id); if(el) attachDial(el); });
+    } // end else (normal mode)
 
-    // 다이얼 이벤트 붙이기
-    [wId, rId].forEach(id => {
-      const el = row.querySelector('#'+id);
-      if(el) attachDial(el);
+    // 드롭셋 행들 (일반 모드에서만)
+    if(!timeMode) (s.drops||[]).forEach((d,di)=>{
+      const drow=document.createElement('div');
+      drow.className='set-row';
+      drow.style.cssText='border-left:3px solid var(--red);background:rgba(255,80,80,0.04);';
+      const dwId=`dial-w-${ei}-${si}-d${di}`;
+      const drId=`dial-r-${ei}-${si}-d${di}`;
+      drow.innerHTML=`
+        <span class="set-idx" style="color:var(--red);font-size:10px;">↓</span>
+        <div class="dial-wrap">
+          <div class="dial-display${d.w?'':' empty'}" id="${dwId}" data-ei="${ei}" data-si="${si}" data-di="${di}" data-type="dw">
+            ${d.w?d.w+'<span class="dial-unit">kg</span>':'kg'}
+            <div class="dial-arrows"><span>▲</span><span>▼</span></div>
+          </div>
+        </div>
+        <div class="dial-wrap">
+          <div class="dial-display${d.r?'':' empty'}" id="${drId}" data-ei="${ei}" data-si="${si}" data-di="${di}" data-type="dr">
+            ${d.r?d.r+'<span class="dial-unit">개</span>':'개수'}
+            <div class="dial-arrows"><span>▲</span><span>▼</span></div>
+          </div>
+        </div>
+        <span class="set-vol">${d.w&&d.r?(d.w*d.r).toLocaleString()+'kg':''}</span>
+        <button class="set-del" onclick="removeDrop(${ei},${si},${di})" style="color:var(--red);">×</button>`;
+      c.appendChild(drow);
+      [dwId, drId].forEach(id => { const el=drow.querySelector('#'+id); if(el) attachDial(el); });
     });
+
+
   });
 }
 
@@ -3862,20 +3937,31 @@ function buildSetRows(ei){
 function attachDial(el){
   const ei   = parseInt(el.dataset.ei);
   const si   = parseInt(el.dataset.si);
-  const type = el.dataset.type; // 'w' or 'r'
-  const step = type==='w' ? 0.5 : 1;
-  const min  = type==='w' ? 0 : 0;
-  const max  = type==='w' ? 300 : 100;
-  const unit = type==='w' ? 'kg' : '개';
+  const di   = el.dataset.di !== undefined ? parseInt(el.dataset.di) : -1;
+  const type = el.dataset.type; // 'w','r','dw','dr'
+  const isW  = type==='w'||type==='dw';
+  const timeMode = !!exercises[ei].timeMode;
+  const step = isW ? 0.5 : (timeMode ? 5 : 1);
+  const min  = 0;
+  const max  = isW ? 300 : (timeMode ? 600 : 100);
+  const unit = isW ? 'kg' : (timeMode ? '초' : '개');
 
   let startY=0, startVal=0, dragging=false, moved=false;
 
-  function getVal(){ return type==='w' ? (exercises[ei].sets[si].w||0) : (exercises[ei].sets[si].r||0); }
+  function getVal(){
+    if(di>=0) return isW ? (exercises[ei].sets[si].drops[di].w||0) : (exercises[ei].sets[si].drops[di].r||0);
+    return isW ? (exercises[ei].sets[si].w||0) : (exercises[ei].sets[si].r||0);
+  }
   function setVal(v){
     v = Math.round(v / step) * step;
     v = Math.max(min, Math.min(max, v));
-    if(type==='w') exercises[ei].sets[si].w = v;
-    else           exercises[ei].sets[si].r = v;
+    if(di>=0){
+      if(isW) exercises[ei].sets[si].drops[di].w=v;
+      else    exercises[ei].sets[si].drops[di].r=v;
+    } else {
+      if(isW) exercises[ei].sets[si].w = v;
+      else    exercises[ei].sets[si].r = v;
+    }
     // 표시 업데이트
     el.innerHTML = v
       ? v+'<span class="dial-unit">'+unit+'</span><div class="dial-arrows"><span>▲</span><span>▼</span></div>'
@@ -3913,7 +3999,7 @@ function attachDial(el){
     el.classList.remove('active');
     dragging=false;
     // 탭(움직임 없음) → 숫자 직접 입력 팝업
-    if(!moved) openDialInput(ei, si, type);
+    if(!moved) openDialInput(ei, si, type, di);
     e.preventDefault();
   },{passive:false});
 
@@ -3938,7 +4024,7 @@ function attachDial(el){
       mouseActive=false;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      if(!moved) openDialInput(ei,si,type);
+      if(!moved) openDialInput(ei,si,type,di);
     }
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -3946,15 +4032,24 @@ function attachDial(el){
 }
 
 // 탭 시 숫자 직접 입력
-function openDialInput(ei, si, type){
-  const unit = type==='w'?'kg':'개';
-  const cur  = type==='w'?exercises[ei].sets[si].w:exercises[ei].sets[si].r;
-  const val  = prompt((type==='w'?'무게 (kg)':'횟수 (개)') + ' 직접 입력', cur||'');
+function openDialInput(ei, si, type, di){
+  const isW = type==='w'||type==='dw';
+  const timeMode = !!exercises[ei].timeMode;
+  const unit = isW?'kg':(timeMode?'초':'개');
+  let cur;
+  if(di>=0) cur = isW ? exercises[ei].sets[si].drops[di].w : exercises[ei].sets[si].drops[di].r;
+  else      cur = isW ? exercises[ei].sets[si].w : exercises[ei].sets[si].r;
+  const val = prompt((isW?'무게 (kg)':'횟수 (개)') + ' 직접 입력', cur||'');
   if(val===null) return;
-  const num = type==='w' ? parseFloat(val) : parseInt(val);
+  const num = isW ? parseFloat(val) : parseInt(val);
   if(isNaN(num)) return;
-  if(type==='w') exercises[ei].sets[si].w=num;
-  else           exercises[ei].sets[si].r=num;
+  if(di>=0){
+    if(isW) exercises[ei].sets[si].drops[di].w=num;
+    else    exercises[ei].sets[si].drops[di].r=num;
+  } else {
+    if(isW) exercises[ei].sets[si].w=num;
+    else    exercises[ei].sets[si].r=num;
+  }
   buildSetRows(ei);
   updateExFooter(ei);
   recalcAll();
@@ -4002,6 +4097,7 @@ function buildExCard(ei){
       <div class="ex-header">
         <input class="ex-name-inp" value="${ex.name}" placeholder="종목명 입력"
           oninput="exercises[${ei}].name=this.value;autoFillPrev(${ei},this.value);"/>
+        <button onclick="toggleTimeMode(${ei})" title="등척성/일반 전환" style="background:${ex.timeMode?'var(--g0)':'none'};color:${ex.timeMode?'#fff':'var(--t3)'};border:1px solid ${ex.timeMode?'var(--g0)':'var(--bd)'};border-radius:6px;font-size:11px;padding:2px 6px;cursor:pointer;font-family:inherit;margin-right:4px;">⏱</button>
         <button class="ex-del-btn" onclick="removeExercise(${ei})">×</button>
       </div>
       <div class="ex-color-row">
@@ -4051,6 +4147,19 @@ function renderExCards(){
 }
 
 async function autoFillPrev(ei, name){
+  // 등척성 자동 감지 (수동 토글 아닌 경우만)
+  const nowTime = ISOMETRIC_KEYWORDS.some(k=>(name||'').toLowerCase().includes(k));
+  if(!exercises[ei]._manualTimeMode){
+    if(nowTime && !exercises[ei].timeMode){
+      exercises[ei].timeMode = true;
+      exercises[ei].sets.forEach(s=>{ s.w=0; s.r=30; delete s.drops; });
+      buildSetRows(ei); updateExFooter(ei); recalcAll();
+    } else if(!nowTime && exercises[ei].timeMode){
+      exercises[ei].timeMode = false;
+      exercises[ei].sets.forEach(s=>{ s.r=10; });
+      buildSetRows(ei); updateExFooter(ei); recalcAll();
+    }
+  }
   const infoEl = document.getElementById('prevInfo-'+ei);
   if(!name.trim()){
     exercises[ei].prevMaxW = 0;
