@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.3.5"/>
+<meta name="app-version" content="1.6.2"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -366,25 +366,28 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 /* EXERCISE CARD */
 .ex-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);margin-bottom:10px;overflow:hidden;}
 .ex-header{display:flex;align-items:center;gap:8px;padding:12px 14px 10px;border-bottom:0.5px solid var(--bd);}
+.ex-drag-handle{font-size:18px;color:var(--t3);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:0 2px;line-height:1;}
+.ex-card.dragging{opacity:0.4;border:1.5px dashed var(--g0);}
+.ex-card.drag-over{border-top:2.5px solid var(--g0);}
 .ex-name-inp{flex:1;font-size:15px;font-weight:600;border:none;background:transparent;color:var(--t);outline:none;font-family:inherit;height:auto;padding:0;width:auto;}
 .ex-name-inp::placeholder{color:var(--t3);font-weight:400;}
 .ex-del-btn{width:26px;height:26px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t3);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .ex-del-btn:active{background:var(--red-l);color:var(--red);}
 .prev-auto-row{padding:6px 14px 8px;font-size:11px;color:var(--t3);border-bottom:0.5px solid var(--bd);min-height:0;}
 .prev-auto-row strong{color:var(--t2);font-weight:600;}
-.sets-area{padding:0 14px;}
-.sets-header{display:grid;grid-template-columns:26px 1fr 1fr 1fr 26px;gap:5px;align-items:center;padding:7px 0 4px;border-bottom:0.5px solid var(--bd);}
+.sets-area{padding:0 14px;border-top:0.5px solid var(--bd);}
+.sets-header{display:grid;grid-template-columns:26px 1fr 1fr auto auto 26px;gap:5px;align-items:center;padding:7px 0 4px;border-bottom:0.5px solid var(--bd);}
 .sets-header span{font-size:10px;color:var(--t3);letter-spacing:.03em;text-align:center;}
 .sets-header .th-r{text-align:right;}
-.set-row{display:grid;grid-template-columns:26px 1fr 1fr 1fr 26px;gap:5px;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--bd);}
+.set-row{display:grid;grid-template-columns:26px 1fr 1fr auto auto 26px;gap:5px;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--bd);}
 .set-row:last-of-type{border-bottom:none;}
 .set-idx{font-size:11px;color:var(--t3);text-align:center;}
-.set-vol{font-size:12px;color:var(--t3);text-align:right;}
+.set-vol{font-size:12px;color:var(--t3);text-align:right;min-width:44px;}
 .set-del{width:24px;height:24px;border-radius:50%;background:none;border:none;color:var(--t3);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;}
 .set-del:active{color:var(--red);}
 
 /* DIAL */
-.dial-wrap{display:flex;flex-direction:column;align-items:center;position:relative;user-select:none;-webkit-user-select:none;}
+.dial-wrap{display:flex;flex-direction:column;align-items:center;position:relative;user-select:none;-webkit-user-select:none;min-width:0;}
 .dial-display{
   width:100%;height:48px;
   border-radius:var(--r8);
@@ -540,9 +543,12 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         목록
       </button>
       <span class="nav-title" id="journalsTitle"></span>
-      <button onclick="openNewJournal()" style="background:var(--g0);border:none;border-radius:20px;padding:5px 14px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">
+      <button onclick="openNewJournal()" id="newJournalNavBtn" style="background:var(--g0);border:none;border-radius:20px;padding:5px 14px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         새 일지
+      </button>
+      <button onclick="openSettings()" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--t3);display:flex;align-items:center;" aria-label="설정">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       </button>
     </div>
     <div class="nav-tabs">
@@ -572,6 +578,22 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
           <div style="font-size:12px;color:var(--t3);margin-top:3px;" id="memberInfoSessions"></div>
         </div>
         <button onclick="openEditTotalSessions()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">세션 수정</button>
+      </div>
+
+      <!-- 회원 특이사항 메모 -->
+      <div id="memberNoteCard" style="background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:12px 16px;margin-bottom:10px;cursor:pointer;" onclick="toggleMemberNote()">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:12px;font-weight:700;color:var(--t2);">📌 회원 특이사항</span>
+          <span id="memberNoteToggleIcon" style="font-size:12px;color:var(--t3);">✏️</span>
+        </div>
+        <div id="memberNotePreview" style="font-size:13px;color:var(--t3);margin-top:4px;">메모 없음 — 탭해서 추가</div>
+      </div>
+      <div id="memberNoteEdit" style="display:none;background:var(--sf);border:0.5px solid var(--g0);border-radius:var(--r16);padding:12px 16px;margin-bottom:10px;">
+        <textarea id="memberNoteInput" rows="4" placeholder="이 회원의 특이사항, 주의사항을 적어요&#10;예) 오른쪽 골반 통증, 왼쪽 어깨 가동범위 제한" style="width:100%;border:none;background:transparent;font-size:13px;color:var(--t);font-family:inherit;resize:none;outline:none;line-height:1.7;"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+          <button onclick="closeMemberNote()" style="padding:6px 14px;background:none;border:0.5px solid var(--bd);border-radius:20px;font-size:12px;color:var(--t2);cursor:pointer;font-family:inherit;">닫기</button>
+          <button onclick="saveMemberNote()" style="padding:6px 14px;background:var(--g0);border:none;border-radius:20px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;">저장</button>
+        </div>
       </div>
 
       <!-- 달력 -->
@@ -904,7 +926,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       <span class="nav-title" id="dashTrainerTitle"></span>
     </div>
   </nav>
-  <div style="padding:16px;padding-bottom:60px;max-width:420px;margin:0 auto;">
+  <div style="padding:16px;padding-bottom:60px;max-width:760px;margin:0 auto;">
     <div id="dashSummaryGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;"></div>
     <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;" id="dashFilterRow">
       <button class="filter-btn active" onclick="dashSetFilter('all',this)">전체</button>
@@ -1215,9 +1237,17 @@ document.addEventListener('DOMContentLoaded', async function(){
   const TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2시간
   const lastActive = localStorage.getItem('last_active');
   if(lastActive && Date.now() - parseInt(lastActive) > TIMEOUT_MS){
+    autoSaveDraft();
     localStorage.removeItem('trainer_name');
     localStorage.removeItem('trainer_pin');
   }
+  // 새로고침/탭 닫기 전 임시저장
+  window.addEventListener('beforeunload', ()=>{ autoSaveDraft(); });
+  // 홈으로 나가거나 백그라운드 갈 때 임시저장
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'hidden') autoSaveDraft();
+  });
+
   // 활동할 때마다 타임스탬프 갱신
   function updateActivity(){ localStorage.setItem('last_active', Date.now()); }
   document.addEventListener('touchstart', updateActivity, {passive:true});
@@ -1784,6 +1814,9 @@ function switchMemberTab(t){
     document.getElementById('mtab-'+id).classList.toggle('active', id===t);
     document.getElementById('mpage-'+id).classList.toggle('active', id===t);
   });
+  // 식단 탭에서 새 일지 버튼 숨기기
+  const newJournalBtn = document.getElementById('newJournalNavBtn');
+  if(newJournalBtn) newJournalBtn.style.visibility = t==='diet' ? 'hidden' : 'visible';
   if(t==='diet') renderDietPage();
 }
 
@@ -1841,7 +1874,7 @@ function renderDietOnboarding(c, d, latestInbody){
   const step = !latestInbody ? 1 : 2;
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'padding:16px;max-width:420px;margin:0 auto;';
+  wrap.style.cssText = 'padding:16px;max-width:760px;margin:0 auto;';
 
   // 진행 표시
   wrap.innerHTML = `
@@ -2067,7 +2100,7 @@ function renderDietMain(c, d, latestInbody){
 
   // 원 그래프
   const chartsEl = document.createElement('div');
-  chartsEl.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-bottom:20px;';
+  chartsEl.style.cssText = 'display:flex;flex-direction:row;gap:4px;margin-bottom:20px;justify-content:space-around;';
   chartsEl.innerHTML =
     buildDonutChart('칼로리', avgKcal, targetKcal, 'kcal', 'var(--g0)') +
     buildDonutChart('단백질', avgProtein, proteinGoal, 'g', '#3A8AE8') +
@@ -2323,8 +2356,8 @@ function openMealModal(){
         <button class="dv2-modal-close" onclick="closeMealModal()">×</button>
       </div>
       <div class="dv2-modal-scroll">
-        <div class="diet-upload-area" id="mealUploadArea" onclick="document.getElementById('mealFile').click()">
-          <input type="file" id="mealFile" accept="image/*" multiple onchange="onMealFile(event)" onclick="event.stopPropagation()"/>
+        <div class="diet-upload-area" id="mealUploadArea">
+          <input type="file" id="mealFile" accept="image/*" multiple style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;"/>
           <div class="diet-upload-icon">🥗</div>
           <div class="diet-upload-text">오늘 먹은 식단 사진</div>
           <div class="diet-upload-hint">여러 장 선택 가능 — AI가 한 번에 분석해요</div>
@@ -2334,9 +2367,10 @@ function openMealModal(){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  const mealFileInput = document.getElementById('mealFile');
+  if(mealFileInput) mealFileInput.addEventListener('change', onMealFile);
 }
 function closeMealModal(){
-  const el = document.getElementById('mealModalOverlay');
   if(el) el.remove();
 }
 
@@ -2617,10 +2651,10 @@ function buildJournalCard(e, realIdx){
 
 async function renderJournalList(){
   if(!currentMember) return;
-  // 달력만 갱신 (일지 목록은 달력 날짜 탭 시 표시)
   await buildCalHistDates();
   renderCalendar();
   await updateMemberInfoCard();
+  renderMemberNote();
 }
 
 async function deleteEntry(idx){
@@ -2751,6 +2785,9 @@ async function openDetailModal(e, idx){
 async function openNewJournal(){
   if(!currentMember) return;
   editingEntryIdx = null;
+  // 복사 버튼 초기화
+  const copyBtn = document.getElementById('copyBtn');
+  if(copyBtn){ copyBtn.classList.remove('done'); copyBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 저장 + 카톡 전송'; }
 
   // 임시저장 복구 확인
   if(hasDraft(currentMember.id)){
@@ -2795,6 +2832,85 @@ async function openNewJournal(){
   showScreen('screen-journal');
 }
 
+async function renderMemberNote(){
+  if(!currentMember) return;
+  const memos = await getMemos(currentMember.id);
+  // 특이사항 메모: id가 'note'인 항목
+  const note = memos.find(m=>m.id==='note');
+  const text = note ? note.content : '';
+  const preview = document.getElementById('memberNotePreview');
+  const card = document.getElementById('memberNoteCard');
+  if(preview){
+    if(text){
+      preview.textContent = text;
+      preview.style.color = 'var(--t)';
+      card.style.borderColor = 'var(--g3)';
+      card.style.background = 'var(--g2)';
+    } else {
+      preview.textContent = '메모 없음 — 탭해서 추가';
+      preview.style.color = 'var(--t3)';
+      card.style.borderColor = 'var(--bd)';
+      card.style.background = 'var(--sf)';
+    }
+  }
+}
+
+function toggleMemberNote(){
+  const edit = document.getElementById('memberNoteEdit');
+  const card = document.getElementById('memberNoteCard');
+  if(edit.style.display==='none'){
+    // 현재 내용 불러오기
+    getMemos(currentMember.id).then(memos=>{
+      const note = memos.find(m=>m.id==='note');
+      document.getElementById('memberNoteInput').value = note ? note.content : '';
+    });
+    edit.style.display='block';
+    card.style.display='none';
+    setTimeout(()=>document.getElementById('memberNoteInput').focus(), 100);
+  } else {
+    edit.style.display='none';
+    card.style.display='block';
+  }
+}
+
+function closeMemberNote(){
+  document.getElementById('memberNoteEdit').style.display='none';
+  document.getElementById('memberNoteCard').style.display='block';
+}
+
+async function saveMemberNote(){
+  if(!currentMember) return;
+  const text = document.getElementById('memberNoteInput').value.trim();
+  const memos = await getMemos(currentMember.id);
+  const idx = memos.findIndex(m=>m.id==='note');
+  if(text){
+    const entry = {id:'note', content:text, updatedAt:new Date().toISOString()};
+    if(idx>=0) memos[idx]=entry;
+    else memos.unshift(entry);
+  } else {
+    if(idx>=0) memos.splice(idx,1);
+  }
+  await saveMemos(currentMember.id, memos);
+  closeMemberNote();
+  // Firestore 재조회 없이 바로 화면 반영
+  const preview = document.getElementById('memberNotePreview');
+  const card = document.getElementById('memberNoteCard');
+  if(preview){
+    if(text){
+      preview.textContent = text;
+      preview.style.color = 'var(--t)';
+      card.style.borderColor = 'var(--g3)';
+      card.style.background = 'var(--g2)';
+    } else {
+      preview.textContent = '메모 없음 — 탭해서 추가';
+      preview.style.color = 'var(--t3)';
+      card.style.borderColor = 'var(--bd)';
+      card.style.background = 'var(--sf)';
+    }
+  }
+  showToast('저장 완료 ✓');
+}
+
 async function renderRecentMemoBar(){
   const bar = document.getElementById('recentMemoBar');
   if(!bar || !currentMember) return;
@@ -2815,6 +2931,9 @@ async function renderRecentMemoBar(){
 
 async function openEditJournal(idx){
   if(!currentMember) return;
+  // 복사 버튼 초기화
+  const copyBtn = document.getElementById('copyBtn');
+  if(copyBtn){ copyBtn.classList.remove('done'); copyBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 저장 + 카톡 전송'; }
   const hist = await getMemberHistory(currentMember.id);
   const e = hist[idx];
   if(!e) return;
@@ -3648,13 +3767,11 @@ function openDatePicker(){
       const date = new Date(pickYear, pickMonth, d);
       const key = date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
       const dow = date.getDay();
-      const isFuture = date > new Date(new Date().setHours(23,59,59,999));
       const classes = ['cal-cell'];
       if(key === selectedKey) classes.push('selected');
       if(dow===0) classes.push('sunday');
       if(dow===6) classes.push('saturday');
-      if(isFuture) classes.push('empty');
-      cells += `<div class="${classes.join(' ')}" ${isFuture?'':`onclick="pickDate(${pickYear},${pickMonth},${d})"`} style="${isFuture?'opacity:.3;cursor:default;':''}">
+      cells += `<div class="${classes.join(' ')}" onclick="pickDate(${pickYear},${pickMonth},${d})">
         <span class="cal-num">${d}</span>
       </div>`;
     }
@@ -3811,7 +3928,15 @@ function updateExFooter(ei){
       chip.innerHTML=`최고 <strong>${mw}kg</strong>　총 볼륨 <strong>${vol.toLocaleString()}kg</strong>`;
     }
   }
-  if(badge) badge.style.display=(!bw&&ex.prevMaxW>0&&mw>ex.prevMaxW)?'inline-block':'none';
+  if(badge){
+    if(bw){
+      // 맨몸: 세트 중 최고 횟수가 이전 기록보다 높으면 신기록
+      const maxR = ex.sets.length ? Math.max(...ex.sets.map(s=>s.r||0)) : 0;
+      badge.style.display = (ex.prevMaxR>0 && maxR>ex.prevMaxR) ? 'inline-block' : 'none';
+    } else {
+      badge.style.display = (ex.prevMaxW>0 && mw>ex.prevMaxW) ? 'inline-block' : 'none';
+    }
+  }
 
   // 세트 요약 칩
   if(setsum){
@@ -3855,12 +3980,7 @@ function buildSetRows(ei){
   if(!c) return;
   c.innerHTML='';
   const timeMode = !!exercises[ei].timeMode;
-  const hdr=document.createElement('div');
-  hdr.className='sets-header';
-  hdr.innerHTML = timeMode
-    ? '<span></span><span>시간</span><span></span><span class="th-r"></span><span></span>'
-    : '<span></span><span>무게</span><span>횟수</span><span class="th-r">볼륨</span><span></span>';
-  c.appendChild(hdr);
+  // 헤더 없음 - 라벨은 다이얼 위에 직접 표시
   exercises[ei].sets.forEach((s,si)=>{
     const row=document.createElement('div');
     row.className='set-row';
@@ -3884,19 +4004,24 @@ function buildSetRows(ei){
       row.innerHTML=`
         <span class="set-idx">${si+1}</span>
         <div class="dial-wrap">
+          <div style="font-size:9px;color:var(--t3);text-align:center;margin-bottom:2px;">${si===0?'무게':''}</div>
           <div class="dial-display${s.w?'':' empty'}" id="${wId}" data-ei="${ei}" data-si="${si}" data-type="w">
-            ${s.w?s.w+'<span class="dial-unit">kg</span>':'kg'}
+            ${s.w?wDisplay(exercises[ei],s.w)+'<span class="dial-unit">kg</span>':'kg'}
             <div class="dial-arrows"><span>▲</span><span>▼</span></div>
           </div>
         </div>
         <div class="dial-wrap">
+          <div style="font-size:9px;color:var(--t3);text-align:center;margin-bottom:2px;">${si===0?(timeMode?'시간':'횟수'):''}</div>
           <div class="dial-display${s.r?'':' empty'}" id="${rId}" data-ei="${ei}" data-si="${si}" data-type="r">
             ${s.r?s.r+'<span class="dial-unit">개</span>':'개수'}
             <div class="dial-arrows"><span>▲</span><span>▼</span></div>
           </div>
         </div>
-        <span class="set-vol" id="rv-${ei}-${si}">${s.w&&s.r?(s.w*s.r).toLocaleString()+'kg':''}</span>
-        <button onclick="addDrop(${ei},${si})" style="font-size:10px;color:var(--red);background:none;border:1px solid var(--red);border-radius:4px;cursor:pointer;font-family:inherit;padding:1px 5px;white-space:nowrap;">↓드롭</button>
+        <button onclick="addDrop(${ei},${si})" style="font-size:10px;color:var(--red);background:none;border:1px solid var(--red);border-radius:4px;cursor:pointer;font-family:inherit;padding:1px 5px;white-space:nowrap;align-self:flex-end;">↓드롭</button>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;align-self:flex-end;">
+          ${si===0?'<div style="font-size:9px;color:var(--t3);margin-bottom:2px;">볼륨</div>':''}
+          <span class="set-vol" id="rv-${ei}-${si}">${s.w&&s.r?(s.w*s.r).toLocaleString()+'kg':''}</span>
+        </div>
         <button class="set-del" onclick="removeSet(${ei},${si})">×</button>`;
       c.appendChild(row);
       [wId, rId].forEach(id => { const el=row.querySelector('#'+id); if(el) attachDial(el); });
@@ -3963,8 +4088,9 @@ function attachDial(el){
       else    exercises[ei].sets[si].r = v;
     }
     // 표시 업데이트
+    const dispV = isW ? wDisplay(exercises[ei], v) : v;
     el.innerHTML = v
-      ? v+'<span class="dial-unit">'+unit+'</span><div class="dial-arrows"><span>▲</span><span>▼</span></div>'
+      ? dispV+'<span class="dial-unit">'+unit+'</span><div class="dial-arrows"><span>▲</span><span>▼</span></div>'
       : unit+'<div class="dial-arrows"><span>▲</span><span>▼</span></div>';
     el.classList.toggle('empty', !v);
     // 볼륨 업데이트
@@ -4095,8 +4221,9 @@ function buildExCard(ei){
   ).join('');
   card.innerHTML=`
       <div class="ex-header">
+        <span class="ex-drag-handle" title="드래그하여 순서 변경">⠿</span>
         <input class="ex-name-inp" value="${ex.name}" placeholder="종목명 입력"
-          oninput="exercises[${ei}].name=this.value;autoFillPrev(${ei},this.value);"/>
+          oninput="exercises[${ei}].name=this.value;autoFillPrev(${ei},this.value);buildSetRows(${ei});"/>
         <button onclick="toggleTimeMode(${ei})" title="등척성/일반 전환" style="background:${ex.timeMode?'var(--g0)':'none'};color:${ex.timeMode?'#fff':'var(--t3)'};border:1px solid ${ex.timeMode?'var(--g0)':'var(--bd)'};border-radius:6px;font-size:11px;padding:2px 6px;cursor:pointer;font-family:inherit;margin-right:4px;">⏱</button>
         <button class="ex-del-btn" onclick="removeExercise(${ei})">×</button>
       </div>
@@ -4126,14 +4253,22 @@ function buildExCard(ei){
 function initExCard(ei){
   buildSetRows(ei);
   updateExFooter(ei);
+  const card = document.getElementById('exCard-'+ei);
+  if(card) initExDrag(card, ei);
   const ex = exercises[ei];
   if(ex.name && editingEntryIdx === null){
     autoFillPrev(ei, ex.name);
-  } else if(ex.name && (ex.prevMaxW || ex.prevVol)){
+  } else if(ex.name && (ex.prevMaxW || ex.prevVol || ex.prevMaxR)){
     const infoEl = document.getElementById('prevInfo-'+ei);
-    if(infoEl) infoEl.innerHTML =
-      '지난 기록 &nbsp;최고 <strong>'+(ex.prevMaxW||0)+'kg</strong>'
-      +'&nbsp;·&nbsp;총 볼륨 <strong>'+(ex.prevVol||0).toLocaleString()+'kg</strong>';
+    if(infoEl){
+      if(ex.prevMaxR > 0){
+        infoEl.innerHTML = '지난 기록 &nbsp;최고 <strong>'+ex.prevMaxR+'개</strong>';
+      } else {
+        infoEl.innerHTML =
+          '지난 기록 &nbsp;최고 <strong>'+(ex.prevMaxW||0)+'kg</strong>'
+          +'&nbsp;·&nbsp;총 볼륨 <strong>'+(ex.prevVol||0).toLocaleString()+'kg</strong>';
+      }
+    }
   }
 }
 
@@ -4176,9 +4311,18 @@ async function autoFillPrev(ei, name){
   }
   exercises[ei].prevMaxW = prev.maxW || 0;
   exercises[ei].prevVol  = prev.vol  || 0;
-  if(infoEl) infoEl.innerHTML =
-    '지난 기록 &nbsp;최고 <strong>'+(prev.maxW||0)+'kg</strong>'
-    +'&nbsp;·&nbsp;총 볼륨 <strong>'+(prev.vol||0).toLocaleString()+'kg</strong>';
+  // 맨몸운동: 최고 횟수 저장
+  const bwPrev = (prev.sets||[]).every(s=>Number(s.w)===0);
+  exercises[ei].prevMaxR = bwPrev ? Math.max(...(prev.sets||[]).map(s=>s.r||0)) : 0;
+  if(infoEl){
+    if(bwPrev && exercises[ei].prevMaxR > 0){
+      infoEl.innerHTML = '지난 기록 &nbsp;최고 <strong>'+exercises[ei].prevMaxR+'개</strong>';
+    } else {
+      infoEl.innerHTML =
+        '지난 기록 &nbsp;최고 <strong>'+(prev.maxW||0)+'kg</strong>'
+        +'&nbsp;·&nbsp;총 볼륨 <strong>'+(prev.vol||0).toLocaleString()+'kg</strong>';
+    }
+  }
   recalcAll();
 }
 
@@ -4193,6 +4337,94 @@ function setExColor(ei, colorId){
     dot.classList.toggle('selected', selected);
     dot.style.borderColor = selected ? c.border : 'transparent';
   });
+}
+
+/* ═══════════════════════════════════════
+   DRAG & DROP - 종목 순서 변경
+═══════════════════════════════════════ */
+let dragSrcEi = null;
+
+function initExDrag(card, ei){
+  const handle = card.querySelector('.ex-drag-handle');
+  if(!handle) return;
+
+  // PC 드래그
+  card.draggable = true;
+  card.addEventListener('dragstart', e=>{
+    dragSrcEi = ei;
+    setTimeout(()=>card.classList.add('dragging'), 0);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  card.addEventListener('dragend', ()=>{
+    card.classList.remove('dragging');
+    document.querySelectorAll('.ex-card').forEach(c=>c.classList.remove('drag-over'));
+  });
+  card.addEventListener('dragover', e=>{
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.querySelectorAll('.ex-card').forEach(c=>c.classList.remove('drag-over'));
+    if(dragSrcEi !== ei) card.classList.add('drag-over');
+  });
+  card.addEventListener('drop', e=>{
+    e.preventDefault();
+    if(dragSrcEi === null || dragSrcEi === ei) return;
+    // exercises 배열 순서 변경
+    const moved = exercises.splice(dragSrcEi, 1)[0];
+    exercises.splice(ei, 0, moved);
+    dragSrcEi = null;
+    renderExCards();
+  });
+
+  // 모바일 롱프레스 드래그
+  let longPressTimer = null;
+  let touchDragging = false;
+  let ghostEl = null;
+
+  handle.addEventListener('touchstart', e=>{
+    const touch = e.touches[0];
+    longPressTimer = setTimeout(()=>{
+      touchDragging = true;
+      card.classList.add('dragging');
+      // 고스트 생성
+      ghostEl = card.cloneNode(false);
+      ghostEl.style.cssText = `position:fixed;opacity:0.7;pointer-events:none;z-index:9999;width:${card.offsetWidth}px;top:${card.getBoundingClientRect().top}px;left:${card.getBoundingClientRect().left}px;background:var(--sf);border:1.5px solid var(--g0);border-radius:var(--r16);height:${card.offsetHeight}px;`;
+      document.body.appendChild(ghostEl);
+    }, 400);
+  },{passive:true});
+
+  handle.addEventListener('touchmove', e=>{
+    if(!touchDragging){ clearTimeout(longPressTimer); return; }
+    e.preventDefault();
+    const touch = e.touches[0];
+    if(ghostEl){
+      ghostEl.style.top = (touch.clientY - card.offsetHeight/2) + 'px';
+      ghostEl.style.left = card.getBoundingClientRect().left + 'px';
+    }
+    // 어느 카드 위에 있는지 찾기
+    document.querySelectorAll('.ex-card').forEach(c=>c.classList.remove('drag-over'));
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const targetCard = el?.closest('.ex-card');
+    if(targetCard && targetCard !== card) targetCard.classList.add('drag-over');
+  },{passive:false});
+
+  handle.addEventListener('touchend', e=>{
+    clearTimeout(longPressTimer);
+    if(!touchDragging){ return; }
+    touchDragging = false;
+    card.classList.remove('dragging');
+    if(ghostEl){ ghostEl.remove(); ghostEl = null; }
+    document.querySelectorAll('.ex-card').forEach(c=>c.classList.remove('drag-over'));
+
+    const touch = e.changedTouches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const targetCard = el?.closest('.ex-card');
+    if(targetCard && targetCard !== card){
+      const targetEi = parseInt(targetCard.id.replace('exCard-',''));
+      const moved = exercises.splice(ei, 1)[0];
+      exercises.splice(targetEi, 0, moved);
+      renderExCards();
+    }
+  },{passive:true});
 }
 
 function addExercise(){
@@ -4300,8 +4532,16 @@ async function saveJournal(){
 
 // 저장만 하고 화면 나가기
 async function saveOnly(){
+  const btn = document.querySelector('.bottom-btns button:first-child');
   await saveJournal();
-  goBack();
+  showToast('저장 완료 ✓');
+  if(btn){
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓ 저장됨';
+    btn.style.background = 'var(--g0)';
+    btn.style.color = '#fff';
+    setTimeout(()=>{ btn.innerHTML=orig; btn.style.background=''; btn.style.color=''; }, 1500);
+  }
 }
 
 // 전송 기록 저장 — 일지 ID별 카운트
@@ -4329,13 +4569,15 @@ function saveAndCopy(){
     btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 전송 완료!';
     // 저장 + 전송 기록 + 화면 나가기
     saveJournal().then(async () => {
-      if(currentMember){
-        const hist = await getMemberHistory(currentMember.id);
-        const last = hist[hist.length-1];
-        if(last) await recordSent(currentMember.id, last.id);
-      }
+      try{
+        if(currentMember){
+          const hist = await getMemberHistory(currentMember.id);
+          const last = hist[hist.length-1];
+          if(last) await recordSent(currentMember.id, last.id);
+        }
+      } catch(e){}
       setTimeout(()=>goBack(), 800);
-    });
+    }).catch(()=>setTimeout(()=>goBack(), 800));
   }
   function fallback(text){
     const ta=document.createElement('textarea');
