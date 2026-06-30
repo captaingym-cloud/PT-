@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.8.4"/>
+<meta name="app-version" content="1.8.5"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -2946,9 +2946,10 @@ async function openNewJournal(){
 
   const hist = await getMemberHistory(currentMember.id);
   const lastEntry = hist.length ? hist[hist.length-1] : null;
+  const nextSession = lastEntry ? (parseInt(lastEntry.session || lastEntry.streak) || hist.length) + 1 : 1;
 
-  document.getElementById('iStreak').value = hist.length + 1;
-  document.getElementById('iSession').value = hist.length + 1;
+  document.getElementById('iStreak').value = nextSession;
+  document.getElementById('iSession').value = nextSession;
   updateSessionLabel();
 
   setEntryDate(todayISO());
