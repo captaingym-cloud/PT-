@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.7.1"/>
+<meta name="app-version" content="1.8.0"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1063,12 +1063,65 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 ═══════════════════════════════════════ */
 
 const FS_PROJECT = 'captaingym-1ccd2';
+const FS_API_KEY = 'AIzaSyCXtPpKkFZuDnkZViRheHMq9mePKDUbUt8';
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
+const AUTH_BASE  = `https://identitytoolkit.googleapis.com/v1`;
+
+/* ── Firebase Auth: TRAINER_ID 기반 가이메일 로그인 ── */
+let fsToken = null; // 현재 발급받은 인증 토큰
+let fsTokenExpiry = 0;
+
+function trainerEmail(trainerId){
+  // TRAINER_ID(이름_PIN)를 가이메일로 변환, Firebase Auth 이메일 형식 제약 대응
+  const safe = encodeURIComponent(trainerId).replace(/%/g,'_');
+  return `${safe}@captaingym.local`;
+}
+
+async function fsAuthEnsure(trainerId, pin){
+  // 토큰이 있고 아직 안 만료됐으면 재사용
+  if(fsToken && Date.now() < fsTokenExpiry) return true;
+  const email = trainerEmail(trainerId);
+  const password = 'pw_' + pin + '_captaingym'; // PIN 기반 고정 비밀번호 (가입/로그인 동일하게 사용)
+
+  // 1) 로그인 시도
+  try{
+    const res = await fetch(`${AUTH_BASE}/accounts:signInWithPassword?key=${FS_API_KEY}`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, password, returnSecureToken:true})
+    });
+    if(res.ok){
+      const data = await res.json();
+      fsToken = data.idToken;
+      fsTokenExpiry = Date.now() + (parseInt(data.expiresIn||'3600')*1000) - 60000;
+      return true;
+    }
+  } catch(e){}
+
+  // 2) 로그인 실패 시 (계정 없음) → 신규 가입
+  try{
+    const res = await fetch(`${AUTH_BASE}/accounts:signUp?key=${FS_API_KEY}`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, password, returnSecureToken:true})
+    });
+    if(res.ok){
+      const data = await res.json();
+      fsToken = data.idToken;
+      fsTokenExpiry = Date.now() + (parseInt(data.expiresIn||'3600')*1000) - 60000;
+      return true;
+    }
+  } catch(e){}
+
+  return false;
+}
+
+function fsAuthHeaders(){
+  return fsToken ? {'Authorization':'Bearer '+fsToken} : {};
+}
 
 // Firestore 문서 경로: col/docId
 async function fsGet(col, docId){
   try{
-    const res = await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`);
+    const res = await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`, {headers: fsAuthHeaders()});
     if(!res.ok) return null;
     const doc = await res.json();
     if(!doc.fields || !doc.fields.v) return null;
@@ -1081,14 +1134,14 @@ async function fsSet(col, docId, value){
     const body = {fields: {v: {stringValue: JSON.stringify(value)}}};
     await fetch(
       `${FS_BASE}/${col}/${encodeURIComponent(docId)}?updateMask.fieldPaths=v`,
-      {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}
+      {method:'PATCH', headers:{'Content-Type':'application/json', ...fsAuthHeaders()}, body:JSON.stringify(body)}
     );
   } catch(e){}
 }
 
 async function fsDel(col, docId){
   try{
-    await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`, {method:'DELETE'});
+    await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`, {method:'DELETE', headers: fsAuthHeaders()});
   } catch(e){}
 }
 
@@ -1279,6 +1332,8 @@ document.addEventListener('DOMContentLoaded', async function(){
 
   const trainer = await getTrainer();
   if(trainer){
+    const savedPin = localStorage.getItem('trainer_pin') || '0000';
+    await fsAuthEnsure(TRAINER_ID, savedPin);
     registerToDirectory(trainer, TRAINER_ID);
     showScreen('screen-members');
     renderMemberList();
@@ -1314,6 +1369,13 @@ async function doSetup(){
   }
   errEl.style.display = 'none';
   await saveTrainer(name, pin);
+  // Firebase Auth 로그인/가입
+  const authOk = await fsAuthEnsure(TRAINER_ID, pin);
+  if(!authOk){
+    errEl.textContent = '로그인에 실패했어요. 잠시 후 다시 시도해주세요.';
+    errEl.style.display = 'block';
+    return;
+  }
   showScreen('screen-members');
   renderMemberList();
 }
@@ -3344,6 +3406,9 @@ let dashEntryStore = {};
 async function doDashLogin(){
   const pin = document.getElementById('dashMasterPin').value.trim();
   if(!pin){ document.getElementById('dashLoginErr').style.display='block'; return; }
+  // 대표님 전용 마스터 계정으로 인증 (전체 데이터 열람 권한)
+  const authOk = await fsAuthEnsure('__admin__', pin);
+  if(!authOk){ document.getElementById('dashLoginErr').style.display='block'; return; }
   let config = await fsGet('admin', 'config');
   if(!config){
     config = { masterPin: pin, createdAt: new Date().toISOString() };
