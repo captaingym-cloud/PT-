@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.8.6"/>
+<meta name="app-version" content="1.9.0"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1103,6 +1103,52 @@ const FS_API_KEY = 'AIzaSyCXtPpKkFZuDnkZViRheHMq9mePKDUbUt8';
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
 const AUTH_BASE  = `https://identitytoolkit.googleapis.com/v1`;
 
+// AI 기능(식단 분석, 인바디 분석, 편지 자동작성, 말투 학습)은 Google Gemini 무료 API를 사용
+// 카드 등록 없이 무료로 사용 가능 (하루 1500건 한도, PT 일지 앱 사용량으로는 충분)
+const GEMINI_API_KEY = 'AQ.Ab8RN6JGRvIarfqLwS-cO-ol-fxNhogkW5BVv92ly4pzteb59w';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+// Anthropic 메시지 형식({system, messages:[{role,content:[...]}]})을
+// Gemini 형식({contents:[{parts:[...]}]})으로 변환해서 호출하고,
+// 응답도 Anthropic과 비슷한 형태({content:[{type:'text',text}]})로 맞춰서 반환
+async function callGeminiAPI({ system, messages, max_tokens }){
+  const parts = [];
+  if(system) parts.push({ text: system });
+  (messages||[]).forEach(m=>{
+    if(typeof m.content === 'string'){
+      parts.push({ text: m.content });
+    } else if(Array.isArray(m.content)){
+      m.content.forEach(block=>{
+        if(block.type === 'text'){
+          parts.push({ text: block.text });
+        } else if(block.type === 'image' && block.source && block.source.data){
+          parts.push({ inline_data: { mime_type: block.source.media_type||'image/jpeg', data: block.source.data } });
+        }
+      });
+    }
+  });
+
+  const res = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role:'user', parts }],
+      generationConfig: { maxOutputTokens: max_tokens || 1000 }
+    })
+  });
+
+  if(!res.ok){
+    const errText = await res.text();
+    throw new Error('Gemini API '+res.status+': '+errText.slice(0,200));
+  }
+
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('') || '';
+  // Anthropic 응답 형식과 비슷하게 맞춰서 반환 (기존 코드 재사용 위해)
+  return { content: [{ type:'text', text }] };
+}
+
 /* ── Firebase Auth: TRAINER_ID 기반 가이메일 로그인 ── */
 let fsToken = null; // 현재 발급받은 인증 토큰
 let fsTokenExpiry = 0;
@@ -2142,19 +2188,14 @@ async function analyzeInbodyPhoto(e){
   reader.onload = async ev => {
     const b64 = ev.target.result.split(',')[1];
     try{
-      const res = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          model:'claude-sonnet-4-6', max_tokens:300,
-          system:'인바디 사진에서 수치를 읽어서 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"weight":체중숫자,"height":키숫자,"age":나이숫자} 없는 항목은 null로. 숫자만 반환(단위 제외).',
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-            {type:'text',text:'이 인바디 결과지에서 체중(kg), 키(cm), 나이를 읽어서 JSON으로 반환해줘.'}
-          ]}]
-        })
+      const data = await callGeminiAPI({
+        system:'인바디 사진에서 수치를 읽어서 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"weight":체중숫자,"height":키숫자,"age":나이숫자} 없는 항목은 null로. 숫자만 반환(단위 제외).',
+        max_tokens:300,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          {type:'text',text:'이 인바디 결과지에서 체중(kg), 키(cm), 나이를 읽어서 JSON으로 반환해줘.'}
+        ]}]
       });
-      const data = await res.json();
       const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
       const parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
 
@@ -2421,23 +2462,14 @@ async function analyzeInbody(){
   document.getElementById('inbodyModalResult').innerHTML = '<div class="diet-result-loading">인바디 데이터 읽는 중...</div>';
 
   try{
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:600,
-        system:'인바디 결과지 이미지를 분석해서 반드시 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"bmr":숫자,"muscle":숫자,"fat":숫자,"fatPct":숫자,"direction":"방향성 한 줄 (예: 근육량 양호, 체지방 감량 권장)"}. 값을 읽을 수 없으면 합리적으로 추정해.',
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:dietState.inbodyB64}},
-          {type:'text',text:'이 인바디 결과지에서 BMR(기초대사량), 골격근량, 체지방량, 체지방률, 그리고 방향성을 JSON으로 반환해줘.'}
-        ]}]
-      })
+    const data = await callGeminiAPI({
+      system:'인바디 결과지 이미지를 분석해서 반드시 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"bmr":숫자,"muscle":숫자,"fat":숫자,"fatPct":숫자,"direction":"방향성 한 줄 (예: 근육량 양호, 체지방 감량 권장)"}. 값을 읽을 수 없으면 합리적으로 추정해.',
+      max_tokens:600,
+      messages:[{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:'image/jpeg',data:dietState.inbodyB64}},
+        {type:'text',text:'이 인바디 결과지에서 BMR(기초대사량), 골격근량, 체지방량, 체지방률, 그리고 방향성을 JSON으로 반환해줘.'}
+      ]}]
     });
-    if(!res.ok){
-      const errText = await res.text();
-      throw new Error('API ' + res.status + ': ' + errText.slice(0,200));
-    }
-    const data = await res.json();
     const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     if(!text) throw new Error('응답에 텍스트 없음: ' + JSON.stringify(data).slice(0,200));
     const clean = text.replace(/```json|```/g,'').trim();
@@ -2562,23 +2594,15 @@ async function analyzeMeal(){
       type:'image', source:{type:'base64', media_type:'image/jpeg', data:b64}
     }));
 
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:1000,
-        system:'식단 사진을 분석해서 반드시 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"calories":총칼로리숫자,"protein":단백질g숫자,"carb":탄수화물g숫자,"fat":지방g숫자,"foods":["음식1 약 300g","음식2"],"comment":"한줄코멘트"}',
-        messages:[{role:'user',content:[
-          ...imageBlocks,
-          {type:'text',text:`이 ${imageBlocks.length}장의 사진은 오늘 하루 먹은 식단이야. 전체를 합산해서 총 칼로리, 단백질, 탄수화물, 지방을 추정해줘. JSON으로만 반환해.`}
-        ]}]
-      })
+    const res = await callGeminiAPI({
+      system:'식단 사진을 분석해서 반드시 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"calories":총칼로리숫자,"protein":단백질g숫자,"carb":탄수화물g숫자,"fat":지방g숫자,"foods":["음식1 약 300g","음식2"],"comment":"한줄코멘트"}',
+      max_tokens:1000,
+      messages:[{role:'user',content:[
+        ...imageBlocks,
+        {type:'text',text:`이 ${imageBlocks.length}장의 사진은 오늘 하루 먹은 식단이야. 전체를 합산해서 총 칼로리, 단백질, 탄수화물, 지방을 추정해줘. JSON으로만 반환해.`}
+      ]}]
     });
-    if(!res.ok){
-      const errText = await res.text();
-      throw new Error('API ' + res.status + ': ' + errText.slice(0,200));
-    }
-    const data = await res.json();
+    const data = res;
     const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     if(!text) throw new Error('응답에 텍스트 없음: ' + JSON.stringify(data).slice(0,200));
     const clean = text.replace(/```json|```/g,'').trim();
@@ -3191,23 +3215,14 @@ async function analyzeToneFromPhotos(){
     const imageBlocks = toneB64List.map(b64 => ({
       type:'image', source:{type:'base64', media_type:'image/jpeg', data:b64}
     }));
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:600,
-        system:'카카오톡 스크린샷에서 트레이너 본인이 보낸 메시지(보통 화면 오른쪽, 또는 노란색/말풍선 위주)들을 찾아서 말투 특징을 분석해. 존댓말/반말 여부, 자주 쓰는 어미(예: ~해요, ~네요), 이모티콘 사용 빈도와 종류, 문장 길이, 친근함의 정도, 자주 쓰는 표현이나 말버릇을 파악해. 다른 텍스트 없이 JSON만 반환: {"description":"말투 특징을 3-4문장으로 요약 (트레이너가 직접 읽고 이해할 수 있게)"}',
-        messages:[{role:'user',content:[
-          ...imageBlocks,
-          {type:'text',text:'이 카톡 대화에서 트레이너 본인이 보낸 메시지들의 말투를 분석해줘.'}
-        ]}]
-      })
+    const data = await callGeminiAPI({
+      system:'카카오톡 스크린샷에서 트레이너 본인이 보낸 메시지(보통 화면 오른쪽, 또는 노란색/말풍선 위주)들을 찾아서 말투 특징을 분석해. 존댓말/반말 여부, 자주 쓰는 어미(예: ~해요, ~네요), 이모티콘 사용 빈도와 종류, 문장 길이, 친근함의 정도, 자주 쓰는 표현이나 말버릇을 파악해. 다른 텍스트 없이 JSON만 반환: {"description":"말투 특징을 3-4문장으로 요약 (트레이너가 직접 읽고 이해할 수 있게)"}',
+      max_tokens:600,
+      messages:[{role:'user',content:[
+        ...imageBlocks,
+        {type:'text',text:'이 카톡 대화에서 트레이너 본인이 보낸 메시지들의 말투를 분석해줘.'}
+      ]}]
     });
-    if(!res.ok){
-      const errText = await res.text();
-      throw new Error('API '+res.status+': '+errText.slice(0,200));
-    }
-    const data = await res.json();
     const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     const clean = text.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
@@ -3338,19 +3353,10 @@ ${toneInstruction}
 - 트레이너는 회원을 이끄는 사람이야. 그냥 친절하기만 한 게 아니라, 방향을 제시하고 믿음을 주는 말투로 써. 막연한 칭찬보다 구체적인 근거를 들어서 확신을 줘
 - 다른 설명 없이 편지 본문만 반환해`;
 
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:500,
-        messages:[{role:'user', content: prompt}]
-      })
+    const data = await callGeminiAPI({
+      max_tokens:500,
+      messages:[{role:'user', content: prompt}]
     });
-    if(!res.ok){
-      const errText = await res.text();
-      throw new Error('API '+res.status+': '+errText.slice(0,200));
-    }
-    const data = await res.json();
     const letterText = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
 
     if(!letterText) throw new Error('편지 생성 결과가 비어있어요');
