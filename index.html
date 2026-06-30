@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.9.0"/>
+<meta name="app-version" content="1.9.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -2190,7 +2190,7 @@ async function analyzeInbodyPhoto(e){
     try{
       const data = await callGeminiAPI({
         system:'인바디 사진에서 수치를 읽어서 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"weight":체중숫자,"height":키숫자,"age":나이숫자} 없는 항목은 null로. 숫자만 반환(단위 제외).',
-        max_tokens:300,
+        max_tokens:500,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
           {type:'text',text:'이 인바디 결과지에서 체중(kg), 키(cm), 나이를 읽어서 JSON으로 반환해줘.'}
@@ -2464,7 +2464,7 @@ async function analyzeInbody(){
   try{
     const data = await callGeminiAPI({
       system:'인바디 결과지 이미지를 분석해서 반드시 JSON만 반환해. 다른 텍스트 없이 JSON만. 형식: {"bmr":숫자,"muscle":숫자,"fat":숫자,"fatPct":숫자,"direction":"방향성 한 줄 (예: 근육량 양호, 체지방 감량 권장)"}. 값을 읽을 수 없으면 합리적으로 추정해.',
-      max_tokens:600,
+      max_tokens:1000,
       messages:[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type:'image/jpeg',data:dietState.inbodyB64}},
         {type:'text',text:'이 인바디 결과지에서 BMR(기초대사량), 골격근량, 체지방량, 체지방률, 그리고 방향성을 JSON으로 반환해줘.'}
@@ -3217,7 +3217,7 @@ async function analyzeToneFromPhotos(){
     }));
     const data = await callGeminiAPI({
       system:'카카오톡 스크린샷에서 트레이너 본인이 보낸 메시지(보통 화면 오른쪽, 또는 노란색/말풍선 위주)들을 찾아서 말투 특징을 분석해. 존댓말/반말 여부, 자주 쓰는 어미(예: ~해요, ~네요), 이모티콘 사용 빈도와 종류, 문장 길이, 친근함의 정도, 자주 쓰는 표현이나 말버릇을 파악해. 다른 텍스트 없이 JSON만 반환: {"description":"말투 특징을 3-4문장으로 요약 (트레이너가 직접 읽고 이해할 수 있게)"}',
-      max_tokens:600,
+      max_tokens:1000,
       messages:[{role:'user',content:[
         ...imageBlocks,
         {type:'text',text:'이 카톡 대화에서 트레이너 본인이 보낸 메시지들의 말투를 분석해줘.'}
@@ -3354,7 +3354,7 @@ ${toneInstruction}
 - 다른 설명 없이 편지 본문만 반환해`;
 
     const data = await callGeminiAPI({
-      max_tokens:500,
+      max_tokens:1500,
       messages:[{role:'user', content: prompt}]
     });
     const letterText = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
