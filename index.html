@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.8.0"/>
+<meta name="app-version" content="1.8.4"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -686,6 +686,14 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 
       <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
         <div>
+          <div style="font-size:13px;font-weight:500;color:var(--t);">✍️ 말투 학습</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px;" id="toneStatusLabel">카톡 스크린샷으로 내 말투를 학습시켜요</div>
+        </div>
+        <button onclick="openToneTraining()" style="font-size:12px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">설정</button>
+      </div>
+
+      <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
+        <div>
           <div style="font-size:13px;font-weight:500;color:var(--t);">회원 전체 삭제</div>
           <div style="font-size:11px;color:var(--t3);margin-top:2px;">회원 목록과 모든 일지가 삭제돼요</div>
         </div>
@@ -703,6 +711,31 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     </div>
 
     <button class="modal-btn cancel" style="width:100%;" onclick="closeModal('modal-settings')">닫기</button>
+
+<!-- 말투 학습 모달 -->
+<div class="modal-overlay" id="modal-toneTraining" style="display:none;" onclick="if(event.target===this)closeModal('modal-toneTraining')">
+  <div class="modal-box" style="max-height:80vh;overflow-y:auto;">
+    <div class="modal-title">✍️ 말투 학습</div>
+    <p style="font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:14px;">회원님께 보낸 카톡 스크린샷을 올려주세요. 많이 올릴수록 더 자연스럽게 학습돼요. 사진은 분석 후 바로 삭제되고, 말투 특징만 저장돼요.</p>
+
+    <div id="toneUploadArea" style="border:1.5px dashed var(--bd2);border-radius:var(--r12);padding:20px;text-align:center;cursor:pointer;margin-bottom:14px;background:var(--sf2);position:relative;">
+      <input type="file" id="toneFile" accept="image/*" multiple style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;"/>
+      <div style="font-size:28px;margin-bottom:6px;">💬</div>
+      <div style="font-size:13px;font-weight:600;color:var(--t2);">카톡 스크린샷 올리기</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:4px;">여러 장 선택 가능</div>
+    </div>
+
+    <div id="toneFilePreview" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;"></div>
+
+    <div id="toneCurrentResult" style="display:none;background:var(--g2);border:0.5px solid var(--g3);border-radius:var(--r12);padding:12px 14px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;color:var(--g0);margin-bottom:6px;">✓ 학습된 말투</div>
+      <div id="toneCurrentText" style="font-size:13px;color:var(--t);line-height:1.6;"></div>
+    </div>
+
+    <button onclick="analyzeToneFromPhotos()" id="toneAnalyzeBtn" style="width:100%;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;margin-bottom:8px;">말투 분석하기</button>
+    <button class="modal-btn cancel" style="width:100%;" onclick="closeModal('modal-toneTraining')">닫기</button>
+  </div>
+</div>
     <div style="text-align:center;font-size:11px;color:var(--t3);margin-top:10px;">버전 <span id="appVersionLabel"></span></div>
   </div>
 </div>
@@ -819,7 +852,10 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       <div class="intensity-desc" id="intensityDesc"></div>
     </div>
 
-    <div class="eyebrow">회원님께 보내는 편지</div>
+    <div class="eyebrow" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>회원님께 보내는 편지</span>
+      <button onclick="autoWriteLetter()" id="autoWriteLetterBtn" style="font-size:12px;font-weight:700;color:var(--g0);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:4px 12px;cursor:pointer;font-family:inherit;">✨ 자동 작성</button>
+    </div>
     <div class="card">
       <div class="card-section">
         <textarea id="iLetter" rows="5" placeholder="오늘 수업은 어땠는지, 다음에 신경 쓸 부분, 응원의 말까지 자유롭게 적어주세요" oninput="autoSaveDraft()"></textarea>
@@ -3088,6 +3124,244 @@ function openAddMember(){
   document.getElementById('modal-addMember').style.display = 'flex';
   setTimeout(() => document.getElementById('newMemberName').focus(), 100);
 }
+/* ═══════════════════════════════════════
+   말투 학습
+═══════════════════════════════════════ */
+let toneB64List = [];
+
+async function getTrainerTone(){
+  if(!TRAINER_ID) return null;
+  return await fsGet('data', 'tone_'+TRAINER_ID);
+}
+
+async function saveTrainerTone(toneText){
+  if(!TRAINER_ID) return;
+  await fsSet('data', 'tone_'+TRAINER_ID, { text: toneText, updatedAt: new Date().toISOString() });
+}
+
+async function openToneTraining(){
+  toneB64List = [];
+  document.getElementById('toneFilePreview').innerHTML = '';
+  document.getElementById('modal-toneTraining').style.display = 'flex';
+
+  const existing = await getTrainerTone();
+  const resultEl = document.getElementById('toneCurrentResult');
+  const textEl = document.getElementById('toneCurrentText');
+  if(existing && existing.text){
+    resultEl.style.display = 'block';
+    textEl.textContent = existing.text;
+  } else {
+    resultEl.style.display = 'none';
+  }
+
+  const fileInput = document.getElementById('toneFile');
+  if(fileInput){
+    fileInput.value = '';
+    fileInput.onchange = onToneFileSelect;
+  }
+}
+
+function onToneFileSelect(e){
+  const files = Array.from(e.target.files || []);
+  if(!files.length) return;
+  const preview = document.getElementById('toneFilePreview');
+  files.forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      const b64 = ev.target.result.split(',')[1];
+      toneB64List.push(b64);
+      const thumb = document.createElement('div');
+      thumb.style.cssText = 'width:56px;height:56px;border-radius:8px;overflow:hidden;border:0.5px solid var(--bd);';
+      thumb.innerHTML = `<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover;"/>`;
+      preview.appendChild(thumb);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function analyzeToneFromPhotos(){
+  if(!toneB64List.length){ alert('카톡 스크린샷을 먼저 올려주세요.'); return; }
+  const btn = document.getElementById('toneAnalyzeBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'AI가 말투를 분석하고 있어요...'; }
+
+  try{
+    const imageBlocks = toneB64List.map(b64 => ({
+      type:'image', source:{type:'base64', media_type:'image/jpeg', data:b64}
+    }));
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens:600,
+        system:'카카오톡 스크린샷에서 트레이너 본인이 보낸 메시지(보통 화면 오른쪽, 또는 노란색/말풍선 위주)들을 찾아서 말투 특징을 분석해. 존댓말/반말 여부, 자주 쓰는 어미(예: ~해요, ~네요), 이모티콘 사용 빈도와 종류, 문장 길이, 친근함의 정도, 자주 쓰는 표현이나 말버릇을 파악해. 다른 텍스트 없이 JSON만 반환: {"description":"말투 특징을 3-4문장으로 요약 (트레이너가 직접 읽고 이해할 수 있게)"}',
+        messages:[{role:'user',content:[
+          ...imageBlocks,
+          {type:'text',text:'이 카톡 대화에서 트레이너 본인이 보낸 메시지들의 말투를 분석해줘.'}
+        ]}]
+      })
+    });
+    if(!res.ok){
+      const errText = await res.text();
+      throw new Error('API '+res.status+': '+errText.slice(0,200));
+    }
+    const data = await res.json();
+    const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const clean = text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    await saveTrainerTone(parsed.description);
+
+    // 화면 갱신, 사진은 메모리에서만 제거 (toneB64List는 저장 안 했으므로 자동 폐기)
+    toneB64List = [];
+    document.getElementById('toneFilePreview').innerHTML = '';
+    document.getElementById('toneFile').value = '';
+    const resultEl = document.getElementById('toneCurrentResult');
+    const textEl = document.getElementById('toneCurrentText');
+    resultEl.style.display = 'block';
+    textEl.textContent = parsed.description;
+
+    showToast('말투 학습 완료 ✓');
+  } catch(err){
+    alert('말투 분석에 실패했어요: ' + (err.message||err));
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '말투 분석하기'; }
+  }
+}
+
+/* ═══════════════════════════════════════
+   편지 자동 작성
+═══════════════════════════════════════ */
+async function autoWriteLetter(){
+  if(!currentMember) return;
+  const btn = document.getElementById('autoWriteLetterBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '✨ 작성 중...'; }
+
+  try{
+    // 1) 회원 데이터 수집
+    const hist = await getMemberHistory(currentMember.id);
+    const memos = (await getMemos(currentMember.id)).filter(m=>m.id!=='note');
+    const noteEntry = (await getMemos(currentMember.id)).find(m=>m.id==='note');
+    const dietData = await getDietData(currentMember.id);
+    const tone = await getTrainerTone();
+
+    // 현재 작성 중인 일지 (오늘) 정보
+    const sessionNum = document.getElementById('iSession')?.value || document.getElementById('iStreak')?.value || '';
+    const todayExercises = exercises.filter(ex=>ex.name);
+
+    // 종목별 첫 기록 vs 최근 기록 비교 (전체 히스토리 기반 성장 추적)
+    const exProgressMap = {};
+    hist.forEach(e=>{
+      (e.exercises||[]).filter(ex=>ex.name).forEach(ex=>{
+        if(!exProgressMap[ex.name]) exProgressMap[ex.name] = [];
+        const isTime = !!ex.timeMode;
+        const isBw = isBodyweight(ex);
+        let metric;
+        if(isTime){
+          metric = Math.max(...(ex.sets||[]).map(s=>s.r||0));
+        } else if(isBw){
+          metric = Math.max(...(ex.sets||[]).map(s=>s.r||0));
+        } else {
+          metric = Math.max(...(ex.sets||[]).map(s=>s.w||0));
+        }
+        exProgressMap[ex.name].push({date: e.date, metric, unit: isTime?'초':(isBw?'개':'kg')});
+      });
+    });
+    const progressLines = Object.entries(exProgressMap)
+      .filter(([name, records]) => records.length >= 2)
+      .map(([name, records])=>{
+        const first = records[0];
+        const last = records[records.length-1];
+        const diff = last.metric - first.metric;
+        return `${name}: 처음 ${first.metric}${first.unit} → 최근 ${last.metric}${last.unit} (총 ${records.length}회 기록${diff>0?', '+diff+first.unit+' 증가':''})`;
+      }).join('\n');
+
+    // 전체 운동 일수, 기간
+    const totalSessions = hist.length;
+    const firstDate = hist[0]?.date || '';
+    const lastDate = hist[hist.length-1]?.date || '';
+
+    // 최근 메모 (전체 중 최근 5개, 흐름 파악용)
+    const recentMemos = memos.slice(-5).map(m=>`${m.date}: ${m.content}`).join('\n');
+
+    // 식단 데이터
+    let dietSummary = '식단 기록 없음';
+    if(dietData && dietData.mealHistory && dietData.mealHistory.length){
+      const recentMeals = dietData.mealHistory.slice(-5);
+      const avgKcal = Math.round(recentMeals.reduce((s,m)=>s+(m.calories||0),0)/recentMeals.length);
+      dietSummary = `최근 평균 칼로리 ${avgKcal}kcal, 목표 ${dietData.targetKcal||'미설정'}kcal`;
+    }
+
+    // 오늘 운동 요약
+    const todaySummary = todayExercises.map(ex=>{
+      const isPR = !isBodyweight(ex) && !ex.timeMode && ex.prevMaxW>0 && exMaxW(ex)>ex.prevMaxW;
+      return `${ex.name}${isPR?' (신기록!)':''}`;
+    }).join(', ');
+
+    const toneInstruction = tone && tone.text
+      ? `다음 말투 특징을 반드시 따라서 작성해: ${tone.text}`
+      : '친근하고 따뜻한 존댓말로 작성해.';
+
+    const prompt = `너는 PT 트레이너야. 회원에게 보낼 편지(카톡 메시지)를 작성해줘.
+
+[회원 정보]
+이름: ${currentMember.name}
+오늘 회차: ${sessionNum}회차
+총 운동 기록: ${totalSessions}회 (${firstDate} ~ ${lastDate})
+
+[오늘 운동한 종목]
+${todaySummary || '아직 입력 안 됨'}
+
+[종목별 전체 성장 기록 — 처음 기록 대비 최근 기록]
+${progressLines || '비교할 만한 반복 기록 없음'}
+
+[최근 메모/특이사항]
+${recentMemos || '없음'}
+${noteEntry ? '고정 특이사항: '+noteEntry.content : ''}
+
+[식단 현황]
+${dietSummary}
+
+[작성 지침]
+${toneInstruction}
+- 위 [종목별 전체 성장 기록]을 가장 중요하게 활용해. 처음보다 무게가 늘었거나 횟수가 늘었거나 꾸준히 기록을 쌓아온 점을 구체적인 수치로 짚어서 칭찬해줘
+- 총 ${totalSessions}회 동안 꾸준히 해온 점도 자연스럽게 언급해도 좋아
+- 절대 주어진 정보에 없는 사실을 지어내지 마
+- 오늘 신기록이 있으면 따로 축하해줘
+- 다음 수업에 신경 쓸 부분이 있으면 짧게 짚어줘
+- 너무 길지 않게, 카톡으로 보낼 수 있는 분량으로 (4~7문장)
+- 마지막은 응원이나 격려로 마무리
+- 괄호, 별표, 이모티콘 나열, 번호 매기기 같은 정리된 형식은 쓰지 마. 트레이너가 카톡 보내다가 생각나서 바로 타이핑한 것처럼, 말하듯이 자연스럽게 풀어서 써
+- 문장과 문장 사이에 군더더기 없이, 진짜 대화하듯 이어지게 써
+- 트레이너는 회원을 이끄는 사람이야. 그냥 친절하기만 한 게 아니라, 방향을 제시하고 믿음을 주는 말투로 써. 막연한 칭찬보다 구체적인 근거를 들어서 확신을 줘
+- 다른 설명 없이 편지 본문만 반환해`;
+
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens:500,
+        messages:[{role:'user', content: prompt}]
+      })
+    });
+    if(!res.ok){
+      const errText = await res.text();
+      throw new Error('API '+res.status+': '+errText.slice(0,200));
+    }
+    const data = await res.json();
+    const letterText = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
+
+    if(!letterText) throw new Error('편지 생성 결과가 비어있어요');
+
+    document.getElementById('iLetter').value = letterText;
+    autoSaveDraft();
+    showToast('편지 작성 완료 ✓');
+  } catch(err){
+    alert('편지 자동 작성에 실패했어요: ' + (err.message||err));
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '✨ 자동 작성'; }
+  }
+}
+
 function closeModal(id){ document.getElementById(id).style.display = 'none'; }
 
 async function openSettings(){
