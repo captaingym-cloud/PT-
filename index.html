@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.8.5"/>
+<meta name="app-version" content="1.8.6"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1354,7 +1354,7 @@ document.addEventListener('DOMContentLoaded', async function(){
   updateActivity();
 
   // 버전 체크
-  checkAppVersion();
+  // (버전 체크는 로그인 인증 완료 후로 이동)
 
   // 힌트 초기 상태
   if(localStorage.getItem('hint_drag_seen')){
@@ -1370,6 +1370,7 @@ document.addEventListener('DOMContentLoaded', async function(){
   if(trainer){
     const savedPin = localStorage.getItem('trainer_pin') || '0000';
     await fsAuthEnsure(TRAINER_ID, savedPin);
+    checkAppVersion();
     registerToDirectory(trainer, TRAINER_ID);
     showScreen('screen-members');
     renderMemberList();
@@ -1412,6 +1413,7 @@ async function doSetup(){
     errEl.style.display = 'block';
     return;
   }
+  checkAppVersion();
   showScreen('screen-members');
   renderMemberList();
 }
