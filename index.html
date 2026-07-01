@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.9.1"/>
+<meta name="app-version" content="1.9.7"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -366,7 +366,8 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 /* EXERCISE CARD */
 .ex-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);margin-bottom:10px;overflow:hidden;}
 .ex-header{display:flex;align-items:center;gap:8px;padding:12px 14px 10px;border-bottom:0.5px solid var(--bd);}
-.ex-drag-handle{font-size:18px;color:var(--t3);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:0 2px;line-height:1;}
+.ex-drag-handle{font-size:22px;color:var(--t2);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:6px 8px;line-height:1;background:var(--sf2);border-radius:8px;display:flex;align-items:center;justify-content:center;}
+.ex-drag-handle:active{cursor:grabbing;background:var(--g2);color:var(--g0);}
 .ex-card.dragging{opacity:0.4;border:1.5px dashed var(--g0);}
 .ex-card.drag-over{border-top:2.5px solid var(--g0);}
 .ex-name-inp{flex:1;font-size:15px;font-weight:600;border:none;background:transparent;color:var(--t);outline:none;font-family:inherit;height:auto;padding:0;width:auto;}
@@ -3293,8 +3294,8 @@ async function autoWriteLetter(){
         return `${name}: 처음 ${first.metric}${first.unit} → 최근 ${last.metric}${last.unit} (총 ${records.length}회 기록${diff>0?', '+diff+first.unit+' 증가':''})`;
       }).join('\n');
 
-    // 전체 운동 일수, 기간
-    const totalSessions = hist.length;
+    // 전체 운동 일수, 기간 (회차 기준 — 일지 개수가 아니라 실제 작성된 회차 번호 기준)
+    const totalSessions = hist.length ? Math.max(...hist.map(e=>parseInt(e.session||e.streak)||0)) : 0;
     const firstDate = hist[0]?.date || '';
     const lastDate = hist[hist.length-1]?.date || '';
 
@@ -3324,7 +3325,7 @@ async function autoWriteLetter(){
 [회원 정보]
 이름: ${currentMember.name}
 오늘 회차: ${sessionNum}회차
-총 운동 기록: ${totalSessions}회 (${firstDate} ~ ${lastDate})
+총 진행 회차: ${totalSessions}회차 (${firstDate} ~ ${lastDate})
 
 [오늘 운동한 종목]
 ${todaySummary || '아직 입력 안 됨'}
@@ -3341,8 +3342,9 @@ ${dietSummary}
 
 [작성 지침]
 ${toneInstruction}
+- 호칭은 반드시 "${currentMember.name} 회원님"으로 시작해. 이름만 부르거나 "님"만 붙이지 말고 꼭 "회원님"으로 불러줘
 - 위 [종목별 전체 성장 기록]을 가장 중요하게 활용해. 처음보다 무게가 늘었거나 횟수가 늘었거나 꾸준히 기록을 쌓아온 점을 구체적인 수치로 짚어서 칭찬해줘
-- 총 ${totalSessions}회 동안 꾸준히 해온 점도 자연스럽게 언급해도 좋아
+- 총 ${totalSessions}회차 동안 꾸준히 해온 점도 자연스럽게 언급해도 좋아
 - 절대 주어진 정보에 없는 사실을 지어내지 마
 - 오늘 신기록이 있으면 따로 축하해줘
 - 다음 수업에 신경 쓸 부분이 있으면 짧게 짚어줘
@@ -3351,6 +3353,7 @@ ${toneInstruction}
 - 괄호, 별표, 이모티콘 나열, 번호 매기기 같은 정리된 형식은 쓰지 마. 트레이너가 카톡 보내다가 생각나서 바로 타이핑한 것처럼, 말하듯이 자연스럽게 풀어서 써
 - 문장과 문장 사이에 군더더기 없이, 진짜 대화하듯 이어지게 써
 - 트레이너는 회원을 이끄는 사람이야. 그냥 친절하기만 한 게 아니라, 방향을 제시하고 믿음을 주는 말투로 써. 막연한 칭찬보다 구체적인 근거를 들어서 확신을 줘
+- 과한 감탄사, 손발 오그라드는 표현, 억지스러운 텐션은 피해. "정말 정말", "너무너무", 과도한 느낌표 연발 같은 건 쓰지 마. 담백하면서도 진심이 느껴지게, 따뜻하되 절제된 톤으로 써
 - 다른 설명 없이 편지 본문만 반환해`;
 
     const data = await callGeminiAPI({
@@ -3703,6 +3706,12 @@ async function doDashLogin(){
   loadDashTrainerList();
 }
 
+let dashFilterMode = 'all'; // 'all' | 'unsent'
+function setDashFilter(mode){
+  dashFilterMode = mode;
+  loadDashTrainerList();
+}
+
 async function loadDashTrainerList(){
   const listEl = document.getElementById('dashTrainerList');
   listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
@@ -3774,7 +3783,27 @@ async function loadDashTrainerList(){
 
   // 트레이너 카드 (프로그레스 바)
   listEl.innerHTML = '';
-  trainerStats.forEach(({t, todayTotal, todaySent}) => {
+
+  // 필터 토글 (전체 / 오늘 미발송만)
+  const filterBar = document.createElement('div');
+  filterBar.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;';
+  filterBar.innerHTML = `
+    <button id="dashFilterAll" onclick="setDashFilter('all')" style="flex:1;padding:8px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid var(--bd);background:${dashFilterMode==='all'?'var(--g0)':'var(--sf)'};color:${dashFilterMode==='all'?'#fff':'var(--t2)'};">전체 트레이너 (${trainerStats.length})</button>
+    <button id="dashFilterUnsent" onclick="setDashFilter('unsent')" style="flex:1;padding:8px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid var(--bd);background:${dashFilterMode==='unsent'?'var(--red)':'var(--sf)'};color:${dashFilterMode==='unsent'?'#fff':'var(--t2)'};">오늘 미발송 (${unsentTrainers.length})</button>`;
+  listEl.appendChild(filterBar);
+
+  const filteredStats = dashFilterMode==='unsent'
+    ? trainerStats.filter(({todayTotal, todaySent}) => todayTotal > 0 && todaySent < todayTotal)
+    : trainerStats;
+
+  if(dashFilterMode==='unsent' && !filteredStats.length){
+    const empty = document.createElement('div');
+    empty.style.cssText = 'text-align:center;padding:30px;color:var(--t3);font-size:13px;';
+    empty.textContent = '오늘 미발송 일지가 없어요 ✓';
+    listEl.appendChild(empty);
+  }
+
+  filteredStats.forEach(({t, todayTotal, todaySent}) => {
     const pct = todayTotal ? Math.round(todaySent/todayTotal*100) : 0;
     const allDone = todayTotal > 0 && todaySent === todayTotal;
     const hasUnsent = todayTotal > 0 && todaySent < todayTotal;
@@ -4652,7 +4681,7 @@ function buildExCard(ei){
       </div>
       <div class="prev-auto-row" id="prevInfo-${ei}"></div>
       <div class="sets-area" id="sets-${ei}"></div>
-      ${ei===0 && !localStorage.getItem('hint_drag_seen') ? '<div id="dragHint" style="font-size:11px;color:var(--t3);text-align:center;padding:4px 0 6px;">↕ 드래그하거나 탭해서 입력</div>' : ''}
+      ${ei===0 && !localStorage.getItem('hint_drag_seen') ? '<div id="dragHint" style="font-size:11px;color:var(--g0);text-align:center;padding:4px 0 6px;font-weight:600;">⠿ 아이콘을 누른 채로 위아래로 끌면 순서가 바뀌어요</div>' : ''}
       <div class="ex-sets-summary" id="setsum-${ei}"></div>
       <div class="ex-footer">
         <span class="ex-summary" id="chip-${ei}">최고 <strong>0kg</strong>　총 볼륨 <strong>0kg</strong></span>
@@ -4829,6 +4858,17 @@ function initExDrag(card, ei){
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
     const targetCard = el?.closest('.ex-card');
     if(targetCard && targetCard !== card) targetCard.classList.add('drag-over');
+
+    // 화면 가장자리 근처면 자동 스크롤
+    const edgeZone = 80; // 화면 위/아래 80px 안쪽이면 스크롤 시작
+    const winH = window.innerHeight;
+    if(touch.clientY < edgeZone){
+      const speed = (edgeZone - touch.clientY) / edgeZone * 18;
+      window.scrollBy(0, -speed);
+    } else if(touch.clientY > winH - edgeZone){
+      const speed = (touch.clientY - (winH - edgeZone)) / edgeZone * 18;
+      window.scrollBy(0, speed);
+    }
   },{passive:false});
 
   handle.addEventListener('touchend', e=>{
@@ -5118,7 +5158,6 @@ async function buildText(){
   if(letter){
     letter.split('\n').forEach(line=>L.push(line));
     L.push('');
-    L.push(`— 트레이너 ${trainer}`);
     L.push('─────────────');
     L.push('');
   }
