@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.0.1"/>
+<meta name="app-version" content="2.0.8"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -419,8 +419,8 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 .pr-badge{font-size:11px;padding:3px 10px;border-radius:20px;background:var(--gold-l);color:var(--gold);border:0.5px solid var(--gold-b);display:none;white-space:nowrap;}
 .add-set-btn{background:none;border:0.5px dashed var(--bd2);border-radius:var(--r8);padding:5px 12px;font-size:12px;color:var(--t2);cursor:pointer;white-space:nowrap;font-family:inherit;}
 .add-set-btn:active{background:var(--sf2);}
-.add-ex-btn{width:100%;padding:12px;background:var(--sf);border:0.5px dashed var(--bd2);border-radius:var(--r16);font-size:13px;color:var(--t2);cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;transition:background .12s;}
-.add-ex-btn:active{background:var(--sf2);}
+.add-ex-btn{width:100%;padding:14px;background:var(--g2);border:1.5px dashed var(--g0);border-radius:var(--r16);font-size:14px;font-weight:700;color:var(--g0);cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;transition:background .12s;}
+.add-ex-btn:active{background:var(--g3);}
 
 /* INTENSITY */
 .intensity-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px 12px;margin-bottom:10px;}
@@ -813,6 +813,14 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     </div>
     <input type="hidden" id="iStreak" value="1"/>
     <input type="hidden" id="iEntryDate" value=""/>
+
+    <!-- 회차 아래 메모 -->
+    <div id="sessionMemoWrap" style="margin-bottom:10px;">
+      <div id="sessionMemoPrev" style="display:none;background:var(--sf2);border-radius:var(--r12);padding:10px 14px;margin-bottom:6px;font-size:13px;color:var(--t2);line-height:1.6;border:0.5px solid var(--bd);"></div>
+      <textarea id="sessionMemoInput" rows="2" placeholder="다음 수업 때 기억할 것, 회원 전달사항 등..."
+        style="width:100%;border:0.5px solid var(--bd);border-radius:var(--r12);padding:10px 14px;font-size:13px;font-family:inherit;outline:none;resize:none;background:var(--sf);color:var(--t);line-height:1.6;"
+        oninput="autoSaveDraft()"></textarea>
+    </div>
 
 
     <div class="live-bar">
@@ -1365,12 +1373,79 @@ let editingEntryIdx = null; // null이면 새 일지, 숫자면 수정 모드 (�
 const PARTS_LIST = ['가슴','등','어깨','하체','팔','코어'];
 
 const EX_COLORS = [
-  {id:'red',    bg:'#E8503A', border:'#C0392B', text:'#fff'},
-  {id:'blue',   bg:'#3A8AE8', border:'#1A5FAD', text:'#fff'},
-  {id:'yellow', bg:'#F5C842', border:'#B8860B', text:'#fff'},
-  {id:'green',  bg:'#52B443', border:'#1E4D0A', text:'#fff'},
-  {id:'purple', bg:'#9B59B6', border:'#6C3483', text:'#fff'},
+  {id:'red',    bg:'#E8503A', border:'#C0392B', text:'#fff', part:'가슴'},
+  {id:'blue',   bg:'#3A8AE8', border:'#1A5FAD', text:'#fff', part:'등'},
+  {id:'yellow', bg:'#F5C842', border:'#B8860B', text:'#fff', part:'어깨'},
+  {id:'green',  bg:'#52B443', border:'#1E4D0A', text:'#fff', part:'하체'},
+  {id:'purple', bg:'#9B59B6', border:'#6C3483', text:'#fff', part:'팔'},
 ];
+
+// 키워드 기반 부위 자동 매핑
+const PART_KEYWORDS = {
+  '가슴': ['벤치','플라이','체스트','딥스','푸쉬업','푸시업','케이블크로스'],
+  '등':   ['데드','풀업','랫풀','로우','시티드로우','원암','친업','백익스텐션','하이로우','풀다운','친닝'],
+  '어깨': ['숄더','오버헤드','프레스','레터럴','레이즈','사이드','리어','페이스풀'],
+  '하체': ['스쿼트','레그','런지','힙','RDL','루마니안','레그프레스','레그컬','레그익스텐션','카프','종아리','힙쓰러스트'],
+  '팔':   ['컬','트라이','바이','해머','리버스','케이블컬','스컬'],
+};
+
+function guessPartFromName(name){
+  const n = (name||'').toLowerCase();
+  for(const [part, keywords] of Object.entries(PART_KEYWORDS)){
+    if(keywords.some(k=>n.includes(k.toLowerCase()))) return part;
+  }
+  return null;
+}
+
+function partToColorId(part){
+  const c = EX_COLORS.find(c=>c.part===part);
+  return c ? c.id : null;
+}
+
+async function autoSetExColor(ei, name){
+  if(!name) return;
+  // 이미 색깔 지정돼있으면 건드리지 않음
+  if(exercises[ei].color) return;
+
+  // 1단계: 키워드로 먼저 시도
+  const part = guessPartFromName(name);
+  if(part){
+    const colorId = partToColorId(part);
+    if(colorId){
+      exercises[ei].color = colorId;
+      // 색깔 점 UI 갱신
+      const card = document.getElementById('exCard-'+ei);
+      if(card){
+        card.querySelectorAll('.ex-color-dot').forEach(dot=>{
+          const c = EX_COLORS.find(c=>c.id===dot.dataset.colorId);
+          if(c) dot.style.borderColor = c.id===colorId ? c.border : 'transparent';
+        });
+      }
+      return;
+    }
+  }
+
+  // 2단계: AI한테 물어보기
+  try{
+    const data = await callGeminiAPI({
+      system:'운동 종목명을 보고 주요 운동 부위를 딱 하나만 반환해. 반드시 다음 중 하나만: 가슴, 등, 어깨, 하체, 팔. 다른 텍스트 없이 단어 하나만.',
+      max_tokens:10,
+      messages:[{role:'user',content:`"${name}"의 주요 운동 부위는?`}]
+    });
+    const aiPart = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
+    const colorId = partToColorId(aiPart);
+    if(colorId && !exercises[ei].color){
+      exercises[ei].color = colorId;
+      const card = document.getElementById('exCard-'+ei);
+      if(card){
+        card.querySelectorAll('.ex-color-dot').forEach(dot=>{
+          const c = EX_COLORS.find(c=>c.id===dot.dataset.colorId);
+          if(c) dot.style.borderColor = c.id===colorId ? c.border : 'transparent';
+        });
+      }
+    }
+  } catch(e){}
+}
 const INTENSITY_LEVELS = [
   {max:20, color:'var(--g0)', desc:'😌  몸을 깨우는 데 집중한 날이에요'},
   {max:40, color:'var(--g0)', desc:'🙂  가볍게 움직이며 컨디션을 챙겼어요'},
@@ -2992,6 +3067,11 @@ async function openNewJournal(){
 
   // 최근 메모 표시
   renderRecentMemoBar();
+  // 회차 위 이전 메모 표시
+  renderSessionMemoPrev();
+  // 메모 입력 칸 초기화
+  const memoInput = document.getElementById('sessionMemoInput');
+  if(memoInput) memoInput.value = '';
 
   renderParts();
   renderExCards();
@@ -2999,6 +3079,8 @@ async function openNewJournal(){
 
   // 회원 데이터 요약 카드 렌더링
   renderMemberDataSummary();
+  // 잔여 회차 알림
+  checkRemainingSession(nextSession);
   // 10회차 단위면 자동 편지 작성
   checkMilestoneAndAutoLetter();
   updateIntensity(70);
@@ -3086,6 +3168,17 @@ async function saveMemberNote(){
     }
   }
   showToast('저장 완료 ✓');
+}
+
+async function renderSessionMemoPrev(){
+  if(!currentMember) return;
+  const prevEl = document.getElementById('sessionMemoPrev');
+  if(!prevEl) return;
+  const memos = (await getMemos(currentMember.id)).filter(m=>m.id!=='note' && m.sessionMemo);
+  if(!memos.length){ prevEl.style.display='none'; return; }
+  const latest = memos[memos.length-1];
+  prevEl.style.display = 'block';
+  prevEl.innerHTML = `<span style="font-size:11px;font-weight:600;color:var(--t3);">${latest.date} 메모</span><br>${latest.content.replace(/\n/g,'<br>')}`;
 }
 
 async function renderRecentMemoBar(){
@@ -3405,6 +3498,44 @@ async function renderMemberDataSummary(){
   summaryEl.style.display = lines.length ? 'block' : 'none';
 }
 
+function checkRemainingSession(sessionNum){
+  if(!currentMember || !currentMember.totalSessions) return;
+  const total = parseInt(currentMember.totalSessions);
+  const current = parseInt(sessionNum);
+  if(!total || !current) return;
+
+  const remaining = total - current;
+
+  // 잔여 회차 배지 표시
+  const sessionLabel = document.getElementById('sessionRemainingBadge');
+  if(sessionLabel) sessionLabel.remove(); // 기존 배지 제거
+
+  if(remaining <= 0 || remaining > 5) return;
+
+  const iSession = document.getElementById('iSession');
+  if(!iSession) return;
+
+  const badge = document.createElement('span');
+  badge.id = 'sessionRemainingBadge';
+
+  if(remaining === 0){
+    badge.style.cssText = 'display:inline-block;margin-left:8px;background:#FF3B30;color:#fff;font-size:11px;font-weight:700;border-radius:20px;padding:2px 10px;';
+    badge.textContent = '🏁 마지막 회차';
+  } else if(remaining <= 3){
+    badge.style.cssText = 'display:inline-block;margin-left:8px;background:var(--red);color:#fff;font-size:11px;font-weight:700;border-radius:20px;padding:2px 10px;';
+    badge.textContent = `⚠️ 잔여 ${remaining}회`;
+  } else {
+    badge.style.cssText = 'display:inline-block;margin-left:8px;background:#FF9500;color:#fff;font-size:11px;font-weight:700;border-radius:20px;padding:2px 10px;';
+    badge.textContent = `잔여 ${remaining}회`;
+  }
+
+  iSession.parentElement.appendChild(badge);
+
+  // 잔여 회차 정보를 전역으로 저장 (편지 자동 작성 시 활용)
+  window._remainingSession = remaining;
+  window._totalSession = total;
+}
+
 async function checkMilestoneAndAutoLetter(){
   if(!currentMember) return;
   const sessionNum = parseInt(document.getElementById('iSession')?.value || '0');
@@ -3498,6 +3629,13 @@ async function autoWriteLetter(){
 이름: ${currentMember.name}
 오늘 회차: ${sessionNum}회차
 총 진행 회차: ${totalSessions}회차 (${firstDate} ~ ${lastDate})
+${window._remainingSession !== undefined && window._remainingSession <= 5 ?
+  window._remainingSession === 0
+    ? '⚠️ 오늘이 마지막 회차예요. 그동안의 여정을 마무리하는 편지를 써주세요.'
+    : window._remainingSession <= 3
+      ? `⚠️ 잔여 ${window._remainingSession}회 남았어요. 편지에 자연스럽게 언급해주세요.`
+      : `잔여 ${window._remainingSession}회 남았어요. 편지에 슬쩍 언급해도 좋아요.`
+  : ''}
 
 [오늘 운동한 종목]
 ${todaySummary || '아직 입력 안 됨'}
@@ -3793,16 +3931,26 @@ async function loadDraftToForm(){
   document.getElementById('iIntensity').value = iv;
   updateIntensity(iv);
   document.getElementById('iLetter').value = d.letter || '';
+  const memoInp = document.getElementById('sessionMemoInput');
+  if(memoInp) memoInp.value = d.sessionMemo || '';
 }
 
 function autoSaveDraft(){
   if(!currentMember || editingEntryIdx !== null) return;
+
+  // 아무것도 입력 안 했으면 임시저장 안 함
+  const hasExercise = exercises.some(ex => ex.name || (ex.sets||[]).some(s=>s.w||s.r));
+  const hasParts = selectedParts.length > 0;
+  const hasLetter = (document.getElementById('iLetter')?.value||'').trim().length > 0;
+  if(!hasExercise && !hasParts && !hasLetter) return;
+
   const data = {
     parts: [...selectedParts],
     exercises: exercises.map(ex=>({...ex, sets:[...ex.sets]})),
     intensity: document.getElementById('iIntensity')?.value || 70,
     session: document.getElementById('iSession')?.value || 1,
     letter: document.getElementById('iLetter')?.value || '',
+    sessionMemo: document.getElementById('sessionMemoInput')?.value || '',
     entryDate: document.getElementById('iEntryDate')?.value || '',
     savedAt: new Date().toISOString(),
   };
@@ -4841,6 +4989,7 @@ function buildExCard(ei){
   card.id = 'exCard-'+ei;
   const colorDots = EX_COLORS.map(c =>
     `<span class="ex-color-dot${ex.color===c.id?' selected':''}"
+      data-color-id="${c.id}"
       style="background:${c.bg};border-color:${ex.color===c.id?c.border:'transparent'};"
       onclick="setExColor(${ei},'${c.id}')"></span>`
   ).join('');
@@ -4848,13 +4997,13 @@ function buildExCard(ei){
       <div class="ex-header">
         <span class="ex-drag-handle" title="드래그하여 순서 변경">⠿</span>
         <input class="ex-name-inp" value="${ex.name}" placeholder="종목명 입력"
-          oninput="exercises[${ei}].name=this.value;autoFillPrev(${ei},this.value);buildSetRows(${ei});"/>
+          oninput="exercises[${ei}].name=this.value;autoFillPrev(${ei},this.value);buildSetRows(${ei});autoSetExColor(${ei},this.value);"/>
         <button onclick="toggleTimeMode(${ei})" title="등척성/일반 전환" style="background:${ex.timeMode?'var(--g0)':'none'};color:${ex.timeMode?'#fff':'var(--t3)'};border:1px solid ${ex.timeMode?'var(--g0)':'var(--bd)'};border-radius:6px;font-size:11px;padding:2px 6px;cursor:pointer;font-family:inherit;margin-right:4px;">⏱</button>
         <button class="ex-del-btn" onclick="removeExercise(${ei})">×</button>
       </div>
       <div class="ex-color-row">
         ${colorDots}
-        <span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">달력에서 색으로 구분돼요</span>
+        <span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">🔴가슴 🔵등 🟡어깨 🟢하체 🟣팔</span>
       </div>
       <div class="prev-auto-row" id="prevInfo-${ei}"></div>
       <div class="sets-area" id="sets-${ei}"></div>
@@ -5093,6 +5242,20 @@ async function saveJournal(){
   const bw=70; // 추후 입력 추가 가능
   const entryDateIso = document.getElementById('iEntryDate').value || todayISO();
 
+  // 회차 아래 메모 저장
+  const sessionMemoText = (document.getElementById('sessionMemoInput')?.value||'').trim();
+  if(sessionMemoText){
+    const memos = await getMemos(currentMember.id);
+    const today = getShortDate();
+    const existing = memos.find(m=>m.id!=='note' && m.date===today && m.sessionMemo);
+    if(existing){
+      existing.content = sessionMemoText;
+    } else {
+      memos.push({ id:'m_'+Date.now(), date:today, dateTime:new Date().toISOString(), content:sessionMemoText, sessionMemo:true });
+    }
+    await saveMemos(currentMember.id, memos);
+  }
+
   const exData = exercises.map(ex=>({
     name:ex.name,
     maxW:exMaxW(ex),
@@ -5161,8 +5324,8 @@ async function saveJournal(){
   const copyHint = document.getElementById('copyHint');
   if(copyHint) copyHint.style.display = 'none';
 
-  // 임시저장 삭제
-  if(!isEdit) clearDraft(currentMember.id);
+  // 임시저장 삭제 (신규/수정 모두)
+  clearDraft(currentMember.id);
 
   // 달력 갱신
   await buildCalHistDates();
@@ -5177,6 +5340,8 @@ async function saveJournal(){
 async function saveOnly(){
   const btn = document.querySelector('.bottom-btns button:first-child');
   await saveJournal();
+  // 저장 완료 후 임시저장 제거 (작성 중 뱃지 사라지게)
+  if(currentMember) clearDraft(currentMember.id);
   showToast('저장 완료 ✓');
   if(btn){
     const orig = btn.innerHTML;
