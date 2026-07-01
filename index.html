@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="1.9.7"/>
+<meta name="app-version" content="2.0.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -733,7 +733,8 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       <div id="toneCurrentText" style="font-size:13px;color:var(--t);line-height:1.6;"></div>
     </div>
 
-    <button onclick="analyzeToneFromPhotos()" id="toneAnalyzeBtn" style="width:100%;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;margin-bottom:8px;">말투 분석하기</button>
+    <button onclick="analyzeToneFromPhotos()" id="toneAnalyzeBtn" style="width:100%;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;margin-bottom:8px;">📷 사진으로 분석하기</button>
+    <button onclick="analyzeToneFromLetters()" id="toneLetterBtn" style="width:100%;padding:13px;background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r12);font-size:14px;font-weight:700;color:var(--t);cursor:pointer;font-family:inherit;margin-bottom:8px;">✉️ 기존 편지에서 학습하기</button>
     <button class="modal-btn cancel" style="width:100%;" onclick="closeModal('modal-toneTraining')">닫기</button>
   </div>
 </div>
@@ -857,6 +858,13 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       <span>회원님께 보내는 편지</span>
       <button onclick="autoWriteLetter()" id="autoWriteLetterBtn" style="font-size:12px;font-weight:700;color:var(--g0);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:4px 12px;cursor:pointer;font-family:inherit;">✨ 자동 작성</button>
     </div>
+
+    <!-- 회원 데이터 요약 카드 -->
+    <div id="memberDataSummary" style="background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;margin-bottom:10px;display:none;">
+      <div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:10px;letter-spacing:.04em;">📊 오늘 참고할 데이터</div>
+      <div id="memberDataContent" style="font-size:13px;color:var(--t);line-height:1.9;"></div>
+    </div>
+
     <div class="card">
       <div class="card-section">
         <textarea id="iLetter" rows="5" placeholder="오늘 수업은 어땠는지, 다음에 신경 쓸 부분, 응원의 말까지 자유롭게 적어주세요" oninput="autoSaveDraft()"></textarea>
@@ -946,6 +954,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
         <button id="dashDeployBtn" onclick="openDashDeploy()" style="background:var(--g0);border:none;border-radius:20px;padding:3px 10px;font-size:11px;color:#fff;cursor:pointer;font-family:inherit;font-weight:600;">🚀 배포</button>
         <button onclick="openDashPinChange()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">⚙️</button>
         <button onclick="markAllSent()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">✓ 전체 전송됨</button>
+        <button onclick="loadDashTrainerList()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">🔄 새로고침</button>
         <button onclick="doDashLogout()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">로그아웃</button>
       </div>
     </div>
@@ -2987,6 +2996,11 @@ async function openNewJournal(){
   renderParts();
   renderExCards();
   recalcAll();
+
+  // 회원 데이터 요약 카드 렌더링
+  renderMemberDataSummary();
+  // 10회차 단위면 자동 편지 작성
+  checkMilestoneAndAutoLetter();
   updateIntensity(70);
   document.getElementById('iIntensity').value = 70;
   document.getElementById('iLetter').value = '';
@@ -3207,6 +3221,57 @@ function onToneFileSelect(e){
   });
 }
 
+async function analyzeToneFromLetters(){
+  if(!TRAINER_ID){ alert('로그인이 필요해요.'); return; }
+  const btn = document.getElementById('toneLetterBtn');
+  if(btn){ btn.disabled=true; btn.textContent='편지를 불러오는 중...'; }
+
+  try{
+    // 모든 회원의 일지에서 편지 텍스트 수집
+    const members = await getMembers();
+    const letters = [];
+    await Promise.all(members.map(async m=>{
+      const hist = await getMemberHistory(m.id);
+      hist.forEach(e=>{
+        if((e.letter||'').trim().length > 20) letters.push(e.letter.trim());
+      });
+    }));
+
+    if(letters.length < 3){
+      alert(`편지가 ${letters.length}개밖에 없어요. 최소 3개 이상 작성한 뒤 시도해주세요.`);
+      return;
+    }
+
+    if(btn) btn.textContent = `편지 ${letters.length}개 분석 중...`;
+
+    // 최근 20개만 (너무 많으면 토큰 낭비)
+    const sample = letters.slice(-20).join('\n\n---\n\n');
+
+    const data = await callGeminiAPI({
+      system:'트레이너가 회원에게 보낸 편지들을 보고 말투 특징을 분석해. 존댓말/반말, 자주 쓰는 어미, 문장 길이, 친근함 정도, 특유의 표현이나 버릇을 파악해. 다른 텍스트 없이 JSON만 반환: {"description":"말투 특징 3-4문장 요약"}',
+      max_tokens:600,
+      messages:[{role:'user', content:`다음은 이 트레이너가 회원들에게 보낸 편지들이야. 말투를 분석해줘.\n\n${sample}`}]
+    });
+
+    const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const clean = text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    await saveTrainerTone(parsed.description);
+
+    const resultEl = document.getElementById('toneCurrentResult');
+    const textEl = document.getElementById('toneCurrentText');
+    if(resultEl){ resultEl.style.display='block'; }
+    if(textEl){ textEl.textContent = parsed.description; }
+
+    showToast(`편지 ${letters.length}개 학습 완료 ✓`);
+  } catch(err){
+    alert('편지 학습에 실패했어요: ' + (err.message||err));
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='✉️ 기존 편지에서 학습하기'; }
+  }
+}
+
 async function analyzeToneFromPhotos(){
   if(!toneB64List.length){ alert('카톡 스크린샷을 먼저 올려주세요.'); return; }
   const btn = document.getElementById('toneAnalyzeBtn');
@@ -3250,6 +3315,113 @@ async function analyzeToneFromPhotos(){
 /* ═══════════════════════════════════════
    편지 자동 작성
 ═══════════════════════════════════════ */
+/* ═══════════════════════════════════════
+   회원 데이터 요약 카드
+═══════════════════════════════════════ */
+async function renderMemberDataSummary(){
+  if(!currentMember) return;
+  const summaryEl = document.getElementById('memberDataSummary');
+  const contentEl = document.getElementById('memberDataContent');
+  if(!summaryEl || !contentEl) return;
+
+  const hist = await getMemberHistory(currentMember.id);
+  if(!hist.length){ summaryEl.style.display='none'; return; }
+
+  const lines = [];
+
+  // 1) 종목별 성장 (과거 기록 + 현재 작성 중인 데이터 실시간 반영)
+  const exProgressMap = {};
+  hist.forEach(e=>{
+    (e.exercises||[]).filter(ex=>ex.name).forEach(ex=>{
+      if(!exProgressMap[ex.name]) exProgressMap[ex.name] = [];
+      const isTime = !!ex.timeMode;
+      const isBw = isBodyweight(ex);
+      const metric = isTime
+        ? Math.max(...(ex.sets||[]).map(s=>s.r||0))
+        : isBw
+          ? Math.max(...(ex.sets||[]).map(s=>s.r||0))
+          : Math.max(...(ex.sets||[]).map(s=>s.w||0));
+      const unit = isTime?'초':(isBw?'개':'kg');
+      exProgressMap[ex.name].push({metric, unit, date:e.date});
+    });
+  });
+
+  // 현재 작성 중인 종목도 실시간 반영
+  exercises.filter(ex=>ex.name).forEach(ex=>{
+    const isTime = !!ex.timeMode;
+    const isBw = isBodyweight(ex);
+    const sets = ex.sets||[];
+    if(!sets.length) return;
+    const metric = isTime
+      ? Math.max(...sets.map(s=>s.r||0))
+      : isBw
+        ? Math.max(...sets.map(s=>s.r||0))
+        : Math.max(...sets.map(s=>s.w||0));
+    if(!metric) return;
+    const unit = isTime?'초':(isBw?'개':'kg');
+    if(!exProgressMap[ex.name]) exProgressMap[ex.name] = [];
+    exProgressMap[ex.name].push({metric, unit, date:'오늘(작성중)'});
+  });
+
+  const growthLines = Object.entries(exProgressMap)
+    .filter(([_, records]) => records.length >= 2)
+    .map(([name, records])=>{
+      const first = records[0];
+      const last = records[records.length-1];
+      const diff = last.metric - first.metric;
+      const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
+      return `🏋️ ${name}: ${first.metric}${first.unit} → ${last.metric}${last.unit} ${diff>0?`(${arrow}${diff}${last.unit})`:''}`;
+    });
+
+  if(growthLines.length){
+    lines.push(...growthLines);
+    lines.push('');
+  }
+
+  // 2) 출석 현황 — 최근 4주 주당 운동 횟수
+  const now = new Date();
+  const weekCounts = [0,0,0,0];
+  hist.forEach(e=>{
+    if(!e.date) return;
+    const d = new Date(e.date);
+    const diffDays = Math.floor((now - d) / (1000*60*60*24));
+    const weekIdx = Math.floor(diffDays / 7);
+    if(weekIdx < 4) weekCounts[weekIdx]++;
+  });
+  const consecutiveWeeks = weekCounts.filter(c=>c>0).length;
+  const weekStr = weekCounts.slice(0,4).reverse().map((c,i)=>`${i+1}주전 ${c}회`).join(' / ');
+  if(consecutiveWeeks > 0){
+    lines.push(`📅 최근 4주: ${weekStr}`);
+    const successWeeks = weekCounts.filter(c=>c>=2).length;
+    if(successWeeks >= 2) lines.push(`✅ 주 2회 이상 ${successWeeks}주 성공 중`);
+    lines.push('');
+  }
+
+  // 3) 현재 회차
+  const sessionNum = document.getElementById('iSession')?.value || '';
+  if(sessionNum) lines.push(`🎯 오늘 ${sessionNum}회차`);
+
+  contentEl.innerHTML = lines.join('<br>');
+  summaryEl.style.display = lines.length ? 'block' : 'none';
+}
+
+async function checkMilestoneAndAutoLetter(){
+  if(!currentMember) return;
+  const sessionNum = parseInt(document.getElementById('iSession')?.value || '0');
+  if(!sessionNum || sessionNum % 10 !== 0) return;
+
+  // 10회차 단위면 자동으로 편지 작성
+  const letterEl = document.getElementById('iLetter');
+  if(!letterEl || letterEl.value.trim()) return; // 이미 편지 있으면 건너뜀
+
+  const btn = document.getElementById('autoWriteLetterBtn');
+  if(btn){ btn.disabled=true; btn.textContent='✨ '+sessionNum+'회차 편지 작성 중...'; }
+
+  await autoWriteLetter();
+
+  if(btn){ btn.disabled=false; btn.textContent='✨ 자동 작성'; }
+}
+
 async function autoWriteLetter(){
   if(!currentMember) return;
   const btn = document.getElementById('autoWriteLetterBtn');
@@ -3709,6 +3881,8 @@ async function doDashLogin(){
 let dashFilterMode = 'all'; // 'all' | 'unsent'
 function setDashFilter(mode){
   dashFilterMode = mode;
+  const listEl = document.getElementById('dashTrainerList');
+  if(listEl) listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
   loadDashTrainerList();
 }
 
@@ -4327,6 +4501,9 @@ function exTotalReps(ex){ return ex.sets.reduce((s,st)=>s+st.r,0); }
 
 function recalcAll(){
   autoSaveDraft();
+  // 데이터 요약 카드 실시간 갱신 (디바운스 300ms)
+  clearTimeout(recalcAll._summaryTimer);
+  recalcAll._summaryTimer = setTimeout(()=>renderMemberDataSummary(), 300);
   // 지난 기록에서 prev 자동 반영
   const hist = currentMember ? getMemberHistory(currentMember.id) : [];
   const lastEntry = hist.length ? hist[hist.length-1] : null;
