@@ -1226,14 +1226,17 @@ async function fsGet(col, docId){
   } catch(e){ return null; }
 }
 
+// 저장 성공 여부(true/false)를 반환함 — 호출하는 쪽에서 실패를 감지해서
+// 사용자에게 "저장 안 됐어요"라고 알려줄 수 있게 하기 위함
 async function fsSet(col, docId, value){
   try{
     const body = {fields: {v: {stringValue: JSON.stringify(value)}}};
-    await fetch(
+    const res = await fetch(
       `${FS_BASE}/${col}/${encodeURIComponent(docId)}?updateMask.fieldPaths=v`,
       {method:'PATCH', headers:{'Content-Type':'application/json', ...fsAuthHeaders()}, body:JSON.stringify(body)}
     );
-  } catch(e){}
+    return res.ok;
+  } catch(e){ return false; }
 }
 
 async function fsDel(col, docId){
@@ -1267,6 +1270,10 @@ async function fsList(col){
 const cache = {};
 function cacheGet(k){ return (k in cache) ? cache[k] : null; }
 function cacheSet(k,v){ cache[k]=v; }
+// 캐시/저장 함수들은 배열·객체를 참조로 주고받는데, 호출한 쪽에서 그걸 그대로
+// push/수정해버리면 저장 성공 여부와 상관없이 캐시가 오염됨. 그래서 조회 시엔
+// 항상 복사본을 내보내서, 저장이 실제로 성공했을 때만 캐시가 갱신되게 함
+function cloneData(v){ return v==null ? v : JSON.parse(JSON.stringify(v)); }
 
 /* ── 트레이너 ID ── */
 let TRAINER_ID = null;
@@ -1316,54 +1323,59 @@ async function registerToDirectory(name, trainerId, gym, contact){
 async function getMembers(){
   if(!TRAINER_ID) return [];
   const k = 'members_'+TRAINER_ID;
-  if(cacheGet(k)!==null) return cacheGet(k);
+  if(cacheGet(k)!==null) return cloneData(cacheGet(k));
   const v = await fsGet('data', k) || [];
-  cacheSet(k,v); return v;
+  cacheSet(k,v); return cloneData(v);
 }
 async function saveMembers(arr){
-  if(!TRAINER_ID) return;
+  if(!TRAINER_ID) return false;
   const k = 'members_'+TRAINER_ID;
-  cacheSet(k,arr);
-  await fsSet('data', k, arr);
+  // 저장 성공했을 때만 캐시에 반영 (실패한 시도가 캐시에 남으면 다음 저장 때 중복/유실로 이어짐)
+  const ok = await fsSet('data', k, arr);
+  if(ok) cacheSet(k,arr);
+  return ok;
 }
 async function getMemberHistory(mid){
   if(!TRAINER_ID) return [];
   const k = 'hist_'+TRAINER_ID+'_'+mid;
-  if(cacheGet(k)!==null) return cacheGet(k);
+  if(cacheGet(k)!==null) return cloneData(cacheGet(k));
   const v = await fsGet('data', k) || [];
-  cacheSet(k,v); return v;
+  cacheSet(k,v); return cloneData(v);
 }
 async function saveMemberHistory(mid,arr){
-  if(!TRAINER_ID) return;
+  if(!TRAINER_ID) return false;
   const k = 'hist_'+TRAINER_ID+'_'+mid;
-  cacheSet(k,arr);
-  await fsSet('data', k, arr);
+  const ok = await fsSet('data', k, arr);
+  if(ok) cacheSet(k,arr);
+  return ok;
 }
 async function getDietData(mid){
   if(!TRAINER_ID) return {};
   const k = 'diet_'+TRAINER_ID+'_'+mid;
-  if(cacheGet(k)!==null) return cacheGet(k);
+  if(cacheGet(k)!==null) return cloneData(cacheGet(k));
   const v = await fsGet('data', k) || {};
-  cacheSet(k,v); return v;
+  cacheSet(k,v); return cloneData(v);
 }
 async function saveDietData(mid,d){
-  if(!TRAINER_ID) return;
+  if(!TRAINER_ID) return false;
   const k = 'diet_'+TRAINER_ID+'_'+mid;
-  cacheSet(k,d);
-  await fsSet('data', k, d);
+  const ok = await fsSet('data', k, d);
+  if(ok) cacheSet(k,d);
+  return ok;
 }
 async function getMemos(mid){
   if(!TRAINER_ID) return [];
   const k = 'memo_'+TRAINER_ID+'_'+mid;
-  if(cacheGet(k)!==null) return cacheGet(k);
+  if(cacheGet(k)!==null) return cloneData(cacheGet(k));
   const v = await fsGet('data', k) || [];
-  cacheSet(k,v); return v;
+  cacheSet(k,v); return cloneData(v);
 }
 async function saveMemos(mid,arr){
-  if(!TRAINER_ID) return;
+  if(!TRAINER_ID) return false;
   const k = 'memo_'+TRAINER_ID+'_'+mid;
-  cacheSet(k,arr);
-  await fsSet('data', k, arr);
+  const ok = await fsSet('data', k, arr);
+  if(ok) cacheSet(k,arr);
+  return ok;
 }
 
 // 임시저장 — localStorage만 사용 (빠르고 오프라인도 됨)
@@ -3832,7 +3844,11 @@ async function doAddMember(){
   const members = await getMembers();
   const id = 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
   members.push({id, name, totalSessions: total});
-  await saveMembers(members);
+  const saveOk = await saveMembers(members);
+  if(!saveOk){
+    showToast('⚠️ 회원 추가에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true);
+    return;
+  }
   document.getElementById('newMemberTotal').value = '';
   closeModal('modal-addMember');
   renderMemberList();
@@ -4500,13 +4516,14 @@ function finishOnboarding(){
   showScreen('screen-setup');
 }
 
-function showToast(msg){
+function showToast(msg, isError){
   const t = document.createElement('div');
   t.textContent = msg;
-  t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#1A1A1A;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;white-space:nowrap;';
+  const bg = isError ? 'var(--red)' : '#1A1A1A';
+  t.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:${bg};color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;white-space:${isError?'normal':'nowrap'};max-width:85vw;text-align:center;`;
   document.body.appendChild(t);
   requestAnimationFrame(()=>{ t.style.opacity='1'; });
-  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, 2000);
+  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, isError ? 3500 : 2000);
 }
 
 function updateSessionLabel(){
@@ -5346,7 +5363,12 @@ async function saveJournal(){
     }
   }
 
-  await saveMemberHistory(memberId, hist);
+  const saveOk = await saveMemberHistory(memberId, hist);
+  if(!saveOk){
+    // 저장 실패 시 임시저장을 그대로 남겨둬서(지우지 않음) 데이터가 안 날아가게 함
+    showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true);
+    return false;
+  }
 
   // 드래그 힌트 영구 숨김
   localStorage.setItem('hint_drag_seen', '1');
@@ -5369,13 +5391,18 @@ async function saveJournal(){
   await renderMemberList(); // 회원 목록 갱신 (만료 체크 등)
 
   editingEntryIdx = null;
+  return true;
 }
 
 // 저장만 하고 화면 나가기
 async function saveOnly(){
   const btn = document.querySelector('.bottom-btns button:first-child');
   _draftSuppressed = true; // 저장 후 임시저장 재생성 방지
-  await saveJournal();
+  const saveOk = await saveJournal();
+  if(!saveOk){
+    _draftSuppressed = false;
+    return; // saveJournal()이 이미 실패 토스트를 띄웠고, 임시저장도 그대로 남아있음
+  }
   if(currentMember) clearDraft(currentMember.id);
   showToast('저장 완료 ✓');
   if(btn){
@@ -5413,7 +5440,8 @@ function saveAndCopy(){
     btn.classList.add('done');
     btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 전송 완료!';
     // 저장 + 전송 기록 + 화면 나가기
-    saveJournal().then(async () => {
+    saveJournal().then(async (saveOk) => {
+      if(!saveOk) return; // saveJournal()이 이미 실패 토스트를 띄움 — 저장 안 됐으니 전송 기록도 남기지 않음
       try{
         if(currentMember){
           const hist = await getMemberHistory(currentMember.id);
