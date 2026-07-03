@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.9"/>
+<meta name="app-version" content="2.3.10"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -5153,6 +5153,13 @@ function addSet(ei){
   buildSetRows(ei);updateExFooter(ei);recalcAll();
 }
 function removeSet(ei,si){
+  // 마지막 남은 세트를 지우면 무게/횟수/볼륨이 통째로 없어지고 종목 이름만 남는
+  // 상태로 저장돼버려서, 최소 1세트는 남기게 막음. 종목 자체를 지우려면
+  // 종목 카드의 × 버튼(removeExercise)을 쓰면 됨
+  if(exercises[ei].sets.length <= 1){
+    showToast('⚠️ 최소 1세트는 있어야 해요. 종목을 지우려면 종목 옆 × 버튼을 눌러주세요.', true);
+    return;
+  }
   exercises[ei].sets.splice(si,1);
   buildSetRows(ei);updateExFooter(ei);recalcAll();
 }
