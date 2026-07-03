@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.2"/>
+<meta name="app-version" content="2.3.3"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1481,6 +1481,7 @@ const EX_COLORS = [
   {id:'yellow', bg:'#F5C842', border:'#B8860B', text:'#fff', part:'어깨'},
   {id:'green',  bg:'#52B443', border:'#1E4D0A', text:'#fff', part:'하체'},
   {id:'purple', bg:'#9B59B6', border:'#6C3483', text:'#fff', part:'팔'},
+  {id:'orange', bg:'#E8833A', border:'#B0611E', text:'#fff', part:'코어'},
 ];
 
 // 키워드 기반 부위 자동 매핑
@@ -1490,6 +1491,7 @@ const PART_KEYWORDS = {
   '어깨': ['숄더','오버헤드','프레스','레터럴','레이즈','사이드','리어','페이스풀'],
   '하체': ['스쿼트','레그','런지','힙','RDL','루마니안','레그프레스','레그컬','레그익스텐션','카프','종아리','힙쓰러스트'],
   '팔':   ['컬','트라이','바이','해머','리버스','케이블컬','스컬'],
+  '코어': ['플랭크','크런치','싯업','윗몸일으키기','레그레이즈','시저스','마운틴클라이머','러시안트위스트','사이드플랭크','데드버그','할로우홀드','에어바이크','바이시클'],
 };
 
 function guessPartFromName(name){
@@ -1538,7 +1540,7 @@ async function autoSetExColor(ei, name){
   // 2단계: AI한테 물어보기
   try{
     const data = await callGeminiAPI({
-      system:'운동 종목명을 보고 주요 운동 부위를 딱 하나만 반환해. 반드시 다음 중 하나만: 가슴, 등, 어깨, 하체, 팔. 다른 텍스트 없이 단어 하나만.',
+      system:'운동 종목명을 보고 주요 운동 부위를 딱 하나만 반환해. 반드시 다음 중 하나만: 가슴, 등, 어깨, 하체, 팔, 코어. 다른 텍스트 없이 단어 하나만.',
       max_tokens:10,
       messages:[{role:'user',content:`"${name}"의 주요 운동 부위는?`}]
     });
@@ -5141,7 +5143,7 @@ function buildExCard(ei){
       </div>
       <div class="ex-color-row">
         ${colorDots}
-        <span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">🔴가슴 🔵등 🟡어깨 🟢하체 🟣팔</span>
+        <span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">🔴가슴 🔵등 🟡어깨 🟢하체 🟣팔 🟠코어</span>
       </div>
       <div class="prev-auto-row" id="prevInfo-${ei}"></div>
       <div class="sets-area" id="sets-${ei}"></div>
