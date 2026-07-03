@@ -17,6 +17,14 @@
   --red:#C0392B; --red-l:#FDECEA;
   --r4:4px; --r8:8px; --r12:12px; --r16:16px;
 }
+html[data-theme="dark"] {
+  --g0:#4CAE3B; --g1:#69C750; --g2:#1D2A17; --g3:#33512A;
+  --gold:#D9A94A; --gold-l:#2B2413; --gold-b:#4A3D1F;
+  --bg:#131311; --sf:#1E1E1A; --sf2:#272722;
+  --bd:#35352E; --bd2:#46463D;
+  --t:#F2F2ED; --t2:#B7B7AC; --t3:#7C7C71;
+  --red:#E8574A; --red-l:#3A1A15;
+}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html{touch-action:manipulation;-webkit-text-size-adjust:100%;}
 html,body{min-height:100%;min-height:-webkit-fill-available;background:var(--bg);font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:var(--t);overscroll-behavior:none;}
@@ -40,6 +48,7 @@ input,textarea,button,select{touch-action:manipulation;}
 
 /* NAV */
 .nav{position:sticky;top:0;z-index:100;background:rgba(247,247,245,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:0.5px solid var(--bd);padding:0 16px;}
+html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .nav-inner{display:flex;align-items:center;gap:8px;padding:11px 0;}
 .nav-back{background:none;border:none;cursor:pointer;color:var(--t2);font-size:14px;padding:4px 6px 4px 0;display:flex;align-items:center;gap:3px;font-family:inherit;}
 .nav-title{font-size:15px;font-weight:600;color:var(--t);flex:1;}
@@ -455,6 +464,7 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
 
 /* SAVE + COPY BTNs */
 .bottom-btns{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;padding:10px 16px;background:rgba(247,247,245,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:0.5px solid var(--bd);display:flex;gap:8px;z-index:50;}
+html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
 .btn-save{flex:1;padding:13px;background:var(--sf);border:0.5px solid var(--bd2);border-radius:var(--r12);font-size:14px;font-weight:600;color:var(--t);cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;}
 .btn-save:active{background:var(--sf2);}
 .btn-copy{flex:2;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;}
@@ -486,7 +496,21 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
   .cal-ex-desktop{display:block;}
   .cal-cell{aspect-ratio:var(--dp-aspect, 0.55);overflow:hidden;}
 }
+
+/* 다크모드 토글 스위치 */
+.theme-toggle{position:relative;width:46px;height:26px;border-radius:13px;background:var(--bd2);cursor:pointer;transition:background .2s;flex-shrink:0;}
+.theme-toggle.on{background:var(--g0);}
+.theme-toggle .knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+.theme-toggle.on .knob{transform:translateX(20px);}
 </style>
+<script>
+// 화면이 그려지기 전에 먼저 테마를 적용해서 라이트 화면이 잠깐 보였다가 다크로
+// 바뀌는 깜빡임(FOUC)을 방지함
+(function(){
+  var t = localStorage.getItem('theme');
+  if(t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+</script>
 </head>
 <body>
 
@@ -660,6 +684,14 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
     <div class="modal-title">설정</div>
 
     <div style="background:var(--sf2);border-radius:var(--r12);overflow:hidden;margin-bottom:14px;">
+
+      <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--t);">🌙 다크 모드</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px;">어두운 화면으로 바꿔요</div>
+        </div>
+        <div class="theme-toggle" id="darkModeToggle" onclick="toggleDarkMode()"><div class="knob"></div></div>
+      </div>
 
       <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
         <div>
@@ -3750,6 +3782,26 @@ async function openSettings(){
   const v = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
   const vEl = document.getElementById('appVersionLabel');
   if(vEl) vEl.textContent = v;
+  syncDarkModeToggle();
+}
+
+/* ═══════════════════════════════════════
+   다크 모드
+═══════════════════════════════════════ */
+function syncDarkModeToggle(){
+  const toggle = document.getElementById('darkModeToggle');
+  if(toggle) toggle.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
+}
+function toggleDarkMode(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if(isDark){
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.removeItem('theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    localStorage.setItem('theme', 'dark');
+  }
+  syncDarkModeToggle();
 }
 
 async function refreshData(){
