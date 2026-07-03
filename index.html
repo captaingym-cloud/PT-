@@ -502,6 +502,10 @@ input[type=range]#iIntensity::-moz-range-track{background:transparent;}
       <input id="setupName" placeholder="예) 이광명" maxlength="20"/>
     </div>
     <div class="setup-field">
+      <label>체육관 이름</label>
+      <input id="setupGym" placeholder="예) 캡틴짐" maxlength="20"/>
+    </div>
+    <div class="setup-field">
       <label>비밀번호 (숫자 4자리)</label>
       <input id="setupPin" type="password" inputmode="numeric" placeholder="• • • •" maxlength="4"
         style="letter-spacing:0.3em;text-align:center;font-size:20px;"/>
@@ -1121,6 +1125,9 @@ const FS_API_KEY = 'AIzaSyCXtPpKkFZuDnkZViRheHMq9mePKDUbUt8';
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
 const AUTH_BASE  = `https://identitytoolkit.googleapis.com/v1`;
 
+// 대표님 대시보드에 노출할 홈 체육관 (여러 체육관이 같은 Firebase 프로젝트를 테스트로 같이 쓰고 있어서 구분용)
+const HOME_GYM = '캡틴짐';
+
 // AI 기능(식단 분석, 인바디 분석, 편지 자동작성, 말투 학습)은 Google Gemini 무료 API를 사용
 // 카드 등록 없이 무료로 사용 가능 (하루 1500건 한도, PT 일지 앱 사용량으로는 충분)
 const GEMINI_API_KEY = 'AQ.Ab8RN6JGRvIarfqLwS-cO-ol-fxNhogkW5BVv92ly4pzteb59w';
@@ -1245,6 +1252,27 @@ async function fsDel(col, docId){
   } catch(e){}
 }
 
+// 컬렉션 안의 문서를 전부 읽어옴 (문서별로 나뉘어 있어 동시 쓰기 충돌이 없음)
+async function fsList(col){
+  const results = [];
+  try{
+    let pageToken = '';
+    do {
+      const url = `${FS_BASE}/${col}?pageSize=300${pageToken ? '&pageToken='+encodeURIComponent(pageToken) : ''}`;
+      const res = await fetch(url, {headers: fsAuthHeaders()});
+      if(!res.ok) break;
+      const data = await res.json();
+      (data.documents||[]).forEach(doc=>{
+        if(doc.fields && doc.fields.v){
+          try{ results.push(JSON.parse(doc.fields.v.stringValue)); } catch(e){}
+        }
+      });
+      pageToken = data.nextPageToken || '';
+    } while(pageToken);
+  } catch(e){}
+  return results;
+}
+
 /* ── 메모리 캐시 (빠른 UI용) ── */
 const cache = {};
 function cacheGet(k){ return (k in cache) ? cache[k] : null; }
@@ -1265,22 +1293,28 @@ async function getTrainer(){
   if(saved){ TRAINER_ID = nameToId(saved, savedPin||'0000'); return saved; }
   return null;
 }
-async function saveTrainer(name, pin){
-  if(!name){ localStorage.removeItem('trainer_name'); localStorage.removeItem('trainer_pin'); TRAINER_ID=null; return; }
+async function saveTrainer(name, pin, gym){
+  if(!name){ localStorage.removeItem('trainer_name'); localStorage.removeItem('trainer_pin'); localStorage.removeItem('trainer_gym'); TRAINER_ID=null; return; }
   const p = pin || '0000';
+  const g = (gym||'').trim() || '미확인';
   TRAINER_ID = nameToId(name, p);
   localStorage.setItem('trainer_name', name);
   localStorage.setItem('trainer_pin', p);
+  localStorage.setItem('trainer_gym', g);
   await fsSet('trainers', TRAINER_ID, {name, updatedAt: new Date().toISOString()});
   // 대표님 대시보드용 공유 목록에 등록
-  await registerToDirectory(name, TRAINER_ID);
+  await registerToDirectory(name, TRAINER_ID, g);
 }
 
-async function registerToDirectory(name, trainerId){
+// 트레이너 한 명당 문서 하나(트레이너 ID가 문서 ID)라서, 여러 명이 동시에 등록/로그인해도
+// 서로 다른 문서를 건드리기 때문에 다른 트레이너 기록을 덮어쓸 일이 없음
+async function registerToDirectory(name, trainerId, gym){
   try{
-    const dir = await fsGet('admin', 'trainer_directory') || {};
-    dir[trainerId] = { name, trainerId, registeredAt: new Date().toISOString() };
-    await fsSet('admin', 'trainer_directory', dir);
+    const existing = await fsGet('trainer_directory', trainerId);
+    await fsSet('trainer_directory', trainerId, {
+      name, trainerId, gym: gym||'미확인',
+      registeredAt: (existing && existing.registeredAt) || new Date().toISOString()
+    });
   } catch(e){}
 }
 async function getMembers(){
@@ -1500,9 +1534,15 @@ document.addEventListener('DOMContentLoaded', async function(){
   const trainer = await getTrainer();
   if(trainer){
     const savedPin = localStorage.getItem('trainer_pin') || '0000';
+    let savedGym = localStorage.getItem('trainer_gym');
+    if(!savedGym){
+      // 체육관 구분 기능 추가 전에 가입한 트레이너용 1회성 안내
+      savedGym = (prompt(trainer+' 트레이너님, 소속 체육관 이름을 한 번만 입력해주세요') || '').trim() || '미확인';
+      localStorage.setItem('trainer_gym', savedGym);
+    }
     await fsAuthEnsure(TRAINER_ID, savedPin);
     checkAppVersion();
-    registerToDirectory(trainer, TRAINER_ID);
+    registerToDirectory(trainer, TRAINER_ID, savedGym);
     showScreen('screen-members');
     renderMemberList();
   } else {
@@ -1525,10 +1565,12 @@ function showScreen(id){
 ═══════════════════════════════════════ */
 async function doSetup(){
   const name = document.getElementById('setupName').value.trim();
+  const gym  = document.getElementById('setupGym').value.trim();
   const pin  = document.getElementById('setupPin').value.trim();
   const errEl = document.getElementById('setupError');
 
   if(!name){ document.getElementById('setupName').focus(); return; }
+  if(!gym){ document.getElementById('setupGym').focus(); return; }
   if(!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)){
     errEl.textContent = '비밀번호는 숫자 4자리로 입력해주세요';
     errEl.style.display = 'block';
@@ -1536,7 +1578,7 @@ async function doSetup(){
     return;
   }
   errEl.style.display = 'none';
-  await saveTrainer(name, pin);
+  await saveTrainer(name, pin, gym);
   // Firebase Auth 로그인/가입
   const authOk = await fsAuthEnsure(TRAINER_ID, pin);
   if(!authOk){
@@ -3705,10 +3747,12 @@ function doLogout(){
   closeModal('modal-settings');
   localStorage.removeItem('trainer_name');
   localStorage.removeItem('trainer_pin');
+  localStorage.removeItem('trainer_gym');
   TRAINER_ID = null;
   Object.keys(cache).forEach(k => delete cache[k]);
   showScreen('screen-setup');
   document.getElementById('setupName').value = '';
+  document.getElementById('setupGym').value = '';
   document.getElementById('setupPin').value = '';
 }
 
@@ -3768,8 +3812,10 @@ async function resetAll(){
   await saveTrainer(null);
   localStorage.removeItem('trainer_name');
   localStorage.removeItem('trainer_pin');
+  localStorage.removeItem('trainer_gym');
   showScreen('screen-setup');
   document.getElementById('setupName').value = '';
+  document.getElementById('setupGym').value = '';
   document.getElementById('setupPin').value = '';
 }
 async function doAddMember(){
@@ -4045,8 +4091,8 @@ async function loadDashTrainerList(){
   const listEl = document.getElementById('dashTrainerList');
   listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
 
-  const dir = await fsGet('admin', 'trainer_directory') || {};
-  const trainers = Object.values(dir).sort((a,b)=>a.name.localeCompare(b.name));
+  const allTrainers = await fsList('trainer_directory');
+  const trainers = allTrainers.filter(t=>t.gym===HOME_GYM).sort((a,b)=>a.name.localeCompare(b.name));
 
   if(!trainers.length){
     listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">트레이너 앱에서 로그인하면 자동 등록돼요</div>';
@@ -4350,9 +4396,7 @@ async function openDashDeploy(){
 
 async function deleteTrainerFromDir(trainerId, name){
   if(!confirm(`${name} 트레이너를 목록에서 삭제할까요?\n(트레이너 데이터는 유지돼요)`)) return;
-  const dir = await fsGet('admin', 'trainer_directory') || {};
-  delete dir[trainerId];
-  await fsSet('admin', 'trainer_directory', dir);
+  await fsDel('trainer_directory', trainerId);
   loadDashTrainerList();
 }
 
