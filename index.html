@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.8"/>
+<meta name="app-version" content="2.3.9"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1869,6 +1869,15 @@ async function openMemberJournals(member){
   calYear  = new Date().getFullYear();
   calMonth = new Date().getMonth();
   calSelected = null;
+  // 이전 회원 화면에서 날짜를 눌러 열어뒀던 일지 상세 패널이 그대로 남아있으면
+  // (달력만 보이고 일지 목록은 기본적으로 안 뜨게 하기로 한 설계인데) 다른
+  // 회원 화면에 예전 회원의 일지가 그대로 보이게 되므로 확실히 숨기고 내용도 비움
+  const selEntries = document.getElementById('calSelectedEntries');
+  if(selEntries) selEntries.style.display = 'none';
+  const selList = document.getElementById('calSelectedList');
+  if(selList) selList.innerHTML = '';
+  const selMemo = document.getElementById('calSelectedMemo');
+  if(selMemo) selMemo.innerHTML = '';
   await buildCalHistDates();
   renderCalendar();
   renderJournalList();
