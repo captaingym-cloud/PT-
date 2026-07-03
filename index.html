@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.6"/>
+<meta name="app-version" content="2.3.7"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -2205,6 +2205,7 @@ function switchMemberTab(t){
 }
 
 function goToMembers(){
+  autoSaveDraft(); // 일지 작성 화면에서 바로 나가는 경우를 위한 안전망
   showScreen('screen-members');
   renderMemberList();
 }
@@ -3966,6 +3967,10 @@ function openJournal(member){
 }
 
 function goBack(){
+  // 화면 나가기 직전에 마지막 입력 상태를 한 번 더 임시저장함 (oninput 이벤트가
+  // 이미 대부분 저장하지만, 화면 전환 자체는 그 이벤트들에 안 걸려있어서
+  // 놓치는 경우의 안전망)
+  autoSaveDraft();
   editingEntryIdx = null;
   showScreen('screen-journals');
   renderJournalList();
