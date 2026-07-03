@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.7"/>
+<meta name="app-version" content="2.3.8"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1484,6 +1484,7 @@ let currentMember = null; // {id, name}
 let exercises = [];
 let selectedParts = [];
 let editingEntryIdx = null; // null이면 새 일지, 숫자면 수정 모드 (해당 인덱스)
+let _editDirty = false; // 수정 모드에서 저장 안 한 변경사항이 있는지
 
 const PARTS_LIST = ['가슴','등','어깨','하체','팔','코어'];
 
@@ -2205,7 +2206,13 @@ function switchMemberTab(t){
 }
 
 function goToMembers(){
+  // autoSaveDraft() 호출보다 반드시 먼저 체크해야 함 (goBack()과 동일한 이유)
+  if(editingEntryIdx !== null && _editDirty){
+    if(!confirm('저장하지 않고 나가시겠어요?\n수정한 내용이 사라져요.')) return;
+  }
   autoSaveDraft(); // 일지 작성 화면에서 바로 나가는 경우를 위한 안전망
+  _editDirty = false;
+  editingEntryIdx = null;
   showScreen('screen-members');
   renderMemberList();
 }
@@ -3393,6 +3400,7 @@ async function openEditJournal(idx){
   }
   document.getElementById('iLetter').value = letterVal || '';
 
+  _editDirty = false; // 방금 불러온 초기 상태는 "변경사항 없음"으로 침
   switchTab('input');
   showScreen('screen-journal');
 }
@@ -3967,10 +3975,18 @@ function openJournal(member){
 }
 
 function goBack(){
+  // 기존 일지를 수정하던 중이면 임시저장이 안 되므로, 저장 안 하고 나가면
+  // 그대로 사라진다는 걸 확인받음 (autoSaveDraft() 호출보다 반드시 먼저 체크해야 함 —
+  // 그 호출 자체가 수정 모드에서는 _editDirty를 true로 만들어버려서 순서가 바뀌면
+  // 아무것도 안 고쳤어도 항상 확인창이 뜨는 오탐이 생김)
+  if(editingEntryIdx !== null && _editDirty){
+    if(!confirm('저장하지 않고 나가시겠어요?\n수정한 내용이 사라져요.')) return;
+  }
   // 화면 나가기 직전에 마지막 입력 상태를 한 번 더 임시저장함 (oninput 이벤트가
   // 이미 대부분 저장하지만, 화면 전환 자체는 그 이벤트들에 안 걸려있어서
-  // 놓치는 경우의 안전망)
+  // 놓치는 경우의 안전망 — 새 일지 작성 중일 때만 실제로 저장됨)
   autoSaveDraft();
+  _editDirty = false;
   editingEntryIdx = null;
   showScreen('screen-journals');
   renderJournalList();
@@ -4118,7 +4134,14 @@ async function loadDraftToForm(){
 let _draftSuppressed = false;
 
 function autoSaveDraft(){
-  if(!currentMember || editingEntryIdx !== null) return;
+  if(!currentMember) return;
+  if(editingEntryIdx !== null){
+    // 기존 일지 수정 중엔 임시저장은 안 하지만, 뭔가 바뀌었다는 것만 기록해뒀다가
+    // 저장 없이 나가려고 할 때 확인창을 띄우는 데 씀
+    const journalScreen = document.getElementById('screen-journal');
+    if(journalScreen && journalScreen.classList.contains('active')) _editDirty = true;
+    return;
+  }
   if(_draftSuppressed) return;
   // 일지 작성 화면이 실제로 열려있을 때만 저장함. 이전에 다른 회원 일지를 작성하다가
   // 저장 없이 뒤로 나가면 exercises/selectedParts 전역 변수가 그대로 남아있는데,
