@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.10"/>
+<meta name="app-version" content="2.3.11"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -3207,13 +3207,19 @@ async function openNewJournal(){
     }
   }
 
+  // 조회 시작 시점의 회원을 고정해둠 — await 도중 다른 회원으로 화면이 넘어가면
+  // (예: 새 일지 작성 연타) 이 함수가 뒤늦게 끝나면서 엉뚱한 회원의 폼에
+  // 회차/기록 등을 덮어쓰는 걸 방지함
+  const forMember = currentMember;
+
   exercises = [{name:'',prevMaxW:0,prevVol:0,comment:'',color:null,sets:[{w:0,r:10}]}];
   selectedParts = [];
 
-  document.getElementById('journalMemberName').textContent = currentMember.name + '님';
+  document.getElementById('journalMemberName').textContent = forMember.name + '님';
   document.getElementById('journalFormTitle') && (document.getElementById('journalFormTitle').textContent = '새 일지 작성');
 
-  const hist = await getMemberHistory(currentMember.id);
+  const hist = await getMemberHistory(forMember.id);
+  if(currentMember !== forMember) return; // 그 사이 다른 회원으로 넘어갔으면 여기서 중단
   const lastEntry = hist.length ? hist[hist.length-1] : null;
   const nextSession = lastEntry ? (parseInt(lastEntry.session || lastEntry.streak) || hist.length) + 1 : 1;
 
@@ -5520,6 +5526,17 @@ async function _saveJournalInner(memberId){
     };
 
     if(existIdx >= 0){
+      // 이미 내용이 있는(실제로 작성된) 일지를, 아직 거의 안 채워진 새 입력으로
+      // 조용히 덮어쓰려는 상황이면 한 번 확인받음 — 여러 회원 화면을 빠르게
+      // 오가다가 회차 계산이 꼬여서 엉뚱하게 기존 일지를 지워버리는 사고를 방지
+      const old = hist[existIdx];
+      const oldHasContent = (old.exercises||[]).some(ex => ex.vol>0 || (ex.sets||[]).length>1 || (ex.comment||'').trim());
+      const newLooksBlank = exData.every(ex => !ex.name || (ex.sets.length===1 && ex.sets[0].w===0 && ex.sets[0].r===10));
+      if(oldHasContent && newLooksBlank){
+        if(!confirm('이 날짜·회차에 이미 작성된 일지가 있어요.\n지금 내용(대부분 비어있음)으로 덮어쓸까요?')){
+          return false;
+        }
+      }
       hist[existIdx] = entry; // 덮어쓰기
     } else {
       hist.push(entry); // 새로 추가
