@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.3"/>
+<meta name="app-version" content="2.3.4"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1247,9 +1247,21 @@ function fsAuthHeaders(){
   return fsToken ? {'Authorization':'Bearer '+fsToken} : {};
 }
 
+// 로그인 토큰은 1시간 정도면 만료되는데, 트레이너가 앱을 계속 켜놓고 오래 쓰면
+// (하루 여러 수업 하다 보면 흔함) 만료된 토큰으로 계속 요청하다가 전부 실패해서
+// "인터넷 연결 확인해주세요"로 잘못 뜨는 문제가 있었음. 요청 직전에 만료 여부를
+// 확인해서 필요하면 조용히 다시 로그인함
+async function ensureFreshToken(){
+  if(fsToken && Date.now() < fsTokenExpiry) return;
+  if(!TRAINER_ID) return;
+  const pin = localStorage.getItem('trainer_pin') || '0000';
+  await fsAuthEnsure(TRAINER_ID, pin);
+}
+
 // Firestore 문서 경로: col/docId
 async function fsGet(col, docId){
   try{
+    await ensureFreshToken();
     const res = await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`, {headers: fsAuthHeaders()});
     if(!res.ok) return null;
     const doc = await res.json();
@@ -1262,6 +1274,7 @@ async function fsGet(col, docId){
 // 사용자에게 "저장 안 됐어요"라고 알려줄 수 있게 하기 위함
 async function fsSet(col, docId, value){
   try{
+    await ensureFreshToken();
     const body = {fields: {v: {stringValue: JSON.stringify(value)}}};
     const res = await fetch(
       `${FS_BASE}/${col}/${encodeURIComponent(docId)}?updateMask.fieldPaths=v`,
@@ -1273,6 +1286,7 @@ async function fsSet(col, docId, value){
 
 async function fsDel(col, docId){
   try{
+    await ensureFreshToken();
     await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`, {method:'DELETE', headers: fsAuthHeaders()});
   } catch(e){}
 }
@@ -1281,6 +1295,7 @@ async function fsDel(col, docId){
 async function fsList(col){
   const results = [];
   try{
+    await ensureFreshToken();
     let pageToken = '';
     do {
       const url = `${FS_BASE}/${col}?pageSize=300${pageToken ? '&pageToken='+encodeURIComponent(pageToken) : ''}`;
