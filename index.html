@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.1"/>
+<meta name="app-version" content="2.3.2"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -2423,7 +2423,8 @@ async function submitInbodyOnboarding(){
   const saved = await getDietData(currentMember.id);
   if(!saved.inbodyHistory) saved.inbodyHistory = [];
   saved.inbodyHistory.push(entry);
-  await saveDietData(currentMember.id, saved);
+  const saveOk = await saveDietData(currentMember.id, saved);
+  if(!saveOk){ showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
   renderDietPage();
 }
 
@@ -2435,7 +2436,8 @@ async function submitGoalOnboarding(){
   const saved = await getDietData(currentMember.id);
   saved.goal = obGoal;
   saved.targetKcal = map[obGoal];
-  await saveDietData(currentMember.id, saved);
+  const saveOk = await saveDietData(currentMember.id, saved);
+  if(!saveOk){ showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
   obGoal = null;
   renderDietPage();
 }
@@ -2507,7 +2509,8 @@ async function resetDietOnboarding(){
   saved.inbodyHistory = [];
   saved.goal = null;
   saved.targetKcal = null;
-  await saveDietData(currentMember.id, saved);
+  const saveOk = await saveDietData(currentMember.id, saved);
+  if(!saveOk){ showToast('⚠️ 초기화에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
   obGender = null; obGoal = null;
   renderDietPage();
 }
@@ -2599,7 +2602,8 @@ async function setGoal(type, bmr){
   const saved = await getDietData(currentMember.id);
   saved.goal = type;
   saved.targetKcal = map[type];
-  await saveDietData(currentMember.id, saved);
+  const saveOk = await saveDietData(currentMember.id, saved);
+  if(!saveOk){ showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
   renderDietPage();
 }
 
@@ -2683,7 +2687,8 @@ async function analyzeInbody(){
     const saved = await getDietData(currentMember.id);
     if(!saved.inbodyHistory) saved.inbodyHistory = [];
     saved.inbodyHistory.push(entry);
-    await saveDietData(currentMember.id, saved);
+    const saveOk = await saveDietData(currentMember.id, saved);
+    if(!saveOk) throw new Error('저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.');
 
     closeInbodyModal();
     renderDietPage();
@@ -2876,7 +2881,8 @@ async function saveMealResult(parsed, targetKcal){
   const saved = await getDietData(currentMember.id);
   if(!saved.mealHistory) saved.mealHistory = [];
   saved.mealHistory.push(entry);
-  await saveDietData(currentMember.id, saved);
+  const saveOk = await saveDietData(currentMember.id, saved);
+  if(!saveOk){ showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
   closeMealModal();
   renderDietPage();
   showToast('식단 저장 완료 ✓');
@@ -2927,7 +2933,8 @@ async function deleteMealEntry(idx){
   if(!confirm('이 식단 기록을 삭제할까요?')) return;
   const saved = await getDietData(currentMember.id);
   saved.mealHistory.splice(idx, 1);
-  await saveDietData(currentMember.id, saved);
+  const saveOk = await saveDietData(currentMember.id, saved);
+  if(!saveOk){ showToast('⚠️ 삭제에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
   const el = document.getElementById('mealDetailOverlay');
   if(el) el.remove();
   renderDietPage();
