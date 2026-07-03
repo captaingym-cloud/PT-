@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.5"/>
+<meta name="app-version" content="2.3.6"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1821,13 +1821,15 @@ async function renderMemberList(){
 }
 
 async function updateMemberInfoCard(){
-  if(!currentMember) return;
+  const forMember = currentMember;
+  if(!forMember) return;
   const sessEl = document.getElementById('memberInfoSessions');
   if(!sessEl) return;
-  const hist = await getMemberHistory(currentMember.id);
+  const hist = await getMemberHistory(forMember.id);
+  if(currentMember !== forMember) return; // 그 사이 다른 회원으로 넘어갔으면 버림
   const maxSession = hist.length ? Math.max(...hist.map(e => e.session||e.streak||1)) : 0;
-  if(currentMember.totalSessions){
-    sessEl.textContent = `${maxSession} / ${currentMember.totalSessions} 회차 진행 중`;
+  if(forMember.totalSessions){
+    sessEl.textContent = `${maxSession} / ${forMember.totalSessions} 회차 진행 중`;
   } else {
     sessEl.textContent = `총 ${maxSession}회 수업 · 세션 수 미설정`;
   }
@@ -1883,16 +1885,22 @@ let calHistDates = {}; // { 'YYYY-MM-DD': [entry, ...] }
 function dateKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 async function buildCalHistDates(){
-  calHistDates = {};
-  if(!currentMember) return;
-  const hist = await getMemberHistory(currentMember.id);
+  // 조회 시작 시점의 회원을 고정해둠 — await 도중 다른 회원 화면으로 넘어가면
+  // (예: A 보다가 바로 B로 이동) 늦게 도착한 A의 결과가 B 화면에 섞여 들어가지
+  // 않도록, 그 사이 회원이 바뀌었으면 결과를 버림
+  const forMember = currentMember;
+  if(!forMember){ calHistDates = {}; return; }
+  const hist = await getMemberHistory(forMember.id);
+  if(currentMember !== forMember) return;
+  const grouped = {};
   hist.forEach((e, idx) => {
     const d = new Date(e.dateTime || e.date);
     if(isNaN(d)) return;
     const k = dateKey(d);
-    if(!calHistDates[k]) calHistDates[k] = [];
-    calHistDates[k].push({ entry: e, realIdx: idx });
+    if(!grouped[k]) grouped[k] = [];
+    grouped[k].push({ entry: e, realIdx: idx });
   });
+  calHistDates = grouped;
 }
 
 function renderCalendar(){
@@ -3225,8 +3233,10 @@ async function openNewJournal(){
 }
 
 async function renderMemberNote(){
-  if(!currentMember) return;
-  const memos = await getMemos(currentMember.id);
+  const forMember = currentMember;
+  if(!forMember) return;
+  const memos = await getMemos(forMember.id);
+  if(currentMember !== forMember) return; // 그 사이 다른 회원으로 넘어갔으면 버림
   // 특이사항 메모: id가 'note'인 항목
   const note = memos.find(m=>m.id==='note');
   const text = note ? note.content : '';
@@ -5375,11 +5385,29 @@ function removeExercise(ei){
 /* ═══════════════════════════════════════
    SAVE
 ═══════════════════════════════════════ */
+const _journalSaveInFlight = new Set();
+
 async function saveJournal(){
   if(!currentMember) return;
   // 저장 시작 시점의 회원 ID를 고정 (비동기 중 currentMember 바뀌는 거 방지)
   const memberId = currentMember.id;
 
+  // 같은 회원 저장이 이미 진행 중이면(더블탭 등) 새로 시작하지 않음 — 두 저장이
+  // 동시에 예전 기록을 읽고 각자 다시 쓰면, 나중에 끝난 쪽이 먼저 끝난 쪽의
+  // 내용을 통째로 덮어써서 일지가 사라지는 문제로 이어질 수 있음
+  if(_journalSaveInFlight.has(memberId)){
+    showToast('⚠️ 이미 저장 중이에요. 잠시만 기다려주세요.', true);
+    return false;
+  }
+  _journalSaveInFlight.add(memberId);
+  try{
+    return await _saveJournalInner(memberId);
+  } finally {
+    _journalSaveInFlight.delete(memberId);
+  }
+}
+
+async function _saveJournalInner(memberId){
   const hist = await getMemberHistory(memberId);
   const bw=70;
   const entryDateIso = document.getElementById('iEntryDate').value || todayISO();
