@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.4"/>
+<meta name="app-version" content="2.3.5"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -359,7 +359,7 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 .streak-inp{width:42px;height:28px;text-align:center;font-size:16px;border-radius:6px;border:0.5px solid var(--g3);background:#fff;color:var(--g0);outline:none;font-family:inherit;padding:0;}
 
 /* LIVE BAR */
-.live-bar{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;}
+.live-bar{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:14px;}
 .live-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r12);padding:12px 14px;}
 .live-label{font-size:10px;color:var(--t3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;}
 .live-val{font-size:22px;font-weight:600;color:var(--t);line-height:1;}
@@ -868,9 +868,6 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
         <div class="live-label">전체 볼륨</div>
         <div class="live-val" id="sumVol">0<span>kg</span></div>
         <div class="live-delta" id="sumDelta"></div>
-      </div>
-      <div class="live-card">
-        <div class="live-delta" style="font-size:10px;color:var(--t3);">체중 기반 추정</div>
       </div>
     </div>
 
@@ -4807,15 +4804,9 @@ function recalcAll(){
   // 데이터 요약 카드 실시간 갱신 (디바운스 300ms)
   clearTimeout(recalcAll._summaryTimer);
   recalcAll._summaryTimer = setTimeout(()=>renderMemberDataSummary(), 300);
-  // 지난 기록에서 prev 자동 반영
-  const hist = currentMember ? getMemberHistory(currentMember.id) : [];
-  const lastEntry = hist.length ? hist[hist.length-1] : null;
 
   const grandVol = exercises.reduce((s,ex)=>s+exVol(ex),0);
   const grandPrev = exercises.reduce((s,ex)=>s+(ex.prevVol||0),0);
-  const bw = (lastEntry && lastEntry.bw) ? lastEntry.bw : 70;
-  const totalSets = exercises.reduce((s,ex)=>s+ex.sets.length,0);
-  const cal = Math.round(bw*0.088*totalSets*2.5);
 
   document.getElementById('sumVol').innerHTML=grandVol.toLocaleString()+'<span>kg</span>';
 
