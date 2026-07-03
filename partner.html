@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>제휴 문의 — PT 일지</title>
+<style>
+:root {
+  --g0:#3D8A2A; --g1:#52A835; --g2:#EAF3DE; --g3:#C8E6A0;
+  --bg:#F7F7F5; --sf:#FFFFFF; --sf2:#F2F2EF;
+  --bd:#E4E4DF; --bd2:#CECECA;
+  --t:#1A1A18; --t2:#5A5A55; --t3:#9A9A94;
+  --red:#C0392B; --red-l:#FDECEA;
+  --r12:12px; --r16:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{min-height:100%;background:var(--bg);font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;color:var(--t);}
+.wrap{max-width:480px;margin:0 auto;padding:40px 20px 60px;}
+.title{font-size:22px;font-weight:700;margin-bottom:6px;}
+.sub{font-size:14px;color:var(--t2);margin-bottom:28px;line-height:1.6;}
+.field{margin-bottom:14px;}
+.field label{font-size:12px;color:var(--t3);display:block;margin-bottom:5px;letter-spacing:.02em;}
+.field input,.field textarea{width:100%;font-size:16px;padding:12px 14px;border-radius:var(--r12);border:0.5px solid var(--bd2);background:var(--sf);color:var(--t);outline:none;font-family:inherit;resize:vertical;}
+.field input:focus,.field textarea:focus{border-color:var(--g1);}
+.field textarea{min-height:110px;}
+.submit-btn{width:100%;height:50px;background:var(--g0);border:none;border-radius:var(--r12);font-size:15px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;margin-top:6px;}
+.submit-btn:disabled{opacity:.6;cursor:default;}
+.err{font-size:12px;color:var(--red);margin-top:-6px;margin-bottom:12px;display:none;}
+.done-wrap{display:none;text-align:center;padding:60px 20px;}
+.done-icon{font-size:40px;margin-bottom:14px;}
+.done-title{font-size:18px;font-weight:700;margin-bottom:8px;}
+.done-sub{font-size:14px;color:var(--t2);line-height:1.6;}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="formWrap">
+  <div class="title">제휴 문의</div>
+  <div class="sub">PT 일지 도입, 협업 제안 등 편하게 남겨주시면<br/>확인 후 연락드릴게요.</div>
+
+  <form id="partnerForm">
+    <div class="field">
+      <label>성함</label>
+      <input name="name" id="pName" required/>
+    </div>
+    <div class="field">
+      <label>체육관 · 소속</label>
+      <input name="organization" id="pOrg"/>
+    </div>
+    <div class="field">
+      <label>연락처 (이메일 또는 전화번호)</label>
+      <input name="contact" id="pContact" required/>
+    </div>
+    <div class="field">
+      <label>문의 내용</label>
+      <textarea name="message" id="pMessage" required></textarea>
+    </div>
+    <div class="err" id="pErr">전송에 실패했어요. 잠시 후 다시 시도해주세요.</div>
+    <button type="submit" class="submit-btn" id="pSubmitBtn">문의 보내기</button>
+  </form>
+</div>
+
+<div class="done-wrap" id="doneWrap">
+  <div class="done-icon">✅</div>
+  <div class="done-title">문의가 접수됐어요</div>
+  <div class="done-sub">확인 후 남겨주신 연락처로<br/>연락드릴게요. 감사합니다!</div>
+</div>
+
+<script>
+const FORM_ENDPOINT = 'https://formspree.io/f/xnjkorny';
+
+document.getElementById('partnerForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const btn = document.getElementById('pSubmitBtn');
+  const errEl = document.getElementById('pErr');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = '보내는 중...';
+
+  const data = {
+    name: document.getElementById('pName').value.trim(),
+    organization: document.getElementById('pOrg').value.trim(),
+    contact: document.getElementById('pContact').value.trim(),
+    message: document.getElementById('pMessage').value.trim(),
+  };
+
+  try{
+    const res = await fetch(FORM_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if(!res.ok) throw new Error('failed');
+    document.getElementById('formWrap').style.display = 'none';
+    document.getElementById('doneWrap').style.display = 'block';
+  } catch(err){
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '문의 보내기';
+  }
+});
+</script>
+</body>
+</html>
