@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.0"/>
+<meta name="app-version" content="2.3.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1356,7 +1356,17 @@ async function getMembers(){
   if(!TRAINER_ID) return [];
   const k = 'members_'+TRAINER_ID;
   if(cacheGet(k)!==null) return cloneData(cacheGet(k));
-  const v = await fsList(k);
+  let v = await fsList(k);
+  if(v.length === 0){
+    // 회원 한 명당 문서로 저장하는 구조로 바뀌기 전, 배열 통짜로 저장했던 트레이너가
+    // 다시 로그인했을 때를 대비한 1회성 자동 이전(새 구조가 비어있고 예전 데이터가
+    // 남아있을 때만 동작함)
+    const legacy = await fsGet('data', k) || [];
+    if(legacy.length > 0){
+      for(const m of legacy){ await fsSet(k, m.id, m); }
+      v = legacy;
+    }
+  }
   cacheSet(k,v); return cloneData(v);
 }
 // 회원 한 명당 문서 하나(회원 ID가 문서 ID)로 저장함. 예전엔 회원 목록 전체를 배열
