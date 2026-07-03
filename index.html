@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.0.8"/>
+<meta name="app-version" content="2.1.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -2038,7 +2038,7 @@ async function saveMemoEntry(editIdx){
   if(editIdx !== null && editIdx !== undefined){
     memos[editIdx].content = content;
   } else {
-    memos.push({ id:'m_'+Date.now(), date:getShortDate(), dateTime:new Date().toISOString(), content });
+    memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:getShortDate(), dateTime:new Date().toISOString(), content });
   }
   const noteEntry = allMemos.find(m=>m.id==='note');
   const finalMemos = noteEntry ? [noteEntry, ...memos] : memos;
@@ -2307,7 +2307,7 @@ async function submitInbodyOnboarding(){
   const bmr = obGender==='male'
     ? Math.round(88.362 + 13.397*w + 4.799*h - 5.677*a)
     : Math.round(447.593 + 9.247*w + 3.098*h - 4.330*a);
-  const entry = { id:'i_'+Date.now(), date:getShortDate(), dateTime:new Date().toISOString(), weight:w, height:h, age:a, gender:obGender, bmr };
+  const entry = { id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:getShortDate(), dateTime:new Date().toISOString(), weight:w, height:h, age:a, gender:obGender, bmr };
   const saved = await getDietData(currentMember.id);
   if(!saved.inbodyHistory) saved.inbodyHistory = [];
   saved.inbodyHistory.push(entry);
@@ -2561,7 +2561,7 @@ async function analyzeInbody(){
     const parsed = JSON.parse(clean);
 
     const entry = {
-      id: 'i_' + Date.now(),
+      id: 'i_' + Date.now()+'_'+Math.random().toString(36).slice(2,7) + '_' + Math.random().toString(36).slice(2,7),
       date: getShortDate(),
       dateTime: new Date().toISOString(),
       bmr: parsed.bmr, muscle: parsed.muscle, fat: parsed.fat,
@@ -2749,7 +2749,7 @@ function showMealConfirm(parsed, targetKcal){
 
 async function saveMealResult(parsed, targetKcal){
   const entry = {
-    id: 'm_' + Date.now(),
+    id: 'm_' + Date.now()+'_'+Math.random().toString(36).slice(2,7) + '_' + Math.random().toString(36).slice(2,7),
     date: getShortDate(),
     dateTime: new Date().toISOString(),
     calories: parsed.calories || 0,
@@ -3777,7 +3777,7 @@ async function doAddMember(){
   if (!name) return;
   const total = parseInt(document.getElementById('newMemberTotal').value) || null;
   const members = await getMembers();
-  const id = 'm_' + Date.now();
+  const id = 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
   members.push({id, name, totalSessions: total});
   await saveMembers(members);
   document.getElementById('newMemberTotal').value = '';
@@ -3818,38 +3818,42 @@ function switchTab(t){
 }
 
 async function saveMemoFromInputTab(){
+  if(!currentMember) return;
+  const memberId = currentMember.id;
   const inp = document.getElementById('inputTabMemoInput');
   const content = (inp.value || '').trim();
   if(!content) return;
-  const memos = await getMemos(currentMember.id);
+  const memos = await getMemos(memberId);
   const today = getShortDate();
   const todayEntry = memos.find(m=>m.id!=='note' && m.date===today);
   if(todayEntry){
     todayEntry.content = todayEntry.content + '\n' + content;
     todayEntry.dateTime = new Date().toISOString();
   } else {
-    memos.push({ id:'m_'+Date.now(), date:today, dateTime:new Date().toISOString(), content });
+    memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:today, dateTime:new Date().toISOString(), content });
   }
-  await saveMemos(currentMember.id, memos);
+  await saveMemos(memberId, memos);
   inp.value = '';
   showToast('메모 저장 완료 ✓');
   renderMemoTab();
 }
 
 async function saveInlineMemo(){
+  if(!currentMember) return;
+  const memberId = currentMember.id;
   const inp = document.getElementById('inlineMemoInput');
   const content = (inp.value || '').trim();
   if(!content) return;
-  const memos = await getMemos(currentMember.id);
+  const memos = await getMemos(memberId);
   const today = getShortDate();
   const todayEntry = memos.find(m=>m.id!=='note' && m.date===today);
   if(todayEntry){
     todayEntry.content = todayEntry.content + '\n' + content;
     todayEntry.dateTime = new Date().toISOString();
   } else {
-    memos.push({ id:'m_'+Date.now(), date:today, dateTime:new Date().toISOString(), content });
+    memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:today, dateTime:new Date().toISOString(), content });
   }
-  await saveMemos(currentMember.id, memos);
+  await saveMemos(memberId, memos);
   inp.value = '';
   inp.style.height = 'auto';
   renderMemoTab();
@@ -3935,8 +3939,11 @@ async function loadDraftToForm(){
   if(memoInp) memoInp.value = d.sessionMemo || '';
 }
 
+let _draftSuppressed = false;
+
 function autoSaveDraft(){
   if(!currentMember || editingEntryIdx !== null) return;
+  if(_draftSuppressed) return;
 
   // 아무것도 입력 안 했으면 임시저장 안 함
   const hasExercise = exercises.some(ex => ex.name || (ex.sets||[]).some(s=>s.w||s.r));
@@ -5238,22 +5245,25 @@ function removeExercise(ei){
 ═══════════════════════════════════════ */
 async function saveJournal(){
   if(!currentMember) return;
-  const hist = await getMemberHistory(currentMember.id);
-  const bw=70; // 추후 입력 추가 가능
+  // 저장 시작 시점의 회원 ID를 고정 (비동기 중 currentMember 바뀌는 거 방지)
+  const memberId = currentMember.id;
+
+  const hist = await getMemberHistory(memberId);
+  const bw=70;
   const entryDateIso = document.getElementById('iEntryDate').value || todayISO();
 
   // 회차 아래 메모 저장
   const sessionMemoText = (document.getElementById('sessionMemoInput')?.value||'').trim();
   if(sessionMemoText){
-    const memos = await getMemos(currentMember.id);
+    const memos = await getMemos(memberId);
     const today = getShortDate();
     const existing = memos.find(m=>m.id!=='note' && m.date===today && m.sessionMemo);
     if(existing){
       existing.content = sessionMemoText;
     } else {
-      memos.push({ id:'m_'+Date.now(), date:today, dateTime:new Date().toISOString(), content:sessionMemoText, sessionMemo:true });
+      memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:today, dateTime:new Date().toISOString(), content:sessionMemoText, sessionMemo:true });
     }
-    await saveMemos(currentMember.id, memos);
+    await saveMemos(memberId, memos);
   }
 
   const exData = exercises.map(ex=>({
@@ -5293,7 +5303,7 @@ async function saveJournal(){
     );
 
     const entry = {
-      id: existIdx >= 0 ? hist[existIdx].id : 'e_'+Date.now(),
+      id: existIdx >= 0 ? hist[existIdx].id : 'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7),
       date: entryDate,
       dateTime: entryDateIso,
       bw,
@@ -5313,7 +5323,7 @@ async function saveJournal(){
     }
   }
 
-  await saveMemberHistory(currentMember.id, hist);
+  await saveMemberHistory(memberId, hist);
 
   // 드래그 힌트 영구 숨김
   localStorage.setItem('hint_drag_seen', '1');
@@ -5325,7 +5335,9 @@ async function saveJournal(){
   if(copyHint) copyHint.style.display = 'none';
 
   // 임시저장 삭제 (신규/수정 모두)
-  clearDraft(currentMember.id);
+  _draftSuppressed = true;
+  clearDraft(memberId);
+  setTimeout(()=>{ _draftSuppressed = false; }, 2000);
 
   // 달력 갱신
   await buildCalHistDates();
@@ -5339,8 +5351,8 @@ async function saveJournal(){
 // 저장만 하고 화면 나가기
 async function saveOnly(){
   const btn = document.querySelector('.bottom-btns button:first-child');
+  _draftSuppressed = true; // 저장 후 임시저장 재생성 방지
   await saveJournal();
-  // 저장 완료 후 임시저장 제거 (작성 중 뱃지 사라지게)
   if(currentMember) clearDraft(currentMember.id);
   showToast('저장 완료 ✓');
   if(btn){
@@ -5348,7 +5360,9 @@ async function saveOnly(){
     btn.innerHTML = '✓ 저장됨';
     btn.style.background = 'var(--g0)';
     btn.style.color = '#fff';
-    setTimeout(()=>{ btn.innerHTML=orig; btn.style.background=''; btn.style.color=''; }, 1500);
+    setTimeout(()=>{ btn.innerHTML=orig; btn.style.background=''; btn.style.color=''; _draftSuppressed = false; }, 1500);
+  } else {
+    setTimeout(()=>{ _draftSuppressed = false; }, 1500);
   }
 }
 
