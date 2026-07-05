@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.11"/>
+<meta name="app-version" content="2.3.12"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -3367,10 +3367,14 @@ async function renderRecentMemoBar(){
 
 async function openEditJournal(idx){
   if(!currentMember) return;
+  // 조회 시작 시점의 회원을 고정해둠 — await 도중 다른 회원 화면으로 넘어가면
+  // 그 회원 기준 idx로 엉뚱한(현재 회원의) 일지를 덮어쓰게 되는 걸 방지
+  const forMember = currentMember;
   // 복사 버튼 초기화
   const copyBtn = document.getElementById('copyBtn');
   if(copyBtn){ copyBtn.classList.remove('done'); copyBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 저장 + 카톡 전송'; }
-  const hist = await getMemberHistory(currentMember.id);
+  const hist = await getMemberHistory(forMember.id);
+  if(currentMember !== forMember) return; // 그 사이 다른 회원으로 넘어갔으면 중단
   const e = hist[idx];
   if(!e) return;
 
