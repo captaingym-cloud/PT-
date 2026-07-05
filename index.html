@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.14"/>
+<meta name="app-version" content="2.3.15"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1213,6 +1213,7 @@ async function callGeminiAPI({ system, messages, max_tokens }){
 /* ── Firebase Auth: TRAINER_ID 기반 가이메일 로그인 ── */
 let fsToken = null; // 현재 발급받은 인증 토큰
 let fsTokenExpiry = 0;
+let fsUid = null; // Firebase Auth 고유 사용자 ID (보안 규칙에서 소유자 확인용)
 
 function trainerEmail(trainerId){
   // TRAINER_ID(이름_PIN)를 가이메일로 변환, Firebase Auth 이메일 형식 제약 대응
@@ -1235,6 +1236,7 @@ async function fsAuthEnsure(trainerId, pin){
     if(res.ok){
       const data = await res.json();
       fsToken = data.idToken;
+      fsUid = data.localId;
       fsTokenExpiry = Date.now() + (parseInt(data.expiresIn||'3600')*1000) - 60000;
       return true;
     }
@@ -1249,6 +1251,7 @@ async function fsAuthEnsure(trainerId, pin){
     if(res.ok){
       const data = await res.json();
       fsToken = data.idToken;
+      fsUid = data.localId;
       fsTokenExpiry = Date.now() + (parseInt(data.expiresIn||'3600')*1000) - 60000;
       return true;
     }
@@ -1289,9 +1292,15 @@ async function fsGet(col, docId){
 async function fsSet(col, docId, value){
   try{
     await ensureFreshToken();
-    const body = {fields: {v: {stringValue: JSON.stringify(value)}}};
+    // v(실제 데이터)랑 별도로 ownerId(누가 저장했는지, 보안 규칙에서 소유자
+    // 확인용) 필드를 같이 기록함. value가 배열이어도 문서 자체의 필드라
+    // 상관없이 붙일 수 있음
+    const body = {fields: {
+      v: {stringValue: JSON.stringify(value)},
+      ownerId: {stringValue: fsUid || ''},
+    }};
     const res = await fetch(
-      `${FS_BASE}/${col}/${encodeURIComponent(docId)}?updateMask.fieldPaths=v`,
+      `${FS_BASE}/${col}/${encodeURIComponent(docId)}?updateMask.fieldPaths=v&updateMask.fieldPaths=ownerId`,
       {method:'PATCH', headers:{'Content-Type':'application/json', ...fsAuthHeaders()}, body:JSON.stringify(body)}
     );
     return res.ok;

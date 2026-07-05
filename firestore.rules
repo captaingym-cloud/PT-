@@ -1,0 +1,63 @@
+rules_version = '2';
+
+// 트레이너 앱은 Firestore REST API를 SDK 없이 직접 호출하는 구조라, 문서 하나에
+// 실제 데이터를 JSON 문자열(v 필드)로 통째로 저장하고, 그 옆에 ownerId(저장한
+// 사람의 Firebase Auth UID) 필드를 같이 기록해서 "이 문서의 진짜 주인이 누구인지"
+// 표시합니다. 이 규칙은 그 ownerId를 기준으로, 로그인한 사람이 자기 데이터만
+// 만지도록 제한합니다.
+//
+// 단, ownerId 필드를 붙이기 시작한 게 오늘부터라 예전에 저장된 문서엔 이 필드가
+// 없습니다. 예전 문서까지 갑자기 막히면 실제 트레이너들이 로그인 못 하는 사고로
+// 이어지므로, ownerId가 아직 없는 문서는 "로그인만 하면" 접근을 허용하는 과도기
+// 규칙을 같이 둡니다. 이후 예전 문서에도 ownerId를 채워 넣는 마이그레이션을
+// 하고 나면, 과도기 허용 부분을 지우고 완전히 잠글 수 있습니다.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnerOrLegacy() {
+      return isLoggedIn() && (
+        resource == null ||
+        !('ownerId' in resource.data) ||
+        resource.data.ownerId == '' ||
+        resource.data.ownerId == request.auth.uid
+      );
+    }
+
+    // 기본값: 아무것도 명시적으로 허용 안 하면 전부 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 트레이너 프로필
+    match /trainers/{docId} {
+      allow read, write: if isOwnerOrLegacy();
+    }
+
+    // 대표님 대시보드가 전체 트레이너 목록을 봐야 해서, 읽기는 로그인만 하면 허용.
+    // 쓰기(자기 이름 등록)는 본인 것만.
+    match /trainer_directory/{docId} {
+      allow read: if isLoggedIn();
+      allow write: if isOwnerOrLegacy();
+    }
+
+    // 대표님 마스터 PIN 등 — 트레이너 구분 없이 로그인만 하면 허용 (기존과 동일)
+    match /admin/{docId} {
+      allow read, write: if isLoggedIn();
+    }
+
+    // hist_/diet_/memo_/sent_/tone_ 등 회원별 데이터
+    match /data/{docId} {
+      allow read, write: if isOwnerOrLegacy();
+    }
+
+    // members_<트레이너ID> 처럼 트레이너마다 이름이 다른 회원 목록 컬렉션
+    match /{collection}/{docId} {
+      allow read, write: if collection.matches('^members_.*') && isOwnerOrLegacy();
+    }
+  }
+}
