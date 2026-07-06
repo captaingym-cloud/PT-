@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.15"/>
+<meta name="app-version" content="2.3.16"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1214,6 +1214,8 @@ async function callGeminiAPI({ system, messages, max_tokens }){
 let fsToken = null; // 현재 발급받은 인증 토큰
 let fsTokenExpiry = 0;
 let fsUid = null; // Firebase Auth 고유 사용자 ID (보안 규칙에서 소유자 확인용)
+let fsAuthedEmail = null; // 현재 토큰이 어느 계정(이메일) 걸로 발급된 건지 — 로그아웃 없이
+                          // 다른 트레이너로 전환할 때 예전 토큰을 잘못 재사용하는 것 방지용
 
 function trainerEmail(trainerId){
   // TRAINER_ID(이름_PIN)를 가이메일로 변환, Firebase Auth 이메일 형식 제약 대응
@@ -1222,9 +1224,11 @@ function trainerEmail(trainerId){
 }
 
 async function fsAuthEnsure(trainerId, pin){
-  // 토큰이 있고 아직 안 만료됐으면 재사용
-  if(fsToken && Date.now() < fsTokenExpiry) return true;
   const email = trainerEmail(trainerId);
+  // 토큰이 있고 아직 안 만료됐고, "같은 계정"일 때만 재사용 — 로그아웃 후 다른
+  // 트레이너로 전환했는데 예전 토큰이 안 지워져서 그 계정으로 계속 저장 시도되는
+  // 사고를 막기 위해 이메일까지 같이 확인함
+  if(fsToken && Date.now() < fsTokenExpiry && fsAuthedEmail === email) return true;
   const password = 'pw_' + pin + '_captaingym'; // PIN 기반 고정 비밀번호 (가입/로그인 동일하게 사용)
 
   // 1) 로그인 시도
@@ -1237,6 +1241,7 @@ async function fsAuthEnsure(trainerId, pin){
       const data = await res.json();
       fsToken = data.idToken;
       fsUid = data.localId;
+      fsAuthedEmail = email;
       fsTokenExpiry = Date.now() + (parseInt(data.expiresIn||'3600')*1000) - 60000;
       return true;
     }
@@ -1252,6 +1257,7 @@ async function fsAuthEnsure(trainerId, pin){
       const data = await res.json();
       fsToken = data.idToken;
       fsUid = data.localId;
+      fsAuthedEmail = email;
       fsTokenExpiry = Date.now() + (parseInt(data.expiresIn||'3600')*1000) - 60000;
       return true;
     }
@@ -3176,6 +3182,14 @@ async function openDetailModal(e, idx){
           +'<span class="detail-set-main">'+mainStr+'</span>'
           +'<span class="detail-set-vol">'+(ex.timeMode?'':vol.toLocaleString()+'kg')+'</span>'
           +'</div>';
+        (st.drops||[]).forEach(d => {
+          const dvol = (d.w||0) * (d.r||0);
+          html += '<div class="detail-set-row" style="padding-left:16px;">'
+            +'<span class="detail-set-idx" style="color:var(--red);">↓드롭</span>'
+            +'<span class="detail-set-main">'+(d.w||0)+'kg × '+(d.r||0)+'개</span>'
+            +'<span class="detail-set-vol">'+(dvol?dvol.toLocaleString()+'kg':'')+'</span>'
+            +'</div>';
+        });
       });
       if((ex.comment||'').trim()){
         html += '<div style="padding:8px 14px 10px;font-size:12px;color:var(--t2);border-top:0.5px solid var(--bd);line-height:1.6;">'+ex.comment.trim().replace(/\n/g,'<br>')+'</div>';
@@ -3419,7 +3433,10 @@ async function openEditJournal(idx){
     prevVol:  ex.prevVol  || 0,
     comment:  ex.comment  || '',
     color:    ex.color    || null,
-    sets: (ex.sets||[]).map(st => ({w: st.w, r: st.r})),
+    sets: (ex.sets||[]).map(st => ({
+      w: st.w, r: st.r,
+      ...(st.drops && st.drops.length ? { drops: st.drops.map(d => ({w: d.w, r: d.r})) } : {}),
+    })),
   }));
 
   document.getElementById('journalMemberName').textContent = currentMember.name + '님';
@@ -3925,6 +3942,14 @@ function doLogout(){
   localStorage.removeItem('trainer_gym');
   localStorage.removeItem('trainer_contact');
   TRAINER_ID = null;
+  // 인증 토큰도 같이 지워서, 다시 로그인할 때(다른 트레이너든 같은 트레이너든)
+  // 무조건 새로 인증하게 함 — 안 지우면 예전 계정 토큰이 재사용돼서 새 트레이너로
+  // 로그인한 것처럼 화면엔 보이는데 실제 저장은 예전 계정 권한으로 시도되다가
+  // 소유자(ownerId) 불일치로 조용히 실패하는 문제가 있었음
+  fsToken = null;
+  fsUid = null;
+  fsTokenExpiry = 0;
+  fsAuthedEmail = null;
   Object.keys(cache).forEach(k => delete cache[k]);
   showScreen('screen-setup');
   document.getElementById('setupName').value = '';
@@ -4314,7 +4339,7 @@ async function loadDashTrainerList(){
   let totalToday = 0, totalSent = 0, totalUnsent = 0;
 
   const trainerStats = await Promise.all(trainers.map(async t => {
-    const members = await fsGet('data', 'members_'+t.trainerId) || [];
+    const members = await fsList('members_'+t.trainerId);
     const sent = await fsGet('data', 'sent_'+t.trainerId) || {};
     let todayTotal = 0, todaySent = 0;
     await Promise.all(members.map(async m => {
@@ -4432,7 +4457,7 @@ async function openDashTrainer(t){
 
 async function loadDashData(){
   document.getElementById('dashMemberList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
-  const members = await fsGet('data', 'members_'+dashTrainerId) || [];
+  const members = await fsList('members_'+dashTrainerId);
   const sent = await fsGet('data', 'sent_'+dashTrainerId) || {};
   const memberData = await Promise.all(members.map(async m => {
     const hist = await fsGet('data', 'hist_'+dashTrainerId+'_'+m.id) || [];
@@ -4856,8 +4881,17 @@ function updateIntensity(v){
 /* ═══════════════════════════════════════
    CALC
 ═══════════════════════════════════════ */
-function exVol(ex){return ex.sets.reduce((s,st)=>s+st.w*st.r,0);}
-function exMaxW(ex){return ex.sets.length?Math.max(...ex.sets.map(st=>st.w)):0;}
+function exVol(ex){
+  return ex.sets.reduce((s,st)=>{
+    const dropVol = (st.drops||[]).reduce((ds,d)=>ds+(d.w||0)*(d.r||0),0);
+    return s+st.w*st.r+dropVol;
+  },0);
+}
+function exMaxW(ex){
+  if(!ex.sets.length) return 0;
+  const allW = ex.sets.flatMap(st=>[st.w, ...(st.drops||[]).map(d=>d.w||0)]);
+  return Math.max(...allW);
+}
 // 전 세트 무게가 0이면 맨몸운동으로 간주
 function isAssist(ex){ return (ex.name||'').includes('어시스트'); }
 function wDisplay(ex, w){ return (isAssist(ex) && Number(w)>0) ? '-'+w : w; }
@@ -5239,7 +5273,7 @@ function buildExCard(ei){
       </div>
       <div class="ex-color-row">
         ${colorDots}
-        <span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">🔴가슴 🔵등 🟡어깨 🟢하체 🟣팔 🟠코어</span>
+        ${ei===0 && !localStorage.getItem('hint_drag_seen') ? '<span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">🔴가슴 🔵등 🟡어깨 🟢하체 🟣팔 🟠코어</span>' : ''}
       </div>
       <div class="prev-auto-row" id="prevInfo-${ei}"></div>
       <div class="sets-area" id="sets-${ei}"></div>
@@ -5647,12 +5681,28 @@ function saveAndCopy(){
   const wasEdit = editingEntryIdx !== null && editingEntryIdx !== undefined;
   const btn = document.getElementById('copyBtn');
 
+  // 클립보드 복사가 성공해도 실제 Firestore 저장이 실패할 수 있는데, 예전엔
+  // "복사 성공 → 화면에 전송완료! 표시 → 그 다음에서야 저장 시도" 순서라서 저장이
+  // 실패해도 이미 전송완료 표시를 본 사용자가 실패 토스트를 놓치기 쉬웠음(실제로
+  // 일지가 저장 안 된 채 화면을 나가버리는 사고로 이어짐). 그래서 저장은 클립보드
+  // 복사와 동시에 시작하되(iOS 클립보드 권한 때문에 복사 자체는 그대로 클릭 핸들러
+  // 안에서 동기 호출), "전송완료!" 표시와 화면 이동은 반드시 저장이 실제로 성공한
+  // 뒤에만 하도록 바꿈.
+  const savePromise = saveJournal();
+
   function markDone(){
     btn.classList.add('done');
     btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 전송 완료!';
-    // 저장 + 전송 기록 + 화면 나가기
-    saveJournal().then(async (saveOk) => {
-      if(!saveOk) return; // saveJournal()이 이미 실패 토스트를 띄움 — 저장 안 됐으니 전송 기록도 남기지 않음
+  }
+
+  function finalizeAfterCopy(copiedOk){
+    savePromise.then(async (saveOk) => {
+      if(!saveOk){
+        // saveJournal()이 이미 실패 토스트를 띄웠지만, 놓치기 쉬우니 확실하게 alert로도 알림
+        alert('⚠️ 저장에 실패했어요! 방금 복사된 내용은 아직 저장되지 않았어요.\n인터넷 연결을 확인하고 다시 시도해주세요.');
+        return; // 화면 안 나가고 그대로 남아서 다시 저장 시도할 수 있게 함
+      }
+      if(copiedOk) markDone();
       try{
         if(currentMember){
           const hist = await getMemberHistory(currentMember.id);
@@ -5660,16 +5710,20 @@ function saveAndCopy(){
           if(last) await recordSent(currentMember.id, last.id);
         }
       } catch(e){}
-      setTimeout(()=>goBack(), 800);
-    }).catch(()=>setTimeout(()=>goBack(), 800));
+      setTimeout(()=>goBack(), copiedOk?800:0);
+    }).catch(()=>{
+      alert('⚠️ 저장에 실패했어요! 방금 복사된 내용은 아직 저장되지 않았어요.\n인터넷 연결을 확인하고 다시 시도해주세요.');
+    });
   }
   function fallback(text){
     const ta=document.createElement('textarea');
     ta.value=text;ta.style.cssText='position:fixed;top:0;left:0;width:2em;height:2em;opacity:0;';
     document.body.appendChild(ta);ta.focus();ta.select();
-    try{ if(document.execCommand('copy')) markDone(); else showModal(text); }
+    let copiedOk=false;
+    try{ copiedOk = document.execCommand('copy'); if(!copiedOk) showModal(text); }
     catch(e){ showModal(text); }
     document.body.removeChild(ta);
+    finalizeAfterCopy(copiedOk);
   }
 
   // iOS Safari는 클릭 이벤트 핸들러 안에서 동기적으로 호출해야
@@ -5680,14 +5734,14 @@ function saveAndCopy(){
     const item = new ClipboardItem({
       'text/plain': textPromise.then(t => new Blob([t], {type:'text/plain'}))
     });
-    navigator.clipboard.write([item]).then(markDone).catch(async () => {
+    navigator.clipboard.write([item]).then(()=>finalizeAfterCopy(true)).catch(async () => {
       const text = await textPromise;
       fallback(text);
     });
   } else {
     buildText().then(text => {
       if(navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(text).then(markDone).catch(()=>fallback(text));
+        navigator.clipboard.writeText(text).then(()=>finalizeAfterCopy(true)).catch(()=>fallback(text));
       } else {
         fallback(text);
       }
@@ -5906,7 +5960,10 @@ async function doCopyEntry(idx){
       (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+st.r+'개'));
       L.push('   총 '+totalReps+'개');
     } else {
-      (ex.sets||[]).forEach((st,si)=>L.push('   '+(si+1)+'세트  '+wDisplay(ex,st.w)+'kg × '+st.r+'회'));
+      (ex.sets||[]).forEach((st,si)=>{
+        L.push('   '+(si+1)+'세트  '+wDisplay(ex,st.w)+'kg × '+st.r+'회');
+        (st.drops||[]).forEach(d=>L.push('     ↓드롭  '+(d.w||0)+'kg × '+(d.r||0)+'회'));
+      });
       L.push('   최고 '+ex.maxW+'kg  볼륨 '+ex.vol.toLocaleString()+'kg'+(pct!==null?'  ('+(diff>=0?'+':'')+pct+'%)':''));
     }
     if((ex.comment||'').trim()){
