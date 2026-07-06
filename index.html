@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.16"/>
+<meta name="app-version" content="2.3.17"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1276,9 +1276,17 @@ function fsAuthHeaders(){
 // 확인해서 필요하면 조용히 다시 로그인함
 async function ensureFreshToken(){
   if(fsToken && Date.now() < fsTokenExpiry) return;
-  if(!TRAINER_ID) return;
-  const pin = localStorage.getItem('trainer_pin') || '0000';
-  await fsAuthEnsure(TRAINER_ID, pin);
+  if(TRAINER_ID){
+    const pin = localStorage.getItem('trainer_pin') || '0000';
+    await fsAuthEnsure(TRAINER_ID, pin);
+    return;
+  }
+  // 대표님 대시보드는 TRAINER_ID가 없어서 위 경로를 안 타는데, 그렇다고 아무것도
+  // 안 하면 토큰이 만료된 채로 계속 조용히 실패해서 "오늘 수업 기록 없음"처럼
+  // 데이터가 있는데도 없는 것처럼 보이는 문제가 있었음
+  if(dashAdminPin){
+    await fsAuthEnsure('__admin__', dashAdminPin);
+  }
 }
 
 // Firestore 문서 경로: col/docId
@@ -4290,6 +4298,7 @@ function showUpdateBanner(newVersion){
 let dashFilter = 'all';
 let dashTrainerId = null;
 let dashEntryStore = {};
+let dashAdminPin = null; // 대표님 대시보드 세션 중 토큰 만료 시 재인증에 씀
 
 async function doDashLogin(){
   const pin = document.getElementById('dashMasterPin').value.trim();
@@ -4297,6 +4306,7 @@ async function doDashLogin(){
   // 대표님 전용 마스터 계정으로 인증 (전체 데이터 열람 권한)
   const authOk = await fsAuthEnsure('__admin__', pin);
   if(!authOk){ document.getElementById('dashLoginErr').style.display='block'; return; }
+  dashAdminPin = pin;
   let config = await fsGet('admin', 'config');
   if(!config){
     config = { masterPin: pin, createdAt: new Date().toISOString() };
