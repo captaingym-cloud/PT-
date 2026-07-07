@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.3.17"/>
+<meta name="app-version" content="2.4.0"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -81,6 +81,7 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .greeting-name{font-size:20px;font-weight:700;color:var(--g0);margin-bottom:3px;}
 .greeting-sub{font-size:13px;color:var(--g1);}
 .section-label{font-size:10px;font-weight:600;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;}
+.member-letter-header{font-size:13px;font-weight:700;color:var(--g0);padding:14px 4px 6px;position:sticky;top:0;background:var(--bg);z-index:1;}
 .member-card-wrap{position:relative;margin-bottom:8px;border-radius:var(--r16);overflow:hidden;}
 .member-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .2s ease;position:relative;z-index:1;}
 .member-card:active{background:var(--sf2);}
@@ -636,6 +637,7 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
           <span style="font-size:12px;font-weight:700;color:var(--t2);">📌 회원 특이사항</span>
           <span id="memberNoteToggleIcon" style="font-size:12px;color:var(--t3);">✏️</span>
         </div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:2px;">여기 적어두면 이 화면 위에서 항상 체크할 수 있어요</div>
         <div id="memberNotePreview" style="font-size:13px;color:var(--t3);margin-top:4px;">메모 없음 — 탭해서 추가</div>
       </div>
       <div id="memberNoteEdit" style="display:none;background:var(--sf);border:0.5px solid var(--g0);border-radius:var(--r16);padding:12px 16px;margin-bottom:10px;">
@@ -873,10 +875,15 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
 
     <!-- 회차 아래 메모 -->
     <div id="sessionMemoWrap" style="margin-bottom:10px;">
+      <div style="display:flex;align-items:baseline;gap:5px;margin-bottom:5px;padding:0 2px;">
+        <span style="font-size:13px;">📝</span>
+        <span style="font-size:13px;font-weight:700;color:var(--t);">메모</span>
+        <span style="font-size:11px;color:var(--g0);font-weight:600;">다음 수업 때 위에 보여요</span>
+      </div>
       <div id="sessionMemoPrev" style="display:none;background:var(--sf2);border-radius:var(--r12);padding:10px 14px;margin-bottom:6px;font-size:13px;color:var(--t2);line-height:1.6;border:0.5px solid var(--bd);"></div>
       <textarea id="sessionMemoInput" rows="2" placeholder="다음 수업 때 기억할 것, 회원 전달사항 등..."
-        style="width:100%;border:0.5px solid var(--bd);border-radius:var(--r12);padding:10px 14px;font-size:13px;font-family:inherit;outline:none;resize:none;background:var(--sf);color:var(--t);line-height:1.6;"
-        oninput="autoSaveDraft()"></textarea>
+        style="width:100%;border:1px solid var(--g3);border-radius:var(--r12);padding:10px 14px;font-size:13px;font-family:inherit;outline:none;resize:none;background:var(--g2);color:var(--t);line-height:1.6;"
+        oninput="syncNoteBoxes(this.value, 'sessionMemoInput')"></textarea>
     </div>
 
 
@@ -956,10 +963,9 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     <div style="background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);overflow:hidden;margin-bottom:14px;">
       <textarea id="inputTabMemoInput" rows="3"
         placeholder="수업 중 특이사항, 대화 내용 등 자유롭게..."
-        style="width:100%;font-size:14px;border:none;outline:none;padding:14px 16px;background:transparent;color:var(--t);font-family:inherit;line-height:1.6;resize:none;"></textarea>
-      <div style="padding:0 12px 10px;display:flex;justify-content:flex-end;">
-        <button onclick="saveMemoFromInputTab()" style="font-size:13px;font-weight:600;color:#fff;background:var(--g0);border:none;border-radius:var(--r8);padding:7px 16px;cursor:pointer;font-family:inherit;">메모 저장</button>
-      </div>
+        style="width:100%;font-size:14px;border:none;outline:none;padding:14px 16px;background:transparent;color:var(--t);font-family:inherit;line-height:1.6;resize:none;"
+        oninput="syncNoteBoxes(this.value, 'inputTabMemoInput')"></textarea>
+      <div style="padding:0 12px 10px;font-size:11px;color:var(--t3);">위에 있는 메모칸과 같이 연동돼요 — 일지 저장하면 같이 저장돼요</div>
     </div>
   </div>
 
@@ -1631,6 +1637,8 @@ document.addEventListener('DOMContentLoaded', async function(){
     if(document.visibilityState === 'hidden') autoSaveDraft();
   });
 
+  initCalSwipe();
+
   // 버전 체크
   // (버전 체크는 로그인 인증 완료 후로 이동)
 
@@ -1725,6 +1733,17 @@ async function doSetup(){
 /* ═══════════════════════════════════════
    MEMBER LIST
 ═══════════════════════════════════════ */
+// 한글 이름 첫 글자의 초성을 뽑아서 전화번호부처럼 묶어 보여줄 때 씀.
+// 쌍자음은 홑자음 그룹으로 합침(ㄲ→ㄱ 등). 한글이 아니면 그 글자 그대로(영문 대문자 등) 사용
+const CHOSUNG_GROUP = ['ㄱ','ㄱ','ㄴ','ㄷ','ㄷ','ㄹ','ㅁ','ㅂ','ㅂ','ㅅ','ㅅ','ㅇ','ㅈ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+function getChosungGroup(name){
+  const ch = (name||'').trim().charAt(0);
+  const code = ch.charCodeAt(0) - 0xAC00;
+  if(code < 0 || code > 11171) return ch.toUpperCase() || '#';
+  const choIdx = Math.floor(code / (21*28));
+  return CHOSUNG_GROUP[choIdx] || ch;
+}
+
 async function renderMemberList(){
   const trainer = await getTrainer();
   const members = await getMembers();
@@ -1760,9 +1779,30 @@ async function renderMemberList(){
     return { m, hist, lastDate, lastTime, isExpired, maxSession };
   }));
 
-  // 분리: 활성 / 만료
-  const active  = memberData.filter(d => !d.isExpired).sort((a,b) => b.lastTime - a.lastTime);
-  const expired = memberData.filter(d =>  d.isExpired).sort((a,b) => b.lastTime - a.lastTime);
+  // 분리: 활성 / 만료. 각 그룹 안에서는 이름 ㄱㄴㄷ순 정렬
+  const byNameKo = (a,b) => a.m.name.localeCompare(b.m.name, 'ko');
+  const active  = memberData.filter(d => !d.isExpired).sort(byNameKo);
+  const expired = memberData.filter(d =>  d.isExpired).sort(byNameKo);
+
+  function makeLetterHeader(letter){
+    const header = document.createElement('div');
+    header.className = 'member-letter-header';
+    header.textContent = letter;
+    return header;
+  }
+  // 전화번호부처럼 초성으로 묶어서 보여주기 위한 그룹 헤더를 회원 카드들 사이에 끼워넣음
+  // (쌍자음은 홑자음 그룹으로 합침: ㄲ→ㄱ, ㄸ→ㄷ, ㅃ→ㅂ, ㅆ→ㅅ, ㅉ→ㅈ)
+  function appendWithLetterHeaders(list){
+    let lastLetter = null;
+    list.forEach(d => {
+      const letter = getChosungGroup(d.m.name);
+      if(letter !== lastLetter){
+        container.appendChild(makeLetterHeader(letter));
+        lastLetter = letter;
+      }
+      container.appendChild(makeCard(d));
+    });
+  }
 
   function makeCard({m, hist, lastDate, isExpired, maxSession}){
     const card = document.createElement('div');
@@ -1843,7 +1883,7 @@ async function renderMemberList(){
     return wrap;
   }
 
-  active.forEach(d => container.appendChild(makeCard(d)));
+  appendWithLetterHeaders(active);
 
   // 활성 회원 아래 추가 버튼
   const addBtn = document.createElement('button');
@@ -1857,7 +1897,7 @@ async function renderMemberList(){
     divider.style.cssText = 'font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.05em;padding:12px 4px 6px;';
     divider.textContent = '세션 만료';
     container.appendChild(divider);
-    expired.forEach(d => container.appendChild(makeCard(d)));
+    appendWithLetterHeaders(expired);
   }
 }
 
@@ -2104,6 +2144,29 @@ function calMove(dir){
   calSelected = null;
   document.getElementById('calSelectedEntries').style.display = 'none';
   renderCalendar();
+}
+
+// 달력을 좌우로 스와이프하면 이전/다음 달로 넘어가게 함. 세로 스크롤(화면 넘기기)과
+// 헷갈리지 않게, 가로로 움직인 거리가 세로보다 뚜렷하게 클 때만 달 이동으로 인식함
+function initCalSwipe(){
+  const el = document.querySelector('.cal-wrap');
+  if(!el) return;
+  let startX = 0, startY = 0, tracking = false;
+  el.addEventListener('touchstart', (e)=>{
+    if(e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, {passive:true});
+  el.addEventListener('touchend', (e)=>{
+    if(!tracking) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if(Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5){
+      calMove(dx < 0 ? 1 : -1);
+    }
+  }, {passive:true});
 }
 
 /* ═══════════════════════════════════════
@@ -3031,8 +3094,8 @@ function buildJournalCard(e, realIdx){
   const day   = isNaN(d) ? e.date : d.getDate();
   const dow   = isNaN(d) ? '' : ['일','월','화','수','목','금','토'][d.getDay()];
 
-  const grandVol  = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+ex.vol,0);
-  const grandMaxW = (e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
+  const grandVol  = (e.exercises||[]).filter(ex=>!isBodyweight(ex)&&!isAssist(ex)).reduce((s,ex)=>s+ex.vol,0);
+  const grandMaxW = (e.exercises||[]).filter(ex=>!isBodyweight(ex)&&!isAssist(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
   const partTags  = (e.parts||[]).map(p=>'<span class="je-part-tag">'+p+'</span>').join('');
 
   const exList = (e.exercises||[]).filter(ex=>ex.name);
@@ -3149,8 +3212,8 @@ async function openDetailModal(e, idx){
     if(v<=88) return '끝까지 해냄'; return '한계를 넘음';
   };
 
-  const grandVol  = (e.exercises||[]).reduce((s,ex)=>s+ex.vol,0);
-  const grandMaxW = (e.exercises||[]).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
+  const grandVol  = (e.exercises||[]).filter(ex=>!isAssist(ex)).reduce((s,ex)=>s+ex.vol,0);
+  const grandMaxW = (e.exercises||[]).filter(ex=>!isAssist(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
   const partTags  = (e.parts||[]).map(p=>'<span class="je-part-tag">'+p+'</span>').join('') || '<span style="color:var(--t3);font-size:12px;">미입력</span>';
   const iv = e.intensity||70;
 
@@ -3180,22 +3243,23 @@ async function openDetailModal(e, idx){
       html += '<div class="detail-card" style="margin-bottom:4px;">';
       html += '<div class="detail-ex-header">'
         +'<span class="detail-ex-name" style="'+nameBg+'color:'+nameColor+';">'+ex.name+'</span>'
-        +'<span class="detail-ex-chip">볼륨 '+ex.vol.toLocaleString()+'kg'+(pct!==null?' ('+(diff>=0?'+':'')+pct+'%)':'')+'</span>'
+        +'<span class="detail-ex-chip">볼륨 '+volDisplay(ex,ex.vol)+'kg'+(pct!==null?' ('+(diff>=0?'+':'')+pct+'%)':'')+'</span>'
         +'</div>';
+      if(isAssist(ex)) html += '<div style="font-size:11px;color:var(--t3);padding:0 2px 6px;">☝️ 총 볼륨에 적용되지 않아요</div>';
       (ex.sets||[]).forEach((st,si) => {
         const vol = st.w * st.r;
         const mainStr = ex.timeMode ? (st.r+'초') : (wDisplay(ex,st.w)+'kg × '+st.r+'개');
         html += '<div class="detail-set-row">'
           +'<span class="detail-set-idx">'+(si+1)+'세트</span>'
           +'<span class="detail-set-main">'+mainStr+'</span>'
-          +'<span class="detail-set-vol">'+(ex.timeMode?'':vol.toLocaleString()+'kg')+'</span>'
+          +'<span class="detail-set-vol">'+(ex.timeMode?'':volDisplay(ex,vol)+'kg')+'</span>'
           +'</div>';
         (st.drops||[]).forEach(d => {
           const dvol = (d.w||0) * (d.r||0);
           html += '<div class="detail-set-row" style="padding-left:16px;">'
             +'<span class="detail-set-idx" style="color:var(--red);">↓드롭</span>'
-            +'<span class="detail-set-main">'+(d.w||0)+'kg × '+(d.r||0)+'개</span>'
-            +'<span class="detail-set-vol">'+(dvol?dvol.toLocaleString()+'kg':'')+'</span>'
+            +'<span class="detail-set-main">'+wDisplay(ex,d.w||0)+'kg × '+(d.r||0)+'개</span>'
+            +'<span class="detail-set-vol">'+(dvol?volDisplay(ex,dvol)+'kg':'')+'</span>'
             +'</div>';
         });
       });
@@ -3281,9 +3345,12 @@ async function openNewJournal(){
   renderRecentMemoBar();
   // 회차 위 이전 메모 표시
   renderSessionMemoPrev();
-  // 메모 입력 칸 초기화
+  // 메모 입력 칸 초기화 (세션 메모 + 입력탭 메모는 연동된 하나라 같이 초기화.
+  // 메모 탭(inlineMemoInput)은 별개라 안 건드림)
   const memoInput = document.getElementById('sessionMemoInput');
   if(memoInput) memoInput.value = '';
+  const inputTabMemo = document.getElementById('inputTabMemoInput');
+  if(inputTabMemo) inputTabMemo.value = '';
 
   renderParts();
   renderExCards();
@@ -3388,9 +3455,15 @@ async function renderSessionMemoPrev(){
   if(!currentMember) return;
   const prevEl = document.getElementById('sessionMemoPrev');
   if(!prevEl) return;
+  // 가장 최근에 "쓴" 메모가 아니라, 바로 직전 일지(가장 최근 수업)에 달린 메모만
+  // 보여줘야 함. 안 그러면 직전 수업엔 메모를 안 남겼는데 그 전전 수업 메모가
+  // 마치 최신인 것처럼 계속 떠서 헷갈림
+  const hist = await getMemberHistory(currentMember.id);
+  if(!hist.length){ prevEl.style.display='none'; return; }
+  const lastEntryDate = hist[hist.length-1].date;
   const memos = (await getMemos(currentMember.id)).filter(m=>m.id!=='note' && m.sessionMemo);
-  if(!memos.length){ prevEl.style.display='none'; return; }
-  const latest = memos[memos.length-1];
+  const latest = memos.find(m=>m.date===lastEntryDate);
+  if(!latest){ prevEl.style.display='none'; return; }
   prevEl.style.display = 'block';
   prevEl.innerHTML = `<span style="font-size:11px;font-weight:600;color:var(--t3);">${latest.date} 메모</span><br>${latest.content.replace(/\n/g,'<br>')}`;
 }
@@ -3469,6 +3542,18 @@ async function openEditJournal(idx){
     letterVal = [e.note, e.next, e.cheer].filter(Boolean).join('\n\n');
   }
   document.getElementById('iLetter').value = letterVal || '';
+
+  // 이 일지 날짜에 달린 세션 메모 복원 (세션 메모 + 입력탭 메모는 연동된 하나라
+  // 같이 채움). 안 그러면 수정 화면에 메모가 비어있는 것처럼 보여서, 있는 메모를
+  // 못 보고 새로 써서 꼬이거나 빈 걸로 착각하기 쉬움
+  const entryDateShortForMemo = getShortDate(e.dateTime || e.date);
+  const memosForEdit = await getMemos(forMember.id);
+  const sessionMemoForEdit = memosForEdit.find(m=>m.id!=='note' && m.sessionMemo && m.date===entryDateShortForMemo);
+  const restoredMemo = sessionMemoForEdit ? sessionMemoForEdit.content : '';
+  const sessionMemoEl = document.getElementById('sessionMemoInput');
+  if(sessionMemoEl) sessionMemoEl.value = restoredMemo;
+  const inputTabMemoEl = document.getElementById('inputTabMemoInput');
+  if(inputTabMemoEl) inputTabMemoEl.value = restoredMemo;
 
   _editDirty = false; // 방금 불러온 초기 상태는 "변경사항 없음"으로 침
   switchTab('input');
@@ -3644,53 +3729,54 @@ async function renderMemberDataSummary(){
 
   const lines = [];
 
-  // 1) 종목별 성장 (과거 기록 + 현재 작성 중인 데이터 실시간 반영)
-  const exProgressMap = {};
-  hist.forEach(e=>{
+  // 1) 종목별 비교: 같은 종목을 바로 지난번(가장 최근 이전 기록)에 했던 총 볼륨과
+  // 오늘(작성 중) 총 볼륨을 비교함 (전체 기록 중 처음 한 것과 비교하는 게 아니라
+  // 항상 "직전"이랑만 비교 — 그래야 최근 흐름을 볼 수 있음)
+  const exVolMap = {};
+  hist.forEach((e, i)=>{
+    if(i === editingEntryIdx) return; // 지금 수정 중인 그 일지 자신은 제외
     (e.exercises||[]).filter(ex=>ex.name).forEach(ex=>{
-      if(!exProgressMap[ex.name]) exProgressMap[ex.name] = [];
-      const isTime = !!ex.timeMode;
-      const isBw = isBodyweight(ex);
-      const metric = isTime
-        ? Math.max(...(ex.sets||[]).map(s=>s.r||0))
-        : isBw
-          ? Math.max(...(ex.sets||[]).map(s=>s.r||0))
-          : Math.max(...(ex.sets||[]).map(s=>s.w||0));
-      const unit = isTime?'초':(isBw?'개':'kg');
-      exProgressMap[ex.name].push({metric, unit, date:e.date});
+      if(!exVolMap[ex.name]) exVolMap[ex.name] = [];
+      exVolMap[ex.name].push({ vol: exVol(ex), date: e.date });
     });
   });
-
-  // 현재 작성 중인 종목도 실시간 반영
+  const exerciseLines = [];
   exercises.filter(ex=>ex.name).forEach(ex=>{
-    const isTime = !!ex.timeMode;
-    const isBw = isBodyweight(ex);
-    const sets = ex.sets||[];
-    if(!sets.length) return;
-    const metric = isTime
-      ? Math.max(...sets.map(s=>s.r||0))
-      : isBw
-        ? Math.max(...sets.map(s=>s.r||0))
-        : Math.max(...sets.map(s=>s.w||0));
-    if(!metric) return;
-    const unit = isTime?'초':(isBw?'개':'kg');
-    if(!exProgressMap[ex.name]) exProgressMap[ex.name] = [];
-    exProgressMap[ex.name].push({metric, unit, date:'오늘(작성중)'});
+    const prevRecords = exVolMap[ex.name];
+    if(!prevRecords || !prevRecords.length) return;
+    const prev = prevRecords[prevRecords.length-1];
+    const todayVol = exVol(ex);
+    const diff = todayVol - prev.vol;
+    const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
+    exerciseLines.push(`🏋️ ${ex.name}: 지난번(${prev.date}) ${volDisplay(ex,prev.vol)}kg → 오늘 ${volDisplay(ex,todayVol)}kg${diff!==0?` (${arrow}${Math.abs(diff).toLocaleString()}kg)`:''}`);
   });
-
-  const growthLines = Object.entries(exProgressMap)
-    .filter(([_, records]) => records.length >= 2)
-    .map(([name, records])=>{
-      const first = records[0];
-      const last = records[records.length-1];
-      const diff = last.metric - first.metric;
-      const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
-      return `🏋️ ${name}: ${first.metric}${first.unit} → ${last.metric}${last.unit} ${diff>0?`(${arrow}${diff}${last.unit})`:''}`;
-    });
-
-  if(growthLines.length){
-    lines.push(...growthLines);
+  if(exerciseLines.length){
+    lines.push(...exerciseLines);
     lines.push('');
+  }
+
+  // 2) 오늘 체크한 운동 부위와 같은 부위가 있는 가장 최근 이전 일지를 찾아서,
+  // 그 날 한 모든 운동의 총 볼륨 vs 오늘(작성 중) 모든 운동의 총 볼륨을 비교함
+  const todaysParts = selectedParts || [];
+  if(todaysParts.length){
+    let matchEntry = null;
+    for(let i = hist.length - 1; i >= 0; i--){
+      if(i === editingEntryIdx) continue; // 지금 수정 중인 그 일지 자신은 비교 대상에서 제외
+      const e = hist[i];
+      if((e.parts||[]).some(p => todaysParts.includes(p))){
+        matchEntry = e;
+        break;
+      }
+    }
+    if(matchEntry){
+      const prevVol = (matchEntry.exercises||[]).filter(ex=>!isAssist(ex)).reduce((s,ex)=>s+exVol(ex), 0);
+      const todayVol = exercises.filter(ex=>ex.name&&!isAssist(ex)).reduce((s,ex)=>s+exVol(ex), 0);
+      const diff = todayVol - prevVol;
+      const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
+      const matchedParts = (matchEntry.parts||[]).filter(p=>todaysParts.includes(p)).join('·');
+      lines.push(`📊 ${matchedParts} 부위 지난번(${matchEntry.date}) 대비 총 볼륨: ${prevVol.toLocaleString()}kg → ${todayVol.toLocaleString()}kg${diff!==0?` (${arrow}${Math.abs(diff).toLocaleString()}kg)`:''}`);
+      lines.push('');
+    }
   }
 
   // 2) 출석 현황 — 최근 4주 주당 운동 횟수
@@ -4087,25 +4173,17 @@ function switchTab(t){
   }
 }
 
-async function saveMemoFromInputTab(){
-  if(!currentMember) return;
-  const memberId = currentMember.id;
-  const inp = document.getElementById('inputTabMemoInput');
-  const content = (inp.value || '').trim();
-  if(!content) return;
-  const memos = await getMemos(memberId);
-  const today = getShortDate();
-  const todayEntry = memos.find(m=>m.id!=='note' && m.date===today);
-  if(todayEntry){
-    todayEntry.content = todayEntry.content + '\n' + content;
-    todayEntry.dateTime = new Date().toISOString();
-  } else {
-    memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:today, dateTime:new Date().toISOString(), content });
-  }
-  await saveMemos(memberId, memos);
-  inp.value = '';
-  showToast('메모 저장 완료 ✓');
-  renderMemoTab();
+// 입력 탭 안의 위(세션 메모)/아래(수업 중 특이사항) 메모칸은 같은 내용을 다루는
+// 하나의 메모라, 어느 쪽에 적어도 나머지 하나에 실시간으로 그대로 반영되게 함.
+// 저장은 별도 버튼 없이 일지 저장(_saveJournalInner)할 때 sessionMemoInput 값으로
+// 같이 됨. 메모 탭(inlineMemoInput)은 이거랑 별개의 독립적인 메모라 여기 안 끼워넣음
+function syncNoteBoxes(value, sourceId){
+  ['sessionMemoInput','inputTabMemoInput'].forEach(id=>{
+    if(id===sourceId) return;
+    const el = document.getElementById(id);
+    if(el && el.value !== value) el.value = value;
+  });
+  autoSaveDraft();
 }
 
 async function saveInlineMemo(){
@@ -4116,7 +4194,9 @@ async function saveInlineMemo(){
   if(!content) return;
   const memos = await getMemos(memberId);
   const today = getShortDate();
-  const todayEntry = memos.find(m=>m.id!=='note' && m.date===today);
+  // sessionMemo(위/아래 연동 메모)는 별개라 여기 합쳐지면 안 됨 — 그날 쓴 "메모 탭
+  // 전용" 항목만 찾아서 이어붙임
+  const todayEntry = memos.find(m=>m.id!=='note' && !m.sessionMemo && m.date===today);
   if(todayEntry){
     todayEntry.content = todayEntry.content + '\n' + content;
     todayEntry.dateTime = new Date().toISOString();
@@ -4331,7 +4411,10 @@ async function loadDashTrainerList(){
   listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
 
   const allTrainers = await fsList('trainer_directory');
-  const trainers = allTrainers.filter(t=>t.gym===HOME_GYM).sort((a,b)=>a.name.localeCompare(b.name));
+  // 정확히 일치하는 것만 찾으면 "캡틴찜월영점"처럼 지점명이 붙거나 짐/찜 오타가
+  // 있는 경우 실제로는 같은 체육관 소속인데도 목록에서 빠져버림. "캡틴"이 이름에
+  // 들어있으면 같은 체육관 계열로 보고 다 잡아줌
+  const trainers = allTrainers.filter(t=>(t.gym||'').includes('캡틴')).sort((a,b)=>a.name.localeCompare(b.name));
 
   if(!trainers.length){
     listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">트레이너 앱에서 로그인하면 자동 등록돼요</div>';
@@ -4587,8 +4670,8 @@ function openDashDetail(storeKey){
   if(!stored) return;
   const {e, mName} = stored;
   document.getElementById('dashDetailTitle').textContent = mName+' · '+(e.session||e.streak||'?')+'회차  '+e.date;
-  const grandVol = (e.exercises||[]).filter(ex=>{const s=ex.sets||[];return s.length&&!s.every(st=>Number(st.w)===0);}).reduce((s,ex)=>s+(ex.vol||0),0);
-  const grandMaxW = (e.exercises||[]).reduce((mx,ex)=>Math.max(mx,ex.maxW||0),0);
+  const grandVol = (e.exercises||[]).filter(ex=>{const s=ex.sets||[];return s.length&&!s.every(st=>Number(st.w)===0);}).filter(ex=>!isAssist(ex)).reduce((s,ex)=>s+(ex.vol||0),0);
+  const grandMaxW = (e.exercises||[]).filter(ex=>!isAssist(ex)).reduce((mx,ex)=>Math.max(mx,ex.maxW||0),0);
   let html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
     ${(e.parts||[]).length?`<div class="dash-summary-card" style="padding:8px 12px;"><div class="dash-summary-label">부위</div><div style="font-size:13px;font-weight:600;">${(e.parts||[]).join(' · ')}</div></div>`:''}
     ${grandMaxW?`<div class="dash-summary-card" style="padding:8px 12px;"><div class="dash-summary-label">최고 무게</div><div style="font-size:13px;font-weight:600;">${grandMaxW}kg</div></div>`:''}
@@ -4600,13 +4683,14 @@ function openDashDetail(storeKey){
     e.exercises.forEach(ex=>{
       html += `<div style="background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r12);margin-bottom:8px;overflow:hidden;">
         <div style="padding:10px 14px;font-size:14px;font-weight:700;">${ex.name||'종목'}</div>`;
+      if(isAssist(ex)) html += '<div style="padding:0 14px 8px;font-size:11px;color:var(--t3);">☝️ 총 볼륨에 적용되지 않아요</div>';
       (ex.sets||[]).forEach((st,si)=>{
         const bw=Number(st.w)===0;
         const isTime = !!ex.timeMode;
         html+=`<div style="display:flex;align-items:center;padding:6px 14px;border-top:0.5px solid var(--bd);font-size:13px;gap:8px;">
           <span style="color:var(--t3);width:36px;">${si+1}세트</span>
-          <span style="flex:1;">${isTime?st.r+'초':(bw?st.r+'개':st.w+'kg × '+st.r+'개')}</span>
-          ${(!bw&&!isTime)?`<span style="font-size:11px;color:var(--t3);">${(st.w*st.r).toLocaleString()}kg</span>`:''}
+          <span style="flex:1;">${isTime?st.r+'초':(bw?st.r+'개':wDisplay(ex,st.w)+'kg × '+st.r+'개')}</span>
+          ${(!bw&&!isTime)?`<span style="font-size:11px;color:var(--t3);">${volDisplay(ex,st.w*st.r)}kg</span>`:''}
         </div>`;
       });
       if((ex.comment||'').trim()) html+=`<div style="padding:8px 14px;font-size:12px;color:var(--t2);border-top:0.5px solid var(--bd);">💬 ${ex.comment.trim()}</div>`;
@@ -4905,6 +4989,7 @@ function exMaxW(ex){
 // 전 세트 무게가 0이면 맨몸운동으로 간주
 function isAssist(ex){ return (ex.name||'').includes('어시스트'); }
 function wDisplay(ex, w){ return (isAssist(ex) && Number(w)>0) ? '-'+w : w; }
+function volDisplay(ex, vol){ const s=Number(vol||0).toLocaleString(); return (isAssist(ex) && Number(vol)>0) ? '-'+s : s; }
 
 const ISOMETRIC_KEYWORDS = ['플랭크','홀드','버티기','월싯','월 싯','데드행','행잉','버드독','글루트브릿지홀드','홀딩','정적','isometric'];
 function isIsometric(ex){
@@ -4932,8 +5017,8 @@ function recalcAll(){
   clearTimeout(recalcAll._summaryTimer);
   recalcAll._summaryTimer = setTimeout(()=>renderMemberDataSummary(), 300);
 
-  const grandVol = exercises.reduce((s,ex)=>s+exVol(ex),0);
-  const grandPrev = exercises.reduce((s,ex)=>s+(ex.prevVol||0),0);
+  const grandVol = exercises.filter(ex=>!isAssist(ex)).reduce((s,ex)=>s+exVol(ex),0);
+  const grandPrev = exercises.filter(ex=>!isAssist(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
 
   document.getElementById('sumVol').innerHTML=grandVol.toLocaleString()+'<span>kg</span>';
 
@@ -4960,6 +5045,7 @@ function updateExFooter(ei){
   const chip=document.getElementById('chip-'+ei);
   const badge=document.getElementById('badge-'+ei);
   const setsum=document.getElementById('setsum-'+ei);
+  const assistNote=document.getElementById('assistNote-'+ei);
 
   if(chip){
     if(isTime){
@@ -4968,9 +5054,10 @@ function updateExFooter(ei){
     } else if(bw){
       chip.innerHTML=`총 <strong>${totalReps}개</strong>`;
     } else {
-      chip.innerHTML=`최고 <strong>${mw}kg</strong>　총 볼륨 <strong>${vol.toLocaleString()}kg</strong>`;
+      chip.innerHTML=`최고 <strong>${wDisplay(ex,mw)}kg</strong>　총 볼륨 <strong>${volDisplay(ex,vol)}kg</strong>`;
     }
   }
+  if(assistNote) assistNote.style.display = isAssist(ex) ? '' : 'none';
   if(badge){
     if(isTime){
       const maxSec = ex.sets.length ? Math.max(...ex.sets.map(s=>s.r||0)) : 0;
@@ -4991,7 +5078,7 @@ function updateExFooter(ei){
     } else {
       setsum.innerHTML=ex.sets.map((st,si)=>{
         const filled = isTime ? st.r>0 : (bw ? st.r>0 : (st.w>0&&st.r>0));
-        const label  = isTime ? (st.r?`${st.r}초`:`S${si+1}`) : (bw ? (st.r?`${st.r}개`:`S${si+1}`) : (filled?`${st.w}kg×${st.r}`:`S${si+1}`));
+        const label  = isTime ? (st.r?`${st.r}초`:`S${si+1}`) : (bw ? (st.r?`${st.r}개`:`S${si+1}`) : (filled?`${wDisplay(ex,st.w)}kg×${st.r}`:`S${si+1}`));
         return `<span class="ex-set-chip${filled?' filled':''}">${label}</span>`;
       }).join('');
     }
@@ -5001,7 +5088,7 @@ function updateExFooter(ei){
     const el=document.getElementById(`rv-${ei}-${si}`);
     if(el){
       if(bw) el.textContent='';
-      else el.textContent=(ex.sets[si].w&&ex.sets[si].r)?(ex.sets[si].w*ex.sets[si].r).toLocaleString()+'kg':'';
+      else el.textContent=(ex.sets[si].w&&ex.sets[si].r)?volDisplay(ex,ex.sets[si].w*ex.sets[si].r)+'kg':'';
     }
   });
 }
@@ -5066,7 +5153,7 @@ function buildSetRows(ei){
         <button onclick="addDrop(${ei},${si})" style="font-size:10px;color:var(--red);background:none;border:1px solid var(--red);border-radius:4px;cursor:pointer;font-family:inherit;padding:1px 5px;white-space:nowrap;align-self:flex-end;">↓드롭</button>
         <div style="display:flex;flex-direction:column;align-items:flex-end;align-self:flex-end;">
           ${si===0?'<div style="font-size:9px;color:var(--t3);margin-bottom:2px;">볼륨</div>':''}
-          <span class="set-vol" id="rv-${ei}-${si}">${s.w&&s.r?(s.w*s.r).toLocaleString()+'kg':''}</span>
+          <span class="set-vol" id="rv-${ei}-${si}">${s.w&&s.r?volDisplay(exercises[ei],s.w*s.r)+'kg':''}</span>
         </div>
         <button class="set-del" onclick="removeSet(${ei},${si})">×</button>`;
       c.appendChild(row);
@@ -5084,7 +5171,7 @@ function buildSetRows(ei){
         <span class="set-idx" style="color:var(--red);font-size:10px;">↓</span>
         <div class="dial-wrap">
           <div class="dial-display${d.w?'':' empty'}" id="${dwId}" data-ei="${ei}" data-si="${si}" data-di="${di}" data-type="dw">
-            ${d.w?d.w+'<span class="dial-unit">kg</span>':'kg'}
+            ${d.w?wDisplay(exercises[ei],d.w)+'<span class="dial-unit">kg</span>':'kg'}
             <div class="dial-arrows"><span>▲</span><span>▼</span></div>
           </div>
         </div>
@@ -5094,7 +5181,7 @@ function buildSetRows(ei){
             <div class="dial-arrows"><span>▲</span><span>▼</span></div>
           </div>
         </div>
-        <span class="set-vol">${d.w&&d.r?(d.w*d.r).toLocaleString()+'kg':''}</span>
+        <span class="set-vol">${d.w&&d.r?volDisplay(exercises[ei],d.w*d.r)+'kg':''}</span>
         <button class="set-del" onclick="removeDrop(${ei},${si},${di})" style="color:var(--red);">×</button>`;
       c.appendChild(drow);
       [dwId, drId].forEach(id => { const el=drow.querySelector('#'+id); if(el) attachDial(el); });
@@ -5143,36 +5230,51 @@ function attachDial(el){
     const rvEl = document.getElementById('rv-'+ei+'-'+si);
     const w = exercises[ei].sets[si].w;
     const r = exercises[ei].sets[si].r;
-    if(rvEl) rvEl.textContent = w&&r ? (w*r).toLocaleString()+'kg' : '';
+    if(rvEl) rvEl.textContent = w&&r ? volDisplay(exercises[ei],w*r)+'kg' : '';
     recalcAll();
   }
 
-  // 터치
+  // 터치 — 손가락 닿자마자 바로 조절모드로 들어가면, 화면을 그냥 스크롤하려고
+  // 다이얼 위를 스쳐도 스크롤 대신 값이 바뀌어버리는 문제가 있었음. 그래서 닿고
+  // 잠깐(150ms) 안 움직여야만 조절모드로 들어가게 하고, 그 전에 크게(스크롤처럼)
+  // 움직이면 조절모드에 안 들어가고 기본 스크롤 동작 그대로 진행되게 함
+  let armTimer = null, cancelled = false;
   el.addEventListener('touchstart', e=>{
     startY   = e.touches[0].clientY;
     startVal = getVal();
-    dragging = true;
+    dragging = false;
     moved    = false;
-    el.classList.add('active');
-    e.preventDefault();
-  },{passive:false});
+    cancelled = false;
+    clearTimeout(armTimer);
+    armTimer = setTimeout(()=>{
+      if(!cancelled){
+        dragging = true;
+        el.classList.add('active');
+      }
+    }, 150);
+  },{passive:true});
 
   el.addEventListener('touchmove', e=>{
-    if(!dragging) return;
-    const dy  = startY - e.touches[0].clientY; // 위로 올리면 +
+    const dy = startY - e.touches[0].clientY; // 위로 올리면 +
+    if(Math.abs(dy)>3) moved=true;
+    if(!dragging){
+      if(Math.abs(dy)>8){ cancelled=true; clearTimeout(armTimer); }
+      return; // 아직 조절모드 아니면 preventDefault 안 해서 스크롤이 그대로 진행됨
+    }
     const sens = type==='w' ? 3 : 8; // px per step
     const delta = Math.round(dy / sens) * step;
-    if(Math.abs(dy)>3) moved=true;
     setVal(startVal + delta);
     e.preventDefault();
   },{passive:false});
 
   el.addEventListener('touchend', e=>{
+    clearTimeout(armTimer);
     el.classList.remove('active');
+    const wasDragging = dragging;
     dragging=false;
-    // 탭(움직임 없음) → 숫자 직접 입력 팝업
-    if(!moved) openDialInput(ei, si, type, di);
-    e.preventDefault();
+    // 탭(움직임 없음) → 숫자 직접 입력 팝업. 스크롤로 취소된 경우엔 안 열림
+    if(!moved && !cancelled) openDialInput(ei, si, type, di);
+    if(wasDragging) e.preventDefault();
   },{passive:false});
 
   // 마우스 (PC)
@@ -5294,6 +5396,7 @@ function buildExCard(ei){
         <span class="pr-badge" id="badge-${ei}">✦ 신기록</span>
         <button class="add-set-btn" onclick="addSet(${ei})">+ 세트</button>
       </div>
+      <div id="assistNote-${ei}" style="display:none;font-size:11px;color:var(--t3);padding:0 2px 6px;">☝️ 총 볼륨에 적용되지 않아요</div>
       <div class="ex-comment-row">
         <textarea class="ex-comment-inp" rows="1" placeholder="이 종목에 대한 코멘트"
           oninput="exercises[${ei}].comment=this.value;autoGrow(this);">${ex.comment||''}</textarea>
@@ -5320,8 +5423,8 @@ function initExCard(ei){
       } else {
         const repsStr = ex.prevMaxWReps ? '×'+ex.prevMaxWReps+'개' : '';
         infoEl.innerHTML =
-          '지난 기록 &nbsp;최고 <strong>'+(ex.prevMaxW||0)+'kg'+repsStr+'</strong>'
-          +'&nbsp;·&nbsp;총 볼륨 <strong>'+(ex.prevVol||0).toLocaleString()+'kg</strong>';
+          '지난 기록 &nbsp;최고 <strong>'+wDisplay(ex,ex.prevMaxW||0)+'kg'+repsStr+'</strong>'
+          +'&nbsp;·&nbsp;총 볼륨 <strong>'+volDisplay(ex,ex.prevVol||0)+'kg</strong>';
       }
     }
   }
@@ -5378,8 +5481,8 @@ async function autoFillPrev(ei, name){
     } else {
       const repsStr = exercises[ei].prevMaxWReps ? '×'+exercises[ei].prevMaxWReps+'개' : '';
       infoEl.innerHTML =
-        '지난 기록 &nbsp;최고 <strong>'+(prev.maxW||0)+'kg'+repsStr+'</strong>'
-        +'&nbsp;·&nbsp;총 볼륨 <strong>'+(prev.vol||0).toLocaleString()+'kg</strong>';
+        '지난 기록 &nbsp;최고 <strong>'+wDisplay(exercises[ei],prev.maxW||0)+'kg'+repsStr+'</strong>'
+        +'&nbsp;·&nbsp;총 볼륨 <strong>'+volDisplay(exercises[ei],prev.vol||0)+'kg</strong>';
     }
   }
   recalcAll();
@@ -5540,15 +5643,19 @@ async function _saveJournalInner(memberId){
   const sessionMemoText = (document.getElementById('sessionMemoInput')?.value||'').trim();
   if(sessionMemoText){
     const memos = await getMemos(memberId);
-    const today = getShortDate();
-    const existing = memos.find(m=>m.id!=='note' && m.date===today && m.sessionMemo);
+    // 저장 누른 "오늘"이 아니라 이 일지 자체의 날짜로 찍어야 함. 안 그러면 지난
+    // 일지를 수정할 때 메모가 그 일지 날짜가 아니라 수정한 날(오늘)로 찍혀서,
+    // "직전 일지 메모 보여주기" 기능이 엉뚱한 일지 것과 매칭돼버림
+    const entryDateShort = getShortDate(entryDateIso);
+    const existing = memos.find(m=>m.id!=='note' && m.date===entryDateShort && m.sessionMemo);
     if(existing){
       existing.content = sessionMemoText;
     } else {
-      memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:today, dateTime:new Date().toISOString(), content:sessionMemoText, sessionMemo:true });
+      memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:entryDateShort, dateTime:entryDateIso, content:sessionMemoText, sessionMemo:true });
     }
     await saveMemos(memberId, memos);
   }
+
 
   const exData = exercises.map(ex=>({
     name:ex.name,
@@ -5821,9 +5928,9 @@ async function buildText(){
   const intensity=parseInt(document.getElementById('iIntensity').value)||70;
   const letter=document.getElementById('iLetter').value.trim();
 
-  const grandVol=exercises.filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+exVol(ex),0);
-  const grandPrev=exercises.filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
-  const grandMaxW=exercises.filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,exMaxW(ex)),0);
+  const grandVol=exercises.filter(ex=>!isBodyweight(ex)&&!isAssist(ex)).reduce((s,ex)=>s+exVol(ex),0);
+  const grandPrev=exercises.filter(ex=>!isBodyweight(ex)&&!isAssist(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
+  const grandMaxW=exercises.filter(ex=>!isBodyweight(ex)&&!isAssist(ex)).reduce((m,ex)=>Math.max(m,exMaxW(ex)),0);
   const bwTotalReps=exercises.filter(ex=>isBodyweight(ex)).reduce((s,ex)=>s+exTotalReps(ex),0);
   const bw=70;
   const totalSets=exercises.reduce((s,ex)=>s+ex.sets.length,0);
@@ -5880,8 +5987,9 @@ async function buildText(){
       ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.r}개`));
       L.push(`   총 ${totalReps}개`);
     } else {
-      ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${st.w}kg × ${st.r}회`));
-      L.push(`   최고 ${mw}kg  볼륨 ${vol.toLocaleString()}kg${pct!==null?`  (${diff>=0?'+':''}${pct}%)`:''}`);
+      ex.sets.forEach((st,si)=>L.push(`   ${si+1}세트  ${wDisplay(ex,st.w)}kg × ${st.r}회`));
+      L.push(`   최고 ${wDisplay(ex,mw)}kg  볼륨 ${volDisplay(ex,vol)}kg${pct!==null?`  (${diff>=0?'+':''}${pct}%)`:''}`);
+      if(isAssist(ex)) L.push('   ☝️ 총 볼륨에 적용되지 않아요');
     }
     if((ex.comment||'').trim()){
       L.push('');
@@ -5910,9 +6018,9 @@ async function doCopyEntry(idx){
   const dateStr = isNaN(d) ? e.date : (d.getMonth()+1)+'월 '+d.getDate()+'일 '+days[d.getDay()]+'요일';
   const iDesc = v=>{if(v<=20)return '몸을 깨운 날';if(v<=40)return '컨디션 관리';if(v<=60)return '꾸준히 해냄';if(v<=75)return '정말 열심히';if(v<=88)return '끝까지 해냄';return '한계를 넘음';};
   const iv=e.intensity||70;
-  const grandVol=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+ex.vol,0);
-  const grandMaxW=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
-  const grandPrev=(e.exercises||[]).filter(ex=>!isBodyweight(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
+  const grandVol=(e.exercises||[]).filter(ex=>!isBodyweight(ex)&&!isAssist(ex)).reduce((s,ex)=>s+ex.vol,0);
+  const grandMaxW=(e.exercises||[]).filter(ex=>!isBodyweight(ex)&&!isAssist(ex)).reduce((m,ex)=>Math.max(m,ex.maxW||0),0);
+  const grandPrev=(e.exercises||[]).filter(ex=>!isBodyweight(ex)&&!isAssist(ex)).reduce((s,ex)=>s+(ex.prevVol||0),0);
   const bwTotalReps=(e.exercises||[]).filter(ex=>isBodyweight(ex)).reduce((s,ex)=>(ex.sets||[]).reduce((a,st)=>a+st.r,0)+s,0);
   const volDiff=grandVol-grandPrev;
   const volPct=grandPrev?Math.round((volDiff/grandPrev)*100):null;
@@ -5972,9 +6080,10 @@ async function doCopyEntry(idx){
     } else {
       (ex.sets||[]).forEach((st,si)=>{
         L.push('   '+(si+1)+'세트  '+wDisplay(ex,st.w)+'kg × '+st.r+'회');
-        (st.drops||[]).forEach(d=>L.push('     ↓드롭  '+(d.w||0)+'kg × '+(d.r||0)+'회'));
+        (st.drops||[]).forEach(d=>L.push('     ↓드롭  '+wDisplay(ex,d.w||0)+'kg × '+(d.r||0)+'회'));
       });
-      L.push('   최고 '+ex.maxW+'kg  볼륨 '+ex.vol.toLocaleString()+'kg'+(pct!==null?'  ('+(diff>=0?'+':'')+pct+'%)':''));
+      L.push('   최고 '+wDisplay(ex,ex.maxW)+'kg  볼륨 '+volDisplay(ex,ex.vol)+'kg'+(pct!==null?'  ('+(diff>=0?'+':'')+pct+'%)':''));
+      if(isAssist(ex)) L.push('   ☝️ 총 볼륨에 적용되지 않아요');
     }
     if((ex.comment||'').trim()){
       L.push('');

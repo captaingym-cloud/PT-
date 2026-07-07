@@ -19,8 +19,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // 대표님(관리자) 전용 계정의 고정 UID. 대표님 대시보드는 모든 트레이너의
+    // 데이터를 가로질러 봐야 하는데, ownerId가 제대로 채워진(=원래 의도대로
+    // 다른 트레이너는 못 보게 잠긴) 문서는 대표님 계정도 남의 uid라 막혀버려서
+    // "데이터가 있는데 없는 것처럼" 보이는 문제가 있었음. 그래서 이 UID만
+    // ownerId 검사를 통과하도록 예외를 둠.
+    function isAdmin() {
+      return isLoggedIn() && request.auth.uid == 'NM93DCB0gUSxCM3NGy6SblPqj8j1';
+    }
+
     function isOwnerOrLegacy() {
       return isLoggedIn() && (
+        isAdmin() ||
         resource == null ||
         !('ownerId' in resource.data) ||
         resource.data.ownerId == '' ||
