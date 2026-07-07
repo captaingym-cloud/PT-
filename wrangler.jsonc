@@ -1,7 +1,16 @@
 {
   "name": "pt",
   "compatibility_date": "2026-07-03",
+  "main": "src/worker.js",
   "assets": {
-    "directory": "./"
-  }
+    "directory": "./",
+    "binding": "ASSETS"
+  },
+  // SMS 인증번호를 잠깐(5분) 저장하는 KV 저장소
+  "kv_namespaces": [
+    {
+      "binding": "SMS_KV",
+      "id": "1828df33d7ad4159a7b00dc0723a11e2"
+    }
+  ]
 }

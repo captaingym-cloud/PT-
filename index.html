@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.4.0"/>
+<meta name="app-version" content="2.4.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -58,8 +58,11 @@ input,textarea,button,select{touch-action:manipulation;}
 .setup-sub{font-size:14px;color:var(--t2);margin-bottom:32px;text-align:center;}
 .setup-field{width:100%;max-width:320px;margin-bottom:12px;}
 .setup-field label{font-size:11px;color:var(--t3);display:block;margin-bottom:5px;letter-spacing:.04em;}
-.setup-field input{width:100%;height:48px;font-size:16px;padding:0 14px;border-radius:var(--r12);border:0.5px solid var(--bd2);background:var(--sf);color:var(--t);outline:none;font-family:inherit;}
-.setup-field input:focus{border-color:var(--g1);}
+.setup-field input,.setup-field select{width:100%;height:48px;font-size:16px;padding:0 14px;border-radius:var(--r12);border:0.5px solid var(--bd2);background:var(--sf);color:var(--t);outline:none;font-family:inherit;}
+.setup-field input:focus,.setup-field select:focus{border-color:var(--g1);}
+.setup-switch{margin-top:20px;background:none;border:none;font-size:12px;color:var(--g1);cursor:pointer;font-family:inherit;font-weight:600;}
+.setup-group-label{width:100%;max-width:320px;font-size:12px;font-weight:700;color:var(--g0);margin:18px 0 10px;padding-top:14px;border-top:0.5px solid var(--bd);}
+.setup-group-label:first-of-type{margin-top:8px;padding-top:0;border-top:none;}
 .setup-btn{width:100%;max-width:320px;height:50px;background:var(--g0);border:none;border-radius:var(--r12);font-size:15px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;margin-top:8px;}
 .setup-btn:active{background:var(--g0);}
 
@@ -532,34 +535,79 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
 </head>
 <body>
 
-<!-- ① 처음 설정 화면 -->
+<!-- ① 로그인 화면 -->
 <div class="screen active" id="screen-setup">
   <div class="setup-wrap" style="position:relative;overflow:hidden;">
         <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;width:100%;">
-    
+
     <div class="setup-title">PT 일지</div>
-    <div class="setup-sub">한 번 설정하면<br/>폰, 패드, 어디서 열어도 내 정보 그대로예요</div>
+    <div class="setup-sub">한 번 가입하면<br/>폰, 패드, 어디서 열어도 내 정보 그대로예요</div>
     <div class="setup-field">
-      <label>트레이너 이름</label>
+      <label>이름, 전화번호 또는 이메일</label>
+      <input id="loginName" placeholder="이름 / 전화번호 / 이메일" maxlength="60"/>
+    </div>
+    <div class="setup-field">
+      <label>비밀번호</label>
+      <input id="loginPin" type="password" placeholder="비밀번호" maxlength="30"
+        style="text-align:center;font-size:18px;"/>
+    </div>
+    <div id="loginError" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;"></div>
+    <button class="setup-btn" onclick="doLogin()">로그인</button>
+    <button class="setup-switch" onclick="showScreen('screen-signup')">처음이세요? 회원가입</button>
+    <button onclick="showScreen('screen-dashboard-login')" style="margin-top:20px;background:none;border:none;font-size:11px;color:var(--t3);cursor:pointer;font-family:inherit;text-decoration:underline;">대표님이세요?</button>
+  </div>
+  </div>
+</div>
+
+<!-- ①-2 회원가입 화면 -->
+<div class="screen" id="screen-signup">
+  <div class="setup-wrap" style="position:relative;overflow:hidden;">
+        <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;width:100%;">
+
+    <div class="setup-logo">💪</div>
+    <div class="setup-title">PT 일지 시작하기</div>
+    <div class="setup-sub">회원 관리부터 일지 전송까지<br/>한 곳에서 관리하세요</div>
+
+    <div class="setup-group-label">계정 정보</div>
+    <div class="setup-field">
+      <label>이름</label>
       <input id="setupName" placeholder="이름을 입력하세요" maxlength="20"/>
     </div>
     <div class="setup-field">
-      <label>체육관 이름</label>
-      <input id="setupGym" placeholder="체육관 이름을 입력하세요" maxlength="20"/>
+      <label>전화번호</label>
+      <input id="setupPhone" type="tel" inputmode="numeric" placeholder="01012345678" maxlength="20"/>
     </div>
     <div class="setup-field">
-      <label>비밀번호 (숫자 4자리)</label>
-      <input id="setupPin" type="password" inputmode="numeric" placeholder="• • • •" maxlength="4"
-        onblur="tryAutofillGym()" style="letter-spacing:0.3em;text-align:center;font-size:20px;"/>
+      <label>이메일 <span style="font-weight:400;">(선택)</span></label>
+      <input id="setupContact" type="email" placeholder="이메일을 입력하세요" maxlength="60"/>
     </div>
     <div class="setup-field">
-      <label>이메일 또는 전화번호</label>
-      <input id="setupContact" placeholder="이메일 또는 전화번호를 입력하세요" maxlength="60"/>
+      <label>비밀번호 (영문/숫자 6자 이상)</label>
+      <input id="setupPin" type="password" placeholder="비밀번호" maxlength="30"
+        style="text-align:center;font-size:18px;"/>
     </div>
+
+    <div class="setup-group-label">소속 정보</div>
+    <div class="setup-field">
+      <label>헬스장 이름</label>
+      <input id="setupGym" placeholder="헬스장 이름을 입력하세요" maxlength="20"/>
+    </div>
+    <div class="setup-field">
+      <label>직책</label>
+      <select id="setupRole" onchange="onRoleSelectChange()">
+        <option value="트레이너">트레이너</option>
+        <option value="실장">실장</option>
+        <option value="팀장">팀장</option>
+        <option value="대표">대표</option>
+        <option value="__custom__">직접 입력</option>
+      </select>
+      <input id="setupRoleCustom" placeholder="직책을 입력하세요" maxlength="20" style="display:none;margin-top:8px;"/>
+    </div>
+
     <div id="setupError" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;"></div>
-    <button class="setup-btn" onclick="doSetup()">시작하기</button>
-    <p style="font-size:11px;color:var(--t3);margin-top:16px;text-align:center;max-width:280px;line-height:1.6;">같은 이름 + 비밀번호로 로그인하면 어디서든 내 회원 정보가 나와요</p>
-    <button onclick="showScreen('screen-dashboard-login')" style="margin-top:20px;background:none;border:none;font-size:11px;color:var(--t3);cursor:pointer;font-family:inherit;text-decoration:underline;">대표님이세요?</button>
+    <button class="setup-btn" onclick="doSetup()">가입하기</button>
+    <p style="font-size:11px;color:var(--t3);margin-top:14px;text-align:center;max-width:280px;line-height:1.6;">가입 정보는 트레이너님의 회원 관리 목적으로만 사용돼요</p>
+    <button class="setup-switch" onclick="showScreen('screen-setup')">이미 계정이 있어요? 로그인</button>
   </div>
   </div>
 </div>
@@ -818,9 +866,9 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
   <div class="modal-box">
     <div class="modal-title">비밀번호 변경</div>
     <div class="modal-field">
-      <label>새 비밀번호 (숫자 4자리)</label>
-      <input id="newPin" type="password" inputmode="numeric" placeholder="• • • •" maxlength="4"
-        style="letter-spacing:0.3em;text-align:center;font-size:20px;"/>
+      <label>새 비밀번호 (영문/숫자 6자 이상)</label>
+      <input id="newPin" type="password" placeholder="새 비밀번호" maxlength="30"
+        style="text-align:center;font-size:18px;"/>
     </div>
     <div id="pinError" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
     <div class="modal-btns">
@@ -1380,35 +1428,58 @@ async function getTrainer(){
   if(saved){ TRAINER_ID = nameToId(saved, savedPin||'0000'); return saved; }
   return null;
 }
-async function saveTrainer(name, pin, gym, contact){
+async function saveTrainer(name, pin, gym, contact, phone, role){
   if(!name){
     localStorage.removeItem('trainer_name'); localStorage.removeItem('trainer_pin');
     localStorage.removeItem('trainer_gym'); localStorage.removeItem('trainer_contact');
+    localStorage.removeItem('trainer_phone'); localStorage.removeItem('trainer_role');
     TRAINER_ID=null; return;
   }
   const p = pin || '0000';
   const g = (gym||'').trim() || '미확인';
   const c = (contact||'').trim();
+  const ph = (phone||'').trim();
+  const r = (role||'').trim() || '트레이너';
   TRAINER_ID = nameToId(name, p);
   localStorage.setItem('trainer_name', name);
   localStorage.setItem('trainer_pin', p);
   localStorage.setItem('trainer_gym', g);
+  localStorage.setItem('trainer_role', r);
   if(c) localStorage.setItem('trainer_contact', c); else localStorage.removeItem('trainer_contact');
-  await fsSet('trainers', TRAINER_ID, {name, contact: c || null, updatedAt: new Date().toISOString()});
+  if(ph) localStorage.setItem('trainer_phone', ph); else localStorage.removeItem('trainer_phone');
+  await fsSet('trainers', TRAINER_ID, {name, contact: c || null, phone: ph || null, role: r, updatedAt: new Date().toISOString()});
   // 대표님 대시보드용 공유 목록에 등록
-  await registerToDirectory(name, TRAINER_ID, g, c);
+  await registerToDirectory(name, TRAINER_ID, g, c, ph, r);
 }
 
 // 트레이너 한 명당 문서 하나(트레이너 ID가 문서 ID)라서, 여러 명이 동시에 등록/로그인해도
 // 서로 다른 문서를 건드리기 때문에 다른 트레이너 기록을 덮어쓸 일이 없음
-async function registerToDirectory(name, trainerId, gym, contact){
+async function registerToDirectory(name, trainerId, gym, contact, phone, role){
   try{
     const existing = await fsGet('trainer_directory', trainerId);
+    const finalPhone = phone || (existing&&existing.phone) || null;
+    const finalContact = contact || (existing&&existing.contact) || null;
     await fsSet('trainer_directory', trainerId, {
-      name, trainerId, gym: gym||'미확인', contact: contact || (existing&&existing.contact) || null,
+      name, trainerId, gym: gym||'미확인',
+      contact: finalContact,
+      phone: finalPhone,
+      role: role || (existing&&existing.role) || '트레이너',
       registeredAt: (existing && existing.registeredAt) || new Date().toISOString()
     });
+    // 전화번호/이메일로 로그인할 때 "이 번호가 어느 트레이너 계정인지"를 로그인 전에
+    // 찾을 수 있도록 별도 조회용 문서도 같이 남김 (login_lookup — 이름/trainerId만,
+    // 민감정보 없음)
+    if(finalPhone) await fsSet('login_lookup', normalizeLoginKey(finalPhone), { trainerId });
+    if(finalContact) await fsSet('login_lookup', normalizeLoginKey(finalContact), { trainerId });
   } catch(e){}
+}
+
+// 전화번호는 숫자만, 이메일은 소문자로 통일해서 조회 키로 씀 — 트레이너가 하이픈을
+// 넣거나 이메일 대소문자를 다르게 입력해도 같은 계정으로 찾아지게 하기 위함
+function normalizeLoginKey(v){
+  const s = (v||'').trim();
+  if(!s) return '';
+  return s.includes('@') ? s.toLowerCase() : s.replace(/[^0-9]/g,'');
 }
 async function getMembers(){
   if(!TRAINER_ID) return [];
@@ -1663,7 +1734,8 @@ document.addEventListener('DOMContentLoaded', async function(){
     }
     await fsAuthEnsure(TRAINER_ID, savedPin);
     checkAppVersion();
-    registerToDirectory(trainer, TRAINER_ID, savedGym, localStorage.getItem('trainer_contact'));
+    registerToDirectory(trainer, TRAINER_ID, savedGym, localStorage.getItem('trainer_contact'),
+      localStorage.getItem('trainer_phone'), localStorage.getItem('trainer_role'));
     showScreen('screen-members');
     renderMemberList();
   } else {
@@ -1682,52 +1754,163 @@ function showScreen(id){
 }
 
 /* ═══════════════════════════════════════
-   SETUP
+   LOGIN / SIGNUP
 ═══════════════════════════════════════ */
-// 이름+PIN이 이미 등록된 트레이너면 체육관 이름을 서버에서 불러와 자동으로 채워줌
-// (다른 기기에서 로그인할 때마다 체육관 이름을 다시 입력하지 않아도 되게)
-async function tryAutofillGym(){
-  const name = document.getElementById('setupName').value.trim();
-  const pin = document.getElementById('setupPin').value.trim();
-  const gymEl = document.getElementById('setupGym');
-  if(!name || pin.length !== 4 || gymEl.value.trim()) return;
-  const tid = nameToId(name, pin);
-  const authOk = await fsAuthEnsure(tid, pin);
-  if(!authOk) return;
-  const existing = await fsGet('trainer_directory', tid);
-  if(existing && existing.gym && existing.gym !== '미확인'){
-    gymEl.value = existing.gym;
-  }
+// 새 비밀번호 규칙: 6자 이상 영문/숫자. 예전엔 숫자 4자리였는데, 이름+PIN 조합이
+// 그대로 계정이 되는 구조라 4자리 숫자(10000가지)는 무차별 대입에 너무 취약함.
+// 기존에 4자리로 가입한 트레이너는 로그인 시엔 그 4자리를 그대로 계속 쓸 수 있음
+// (doLogin은 이 검증을 안 씀) — 새로 가입하거나 비밀번호를 바꿀 때만 이 규칙을 강제함
+function isValidNewPassword(pw){
+  return !!pw && pw.length >= 6 && /^[a-zA-Z0-9]+$/.test(pw);
+}
+const NEW_PASSWORD_HINT = '비밀번호는 영문/숫자 6자 이상으로 입력해주세요';
+
+function onRoleSelectChange(){
+  const sel = document.getElementById('setupRole');
+  const custom = document.getElementById('setupRoleCustom');
+  custom.style.display = sel.value === '__custom__' ? 'block' : 'none';
+  if(sel.value === '__custom__') custom.focus();
 }
 
-async function doSetup(){
-  const name = document.getElementById('setupName').value.trim();
-  const gym  = document.getElementById('setupGym').value.trim();
-  const pin  = document.getElementById('setupPin').value.trim();
-  const contact = document.getElementById('setupContact').value.trim();
-  const errEl = document.getElementById('setupError');
+function looksLikeLoginKey(v){
+  // 전화번호(숫자만 7자 이상) 또는 이메일(@포함) 형식이면 "이름"이 아니라
+  // 전화번호/이메일로 로그인하려는 것으로 판단
+  return v.includes('@') || /^[0-9-]{7,}$/.test(v);
+}
 
-  if(!name){ document.getElementById('setupName').focus(); return; }
-  if(!gym){ document.getElementById('setupGym').focus(); return; }
-  if(!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)){
-    errEl.textContent = '비밀번호는 숫자 4자리로 입력해주세요';
+// 로그인은 이름, 전화번호, 이메일 중 아무거나 + 비밀번호를 받음. 계정이 없는
+// 조합이면 (기존처럼) 조용히 새로 가입시키지 않고 회원가입 화면으로 안내함 —
+// 조용히 가입시키면 트레이너가 비밀번호를 잘못 기억해서 로그인하려다가 자기도
+// 모르게 완전히 새 계정(빈 회원목록)을 만들어버리는 사고로 이어지기 쉬움
+async function doLogin(){
+  const input = document.getElementById('loginName').value.trim();
+  const pin  = document.getElementById('loginPin').value.trim();
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+
+  if(!input){ document.getElementById('loginName').focus(); return; }
+  // 로그인은 형식을 강제하지 않음 — 예전 4자리 숫자로 가입한 트레이너도 그대로
+  // 로그인할 수 있어야 하고, 실제로 맞는 비밀번호인지는 아래 인증 시도가 판단함
+  if(!pin){
+    errEl.textContent = '비밀번호를 입력해주세요';
     errEl.style.display = 'block';
-    document.getElementById('setupPin').focus();
+    document.getElementById('loginPin').focus();
     return;
   }
-  errEl.style.display = 'none';
-  // Firebase Auth 로그인/가입 (Firestore에 쓰기 전에 인증부터 — 순서가 바뀌면 인증 토큰이
-  // 없는 상태로 저장을 시도해서 조용히 실패함)
-  const authOk = await fsAuthEnsure(nameToId(name, pin), pin);
+
+  let name = input;
+  if(looksLikeLoginKey(input)){
+    // 전화번호/이메일로는 TRAINER_ID(이름_비번)를 바로 못 만듦 — login_lookup에서
+    // 진짜 이름을 먼저 찾아야 함. 이 조회는 비로그인 상태에서도 허용된 컬렉션이라
+    // 인증 없이 바로 가능함
+    const lookup = await fsGet('login_lookup', normalizeLoginKey(input));
+    if(!lookup || !lookup.trainerId){
+      errEl.textContent = '가입되지 않은 계정이에요. 아래 회원가입을 눌러주세요.';
+      errEl.style.display = 'block';
+      return;
+    }
+    // trainerId(이름_비번 형식)에서 실제 이름 부분만 뽑아냄 — nameToId가 언더스코어로
+    // 이름과 비번을 이어붙이는데, 마지막 '_' 뒤가 비번이므로 그 앞부분이 이름
+    const lastUnderscore = lookup.trainerId.lastIndexOf('_');
+    name = lastUnderscore >= 0 ? lookup.trainerId.slice(0, lastUnderscore) : lookup.trainerId;
+  }
+
+  const tid = nameToId(name, pin);
+  // Firestore 보안 규칙상 로그인(인증) 전에는 trainer_directory 조회 자체가 막혀있어서,
+  // 가입 여부를 확인하려면 먼저 인증부터 해야 함. fsAuthEnsure는 로그인 시도가 실패하면
+  // (Firebase Auth 계정이 아예 없으면) 조용히 새로 만들어버리는 함수라서, 여기서 Auth
+  // 계정이 생겼다고 그걸 "가입 성공"으로 착각하면 안 됨 — 진짜 가입 여부는 그 아래
+  // trainer_directory 문서 존재로만 판단함
+  const authOk = await fsAuthEnsure(tid, pin);
   if(!authOk){
     errEl.textContent = '로그인에 실패했어요. 잠시 후 다시 시도해주세요.';
     errEl.style.display = 'block';
     return;
   }
-  await saveTrainer(name, pin, gym, contact);
+  const existing = await fsGet('trainer_directory', tid);
+  if(!existing){
+    errEl.textContent = '가입되지 않은 계정이에요. 아래 회원가입을 눌러주세요.';
+    errEl.style.display = 'block';
+    return;
+  }
+  await saveTrainer(name, pin, existing.gym, existing.contact, existing.phone, existing.role);
   checkAppVersion();
   showScreen('screen-members');
   renderMemberList();
+}
+
+async function doSetup(){
+  const name = document.getElementById('setupName').value.trim();
+  const gym  = document.getElementById('setupGym').value.trim();
+  const phone = document.getElementById('setupPhone').value.trim();
+  const pin  = document.getElementById('setupPin').value.trim();
+  const contact = document.getElementById('setupContact').value.trim();
+  const roleSel = document.getElementById('setupRole').value;
+  const role = roleSel === '__custom__' ? document.getElementById('setupRoleCustom').value.trim() : roleSel;
+  const errEl = document.getElementById('setupError');
+  errEl.style.display = 'none';
+
+  if(!name){ document.getElementById('setupName').focus(); return; }
+  if(!phone){
+    errEl.textContent = '전화번호를 입력해주세요';
+    errEl.style.display = 'block';
+    document.getElementById('setupPhone').focus();
+    return;
+  }
+  if(!gym){ document.getElementById('setupGym').focus(); return; }
+  if(!role){
+    errEl.textContent = '직책을 입력해주세요';
+    errEl.style.display = 'block';
+    return;
+  }
+  if(!isValidNewPassword(pin)){
+    errEl.textContent = NEW_PASSWORD_HINT;
+    errEl.style.display = 'block';
+    document.getElementById('setupPin').focus();
+    return;
+  }
+
+  const tid = nameToId(name, pin);
+  // 같은 이름+비밀번호 조합이 이미 가입돼 있으면 막음 — 동명이인이 우연히 같은
+  // 비밀번호를 고르면 같은 계정으로 합쳐져서 서로의 회원 데이터를 보게 되는
+  // 사고를 여기서 차단함
+  const existingById = await fsGet('trainer_directory', tid);
+  if(existingById){
+    errEl.textContent = '이미 가입된 이름+비밀번호예요. 다른 비밀번호를 쓰거나 로그인해주세요.';
+    errEl.style.display = 'block';
+    return;
+  }
+  // 전화번호 중복 체크: 같은 사람이 실수로 다른 비밀번호로 중복 가입하는 것 방지
+  const existingByPhone = await findTrainerByPhone(phone);
+  if(existingByPhone){
+    errEl.textContent = '이미 가입된 전화번호예요. 로그인해주세요.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  // Firebase Auth 로그인/가입 (Firestore에 쓰기 전에 인증부터 — 순서가 바뀌면 인증 토큰이
+  // 없는 상태로 저장을 시도해서 조용히 실패함)
+  const authOk = await fsAuthEnsure(tid, pin);
+  if(!authOk){
+    errEl.textContent = '가입에 실패했어요. 잠시 후 다시 시도해주세요.';
+    errEl.style.display = 'block';
+    return;
+  }
+  await saveTrainer(name, pin, gym, contact, phone, role);
+  checkAppVersion();
+  showScreen('screen-members');
+  renderMemberList();
+  showToast(`🎉 ${name}님, 가입을 환영해요!`);
+}
+
+// trainer_directory 전체를 훑어서 같은 전화번호로 이미 가입한 트레이너가 있는지 찾음.
+// 트레이너 수가 아주 많아지면 느려질 수 있지만, 지금 규모(수십~수백 명)에서는 충분함
+async function findTrainerByPhone(phone){
+  if(!phone) return null;
+  try{
+    const all = await fsList('trainer_directory');
+    return all.find(t => t.phone === phone) || null;
+  } catch(e){ return null; }
 }
 
 /* ═══════════════════════════════════════
@@ -2317,10 +2500,13 @@ function switchMemberTab(t){
   if(t==='diet') renderDietPage();
 }
 
-function goToMembers(){
+async function goToMembers(){
   // autoSaveDraft() 호출보다 반드시 먼저 체크해야 함 (goBack()과 동일한 이유)
   if(editingEntryIdx !== null && _editDirty){
-    if(!confirm('저장하지 않고 나가시겠어요?\n수정한 내용이 사라져요.')) return;
+    if(confirm('작성 중인 일지를 저장할까요?')){
+      const saveOk = await saveJournal();
+      if(!saveOk) return; // 저장 실패 시 화면에 남아있음 (saveJournal이 이미 안내함)
+    }
   }
   autoSaveDraft(); // 일지 작성 화면에서 바로 나가는 경우를 위한 안전망
   _editDirty = false;
@@ -3471,9 +3657,15 @@ async function renderSessionMemoPrev(){
 async function renderRecentMemoBar(){
   const bar = document.getElementById('recentMemoBar');
   if(!bar || !currentMember) return;
+  // 메모함 전체에서 그냥 마지막 항목이 아니라, 바로 직전 일지(가장 최근 수업)
+  // 날짜에 달린 메모만 보여줘야 함. 안 그러면 그 회차엔 메모가 없어도 훨씬 이전
+  // 회차(예: 1회차) 메모가 배열 마지막에 남아있어서 계속 떠버림
+  const hist = await getMemberHistory(currentMember.id);
+  if(!hist.length){ bar.style.display='none'; return; }
+  const lastEntryDate = hist[hist.length-1].date;
   const memos = (await getMemos(currentMember.id)).filter(m=>m.id!=='note');
-  if(!memos.length){ bar.style.display='none'; return; }
-  const latest = memos[memos.length-1];
+  const latest = memos.find(m=>m.date===lastEntryDate);
+  if(!latest){ bar.style.display='none'; return; }
   bar.style.display = 'block';
   bar.innerHTML = `
     <div style="display:flex;align-items:flex-start;gap:8px;">
@@ -4070,22 +4262,34 @@ function openChangePin(){
 async function doChangePin(){
   const pin = document.getElementById('newPin').value.trim();
   const errEl = document.getElementById('pinError');
-  if(!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)){
-    errEl.textContent = '비밀번호는 숫자 4자리로 입력해주세요';
+  if(!isValidNewPassword(pin)){
+    errEl.textContent = NEW_PASSWORD_HINT;
     errEl.style.display = 'block';
     return;
   }
   const name = await getTrainer() || '';
-  await saveTrainer(name, pin);
+  // 비밀번호만 바꾸는 건데 gym/phone/role을 안 넘기면 saveTrainer가 그걸 빈 값으로
+  // 덮어써버림(gym은 '미확인'으로, phone/role은 지워짐) — 기존 값을 그대로 들고 감
+  const gym = localStorage.getItem('trainer_gym') || '';
+  const contact = localStorage.getItem('trainer_contact') || '';
+  const phone = localStorage.getItem('trainer_phone') || '';
+  const role = localStorage.getItem('trainer_role') || '';
+  await saveTrainer(name, pin, gym, contact, phone, role);
   closeModal('modal-changePin');
-  alert('PIN이 변경됐어요. 다른 기기에서도 새 PIN으로 로그인하세요.');
+  alert('비밀번호가 변경됐어요. 다른 기기에서도 새 비밀번호로 로그인하세요.');
 }
 
 async function doRenameTrainer(){
   const name = document.getElementById('newTrainerName').value.trim();
   if(!name) return;
   const existingPin = localStorage.getItem('trainer_pin') || '0000';
-  await saveTrainer(name, existingPin);
+  // 이름만 바꾸는 건데 gym/phone/role을 안 넘기면 saveTrainer가 그걸 빈 값으로
+  // 덮어써버림 — 기존 값을 그대로 들고 감 (doChangePin과 동일한 이유)
+  const gym = localStorage.getItem('trainer_gym') || '';
+  const contact = localStorage.getItem('trainer_contact') || '';
+  const phone = localStorage.getItem('trainer_phone') || '';
+  const role = localStorage.getItem('trainer_role') || '';
+  await saveTrainer(name, existingPin, gym, contact, phone, role);
   closeModal('modal-renameTrainer');
   renderMemberList();
 }
@@ -4138,13 +4342,18 @@ function openJournal(member){
   openNewJournal();
 }
 
-function goBack(){
-  // 기존 일지를 수정하던 중이면 임시저장이 안 되므로, 저장 안 하고 나가면
-  // 그대로 사라진다는 걸 확인받음 (autoSaveDraft() 호출보다 반드시 먼저 체크해야 함 —
-  // 그 호출 자체가 수정 모드에서는 _editDirty를 true로 만들어버려서 순서가 바뀌면
-  // 아무것도 안 고쳤어도 항상 확인창이 뜨는 오탐이 생김)
-  if(editingEntryIdx !== null && _editDirty){
-    if(!confirm('저장하지 않고 나가시겠어요?\n수정한 내용이 사라져요.')) return;
+async function goBack(){
+  // 입력된 내용이 있으면(신규 작성이든 수정 중이든) 그냥 나가지 않고 저장할지
+  // 물어봄 (autoSaveDraft() 호출보다 반드시 먼저 체크해야 함 — 그 호출 자체가
+  // 수정 모드에서는 _editDirty를 true로 만들어버려서 순서가 바뀌면 아무것도
+  // 안 고쳤어도 항상 확인창이 뜨는 오탐이 생김)
+  const hasInput = exercises.some(ex => (ex.name||'').trim());
+  const isEditDirty = editingEntryIdx !== null && _editDirty;
+  if(hasInput || isEditDirty){
+    if(confirm('작성 중인 일지를 저장할까요?')){
+      const saveOk = await saveJournal();
+      if(!saveOk) return; // 저장 실패 시 화면에 남아있음 (saveJournal이 이미 안내함)
+    }
   }
   // 화면 나가기 직전에 마지막 입력 상태를 한 번 더 임시저장함 (oninput 이벤트가
   // 이미 대부분 저장하지만, 화면 전환 자체는 그 이벤트들에 안 걸려있어서
@@ -4332,6 +4541,27 @@ function autoSaveDraft(){
 /* ═══════════════════════════════════════
    버전 체크
 ═══════════════════════════════════════ */
+// 배포할 때마다 여기에 그 버전에서 바뀐 내용을 추가할 것 — 업데이트 안내 팝업에
+// 자동으로 표시됨 (app-version 메타 태그의 버전과 키가 일치해야 함)
+const CHANGELOG = {
+  '2.4.0': [
+    '달력을 좌우로 스와이프하면 이전/다음 달로 이동해요',
+    '회원 목록이 ㄱㄴㄷ 순으로 정렬되고 글자별로 묶여서 보여요',
+    '무게 조절 다이얼을 만졌을 때 화면이 같이 스크롤되던 문제를 고쳤어요',
+    '일지 메모칸을 정리했어요 (일지 안 메모는 위아래가 자동으로 같이 저장돼요)',
+    '참고할 데이터에 종목별·부위별 볼륨 비교를 추가했어요',
+    '어시스트 운동(예: 어시스트 풀업)은 볼륨 표시에 "-"가 붙고, 총 볼륨 계산과 카톡 전송 텍스트에서 제외돼요'
+  ],
+  '2.4.1': [
+    '일지 작성 중 뒤로가기를 누르면 저장할지 물어봐요',
+    '메모칸에 직전 회차 메모만 뜨도록 고쳤어요 (예전엔 훨씬 전 회차 메모가 계속 남아있던 문제가 있었어요)',
+    '인터넷이 끊긴 상태에서 저장하면 바로 알려드려요',
+    '회원가입 화면이 새로 생겼어요 (전화번호, 헬스장, 직책도 함께 등록해요)',
+    '로그인할 때 이름뿐 아니라 전화번호나 이메일로도 가능해요',
+    '비밀번호를 영문/숫자 6자 이상으로 설정할 수 있어요 (기존 4자리 비밀번호도 계속 쓸 수 있어요)'
+  ]
+};
+
 async function checkAppVersion(){
   try{
     const currentVersion = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
@@ -4360,13 +4590,20 @@ function isNewerVersion(server, current){
 }
 
 function showUpdateBanner(newVersion){
+  const notes = CHANGELOG[newVersion];
+  const notesHtml = (notes && notes.length)
+    ? '<ul style="text-align:left;font-size:12px;color:var(--t2);line-height:1.7;margin:0 0 20px;padding-left:18px;">'
+      + notes.map(n=>'<li>'+n+'</li>').join('')
+      + '</ul>'
+    : '';
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
   overlay.innerHTML = `
     <div style="background:var(--sf);border-radius:var(--r16);padding:28px 24px;max-width:300px;width:90%;text-align:center;">
       <div style="font-size:24px;margin-bottom:12px;">🆕</div>
       <div style="font-size:16px;font-weight:700;color:var(--t);margin-bottom:6px;">새 버전이 있어요</div>
-      <div style="font-size:13px;color:var(--t3);margin-bottom:20px;">v${newVersion} 업데이트가 있어요.<br>확인을 눌러 최신 버전으로 업데이트하세요.</div>
+      <div style="font-size:13px;color:var(--t3);margin-bottom:${notesHtml?'12px':'20px'};">v${newVersion} 업데이트가 있어요.</div>
+      ${notesHtml}
       <button onclick="location.reload(true)" style="width:100%;padding:13px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
     </div>`;
   document.body.appendChild(overlay);
@@ -5274,7 +5511,11 @@ function attachDial(el){
     dragging=false;
     // 탭(움직임 없음) → 숫자 직접 입력 팝업. 스크롤로 취소된 경우엔 안 열림
     if(!moved && !cancelled) openDialInput(ei, si, type, di);
-    if(wasDragging) e.preventDefault();
+    // cancelled(스크롤로 취소)일 때만 기본 동작을 살려서 스크롤이 되게 하고,
+    // 그 외(탭 또는 드래그 조절)에는 preventDefault로 뒤이어 브라우저가 만들어내는
+    // 유령(ghost) mousedown/mouseup을 막음 — 안 막으면 같은 자리에서 mousedown
+    // 핸들러가 또 실행되어 숫자입력 팝업이 취소해도 바로 다시 뜨는 원인이 됨
+    if(!cancelled) e.preventDefault();
   },{passive:false});
 
   // 마우스 (PC)
@@ -5616,6 +5857,14 @@ const _journalSaveInFlight = new Set();
 
 async function saveJournal(){
   if(!currentMember) return;
+  // 오프라인이면 fetch가 어차피 실패할 텐데, 그 실패를 기다렸다가 알리는 것보다
+  // 시도 전에 바로 막아서 "여러 번 눌러도 계속 안 됨"을 트레이너가 더 빨리
+  // 알아채게 함. 인터넷 끊긴 헬스장에서 반복 저장하다가 결국 아무것도 서버에
+  // 안 남았던 실제 사고 이후 추가함
+  if(!navigator.onLine){
+    alert('⚠️ 인터넷 연결이 끊겨있어요.\n연결을 확인한 뒤 다시 저장해주세요.\n(지금 저장하면 안 될 수 있어요)');
+    return false;
+  }
   // 저장 시작 시점의 회원 ID를 고정 (비동기 중 currentMember 바뀌는 거 방지)
   const memberId = currentMember.id;
 

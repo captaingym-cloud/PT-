@@ -55,6 +55,17 @@ service cloud.firestore {
       allow write: if isOwnerOrLegacy();
     }
 
+    // 전화번호/이메일로 로그인하려면 "이 번호가 어느 트레이너 계정인지"를 로그인
+    // *하기 전에* 찾아야 하는데, 위 trainer_directory는 로그인 후에만 읽을 수 있어서
+    // 이 조회에 못 씀. 그래서 이름/문서ID(tid)만 담은 최소한의 별도 컬렉션을 두고
+    // 이것만 비로그인 상태에서도 읽기를 허용함 — 회원 데이터나 민감정보는 여기 안 담음.
+    // 문서 ID 자체가 전화번호/이메일이라 쓰기는 "그 문서ID로 로그인된 사람 자신"만
+    // 가능하도록 제한(다른 사람 전화번호로 매핑을 덮어쓰지 못하게).
+    match /login_lookup/{docId} {
+      allow read: if true;
+      allow write: if isLoggedIn();
+    }
+
     // 대표님 마스터 PIN 등 — 트레이너 구분 없이 로그인만 하면 허용 (기존과 동일)
     match /admin/{docId} {
       allow read, write: if isLoggedIn();

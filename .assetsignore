@@ -1,3 +1,7 @@
 .git
 .wrangler
 .gitignore
+.claude
+.dev.vars
+.dev.vars.example
+src
