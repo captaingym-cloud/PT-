@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.4.1"/>
+<meta name="app-version" content="2.4.2"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -266,9 +266,15 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .cal-selected-date{font-size:11px;font-weight:600;color:var(--g0);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;}
 
 .ex-color-row{display:flex;gap:6px;padding:8px 14px 10px;}
-.ex-color-dot{width:28px;height:28px;border-radius:7px;cursor:pointer;border:3px solid transparent;transition:transform .1s,border-color .1s,opacity .1s;flex-shrink:0;opacity:0.85;}
+.ex-color-dot{width:28px;height:28px;border-radius:7px;cursor:pointer;border:3px solid transparent;transition:transform .1s,border-color .1s,opacity .1s;flex-shrink:0;opacity:0.85;position:relative;}
 .ex-color-dot:active{transform:scale(.88);}
-.ex-color-dot.selected{border-color:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.25);transform:scale(1.1);opacity:1;}
+.ex-color-dot.selected{border-color:var(--t);box-shadow:0 0 0 2px var(--sf), 0 0 0 3.5px var(--t);transform:scale(1.1);opacity:1;}
+.ex-color-dot.selected::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900;text-shadow:0 1px 2px rgba(0,0,0,.5);}
+
+.pref-color-dot{display:inline-block;width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;margin-right:8px;transition:transform .1s;position:relative;}
+.pref-color-dot:active{transform:scale(.88);}
+.pref-color-dot.selected{transform:scale(1.12);box-shadow:0 0 0 2px var(--sf), 0 0 0 3.5px var(--t);}
+.pref-color-dot.selected::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:900;text-shadow:0 1px 2px rgba(0,0,0,.5);}
 
 /* ONBOARDING */
 .ob-slide{display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px 28px;text-align:center;height:100%;}
@@ -794,14 +800,6 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
 
       <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
         <div>
-          <div style="font-size:13px;font-weight:500;color:var(--t);">✍️ 말투 학습</div>
-          <div style="font-size:11px;color:var(--t3);margin-top:2px;" id="toneStatusLabel">카톡 스크린샷으로 내 말투를 학습시켜요</div>
-        </div>
-        <button onclick="openToneTraining()" style="font-size:12px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">설정</button>
-      </div>
-
-      <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
-        <div>
           <div style="font-size:13px;font-weight:500;color:var(--t);">회원 전체 삭제</div>
           <div style="font-size:11px;color:var(--t3);margin-top:2px;">회원 목록과 모든 일지가 삭제돼요</div>
         </div>
@@ -819,6 +817,47 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     </div>
 
     <button class="modal-btn cancel" style="width:100%;" onclick="closeModal('modal-settings')">닫기</button>
+    <div style="text-align:center;font-size:11px;color:var(--t3);margin-top:10px;">버전 <span id="appVersionLabel"></span></div>
+  </div>
+</div>
+
+<!-- 일지 작성 설정 모달 (말투 학습, 부위별 색상 등 일지 작성 중에 쓰는 설정 모음) -->
+<div class="modal-overlay" id="modal-journalSettings" style="display:none;" onclick="if(event.target===this)closeModal('modal-journalSettings')">
+  <div class="modal-box">
+    <div class="modal-title">일지 작성 설정</div>
+
+    <div style="background:var(--sf2);border-radius:var(--r12);overflow:hidden;margin-bottom:14px;">
+      <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--t);">✍️ 말투 학습</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px;" id="toneStatusLabel">카톡 스크린샷으로 내 말투를 학습시켜요</div>
+        </div>
+        <button onclick="openToneTraining()" style="font-size:12px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">설정</button>
+      </div>
+
+      <div style="padding:13px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--t);">🎨 부위별 색상</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px;">종목 색상 자동 지정 기준을 바꿔요</div>
+        </div>
+        <button onclick="openColorPrefs()" style="font-size:12px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">설정</button>
+      </div>
+    </div>
+
+    <button class="modal-btn cancel" style="width:100%;" onclick="closeModal('modal-journalSettings')">닫기</button>
+  </div>
+</div>
+
+<!-- 부위별 색상 설정 모달 -->
+<div class="modal-overlay" id="modal-colorPrefs" style="display:none;" onclick="if(event.target===this)closeModal('modal-colorPrefs')">
+  <div class="modal-box" style="max-height:80vh;overflow-y:auto;">
+    <div class="modal-title">🎨 부위별 색상</div>
+    <p style="font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:14px;">종목을 입력하면 부위를 추측해서 자동으로 색을 붙여요. 부위마다 어떤 색을 쓸지 여기서 바꿀 수 있어요.</p>
+    <div id="colorPrefsList"></div>
+    <p style="font-size:11px;color:var(--t3);line-height:1.6;margin-top:10px;">일지 작성 중 종목 색을 직접 바꾸면, 그 종목명은 다음에도 그 색으로 기억돼요.</p>
+    <button class="modal-btn cancel" style="width:100%;margin-top:12px;" onclick="closeModal('modal-colorPrefs')">닫기</button>
+  </div>
+</div>
 
 <!-- 말투 학습 모달 -->
 <div class="modal-overlay" id="modal-toneTraining" style="display:none;" onclick="if(event.target===this)closeModal('modal-toneTraining')">
@@ -845,8 +884,6 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     <button class="modal-btn cancel" style="width:100%;" onclick="closeModal('modal-toneTraining')">닫기</button>
   </div>
 </div>
-    <div style="text-align:center;font-size:11px;color:var(--t3);margin-top:10px;">버전 <span id="appVersionLabel"></span></div>
-  </div>
 </div>
 
 <!-- 트레이너 이름 변경 모달 -->
@@ -888,6 +925,9 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
       </button>
       <span class="nav-title" id="journalMemberName"></span>
       <span style="font-size:11px;color:var(--t3);" id="journalFormTitle">새 일지 작성</span>
+      <button onclick="openJournalSettings()" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--t3);display:flex;align-items:center;" aria-label="일지 작성 설정">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
     </div>
     <div class="nav-tabs">
       <button class="nav-tab active" id="tab-input" onclick="switchTab('input')">
@@ -1345,6 +1385,10 @@ async function ensureFreshToken(){
 
 // Firestore 문서 경로: col/docId
 async function fsGet(col, docId){
+  // 조회는 화면 전환마다 여러 번 일어나서, 오프라인일 때마다 경고창을 띄우면
+  // 너무 시끄러움 — 여기선 그냥 조용히 빠르게 null 반환(불필요한 fetch 시도
+  // 생략)만 하고, 실제 "저장이 안 됐다"는 경고는 fsSet에서만 띄움
+  if(!navigator.onLine) return null;
   try{
     await ensureFreshToken();
     const res = await fetch(`${FS_BASE}/${col}/${encodeURIComponent(docId)}`, {headers: fsAuthHeaders()});
@@ -1355,9 +1399,28 @@ async function fsGet(col, docId){
   } catch(e){ return null; }
 }
 
+// 오프라인 상태에서 fsSet을 여러 번 연달아 호출해도(자동저장 등) 경고창이
+// 줄줄이 뜨지 않도록, 짧은 시간 안에는 한 번만 띄움
+let _lastOfflineAlertAt = 0;
+function warnIfOffline(){
+  if(navigator.onLine) return false;
+  const now = Date.now();
+  if(now - _lastOfflineAlertAt > 3000){
+    _lastOfflineAlertAt = now;
+    alert('⚠️ 인터넷 연결이 끊겨있어요.\n연결을 확인한 뒤 다시 시도해주세요.\n(지금은 저장이 안 될 수 있어요)');
+  }
+  return true;
+}
+
 // 저장 성공 여부(true/false)를 반환함 — 호출하는 쪽에서 실패를 감지해서
 // 사용자에게 "저장 안 됐어요"라고 알려줄 수 있게 하기 위함
 async function fsSet(col, docId, value){
+  // 오프라인이면 fetch가 어차피 실패할 텐데, 그 실패를 기다렸다가 알리는 것보다
+  // 시도 전에 바로 막아서 트레이너가 더 빨리 알아채게 함. 일지 저장뿐 아니라
+  // fsSet을 쓰는 모든 저장(회원가입, 메모, 색상 설정 등)에 공통 적용됨 —
+  // 인터넷 끊긴 헬스장에서 반복 저장하다가 결국 아무것도 서버에 안 남았던
+  // 실제 사고 이후 추가함
+  if(warnIfOffline()) return false;
   try{
     await ensureFreshToken();
     // v(실제 데이터)랑 별도로 ownerId(누가 저장했는지, 보안 규칙에서 소유자
@@ -1602,6 +1665,7 @@ let exercises = [];
 let selectedParts = [];
 let editingEntryIdx = null; // null이면 새 일지, 숫자면 수정 모드 (해당 인덱스)
 let _editDirty = false; // 수정 모드에서 저장 안 한 변경사항이 있는지
+let colorPrefsCache = null; // 종목 색상 커스터마이징 캐시 (로그인/새로고침 시 초기화됨)
 
 const PARTS_LIST = ['가슴','등','어깨','하체','팔','코어'];
 
@@ -1655,10 +1719,28 @@ async function autoSetExColor(ei, name){
   // 종목명이 바뀌면(다른 부위로) 다시 추측해서 갱신해야 함
   if(exercises[ei].color && exercises[ei].colorManual) return;
 
+  const prefs = await getColorPrefs();
+  // 이 종목명을 예전에 트레이너가 직접 이 색으로 지정했던 적이 있으면 그걸
+  // 최우선으로 씀 — 부위 추측보다 "이 트레이너가 이 종목을 실제로 어떻게
+  // 색칠해왔는지"가 더 정확한 신호이기 때문
+  const learnedColor = prefs.exerciseColors[exerciseColorKey(name)];
+  if(learnedColor){
+    // 응답 기다릴 필요 없는 동기 케이스라 콜백 사이 경쟁 걱정 없이 바로 반영
+    exercises[ei].color = learnedColor;
+    exercises[ei].colorManual = false;
+    refreshExColorDots(ei, learnedColor);
+    return;
+  }
+
+  // 부위별로 트레이너가 커스텀 지정한 색이 있으면 기본 EX_COLORS 대신 그걸 씀
+  function partToColorIdForTrainer(part){
+    return prefs.partColors[part] || partToColorId(part);
+  }
+
   // 1단계: 키워드로 먼저 시도
   const part = guessPartFromName(name);
   if(part){
-    const colorId = partToColorId(part);
+    const colorId = partToColorIdForTrainer(part);
     if(colorId){
       exercises[ei].color = colorId;
       exercises[ei].colorManual = false;
@@ -1675,7 +1757,7 @@ async function autoSetExColor(ei, name){
       messages:[{role:'user',content:`"${name}"의 주요 운동 부위는?`}]
     });
     const aiPart = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
-    const colorId = partToColorId(aiPart);
+    const colorId = partToColorIdForTrainer(aiPart);
     // 응답 기다리는 동안 사용자가 직접 색을 골랐을 수 있으니 그 경우엔 덮어쓰지 않음
     if(colorId && !(exercises[ei].color && exercises[ei].colorManual)){
       exercises[ei].color = colorId;
@@ -1700,6 +1782,7 @@ document.addEventListener('DOMContentLoaded', async function(){
 
   // 앱 시작할 때마다 캐시 초기화 → Firestore에서 최신 데이터 불러옴
   Object.keys(cache).forEach(k => delete cache[k]);
+  colorPrefsCache = null;
 
   // 새로고침/탭 닫기 전 임시저장
   window.addEventListener('beforeunload', ()=>{ autoSaveDraft(); });
@@ -1722,6 +1805,7 @@ document.addEventListener('DOMContentLoaded', async function(){
   }
   // 앱 시작 시 캐시 초기화 → Firestore에서 항상 최신 데이터 로드
   Object.keys(cache).forEach(k => delete cache[k]);
+  colorPrefsCache = null;
 
   const trainer = await getTrainer();
   if(trainer){
@@ -3773,6 +3857,66 @@ async function saveTrainerTone(toneText){
   await fsSet('data', 'tone_'+TRAINER_ID, { text: toneText, updatedAt: new Date().toISOString() });
 }
 
+/* ═══════════════════════════════════════
+   종목 색상 커스터마이징
+   (트레이너마다 부위별 기본색을 다르게 쓰거나, 특정 종목명은 항상 정해진
+   색으로 고정하고 싶어함 — 둘 다 지원)
+═══════════════════════════════════════ */
+async function getColorPrefs(){
+  if(colorPrefsCache) return colorPrefsCache;
+  if(!TRAINER_ID) return { partColors:{}, exerciseColors:{} };
+  const v = await fsGet('data', 'color_prefs_'+TRAINER_ID);
+  colorPrefsCache = { partColors: (v&&v.partColors)||{}, exerciseColors: (v&&v.exerciseColors)||{} };
+  return colorPrefsCache;
+}
+
+async function saveColorPrefs(prefs){
+  if(!TRAINER_ID) return false;
+  colorPrefsCache = prefs;
+  return await fsSet('data', 'color_prefs_'+TRAINER_ID, prefs);
+}
+
+// 종목명은 트레이너마다 앞뒤 공백/전각공백 등 미세한 차이로 다르게 입력할 수 있어서,
+// 학습된 색을 다시 찾을 때 놓치지 않도록 트림 정도만 통일해서 키로 씀
+function exerciseColorKey(name){
+  return (name||'').trim();
+}
+
+// 사용자가 직접 색을 고른 경우에만 호출됨 (자동 추측 결과는 학습 안 함 — 그건
+// "트레이너의 의도"가 아니라 그냥 프로그램이 추측한 값이라서)
+async function learnExerciseColor(name, colorId){
+  const key = exerciseColorKey(name);
+  if(!key || !colorId) return;
+  const prefs = await getColorPrefs();
+  prefs.exerciseColors[key] = colorId;
+  await saveColorPrefs(prefs);
+}
+
+async function openColorPrefs(){
+  const prefs = await getColorPrefs();
+  const list = document.getElementById('colorPrefsList');
+  list.innerHTML = PARTS_LIST.map(part=>{
+    const currentColorId = prefs.partColors[part] || partToColorId(part);
+    const dots = EX_COLORS.map(c=>
+      `<span class="pref-color-dot${currentColorId===c.id?' selected':''}"
+        onclick="setPartColorPref('${part}','${c.id}')"
+        style="background:${c.bg};border-color:${currentColorId===c.id?c.border:'transparent'};"></span>`
+    ).join('');
+    return `<div style="padding:10px 0;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:13px;font-weight:600;color:var(--t);width:44px;flex-shrink:0;">${part}</span>
+      <div>${dots}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('modal-colorPrefs').style.display = 'flex';
+}
+
+async function setPartColorPref(part, colorId){
+  const prefs = await getColorPrefs();
+  prefs.partColors[part] = colorId;
+  await saveColorPrefs(prefs);
+  openColorPrefs(); // 선택 표시 갱신을 위해 다시 그림
+}
+
 async function openToneTraining(){
   toneB64List = [];
   document.getElementById('toneFilePreview').innerHTML = '';
@@ -4196,6 +4340,12 @@ async function openSettings(){
   syncDarkModeToggle();
 }
 
+// 일지 작성 화면 전용 설정(말투 학습, 부위별 색상) — 계정 설정과 분리해서
+// 일지 쓰다가 바로 열어볼 수 있게 함
+function openJournalSettings(){
+  document.getElementById('modal-journalSettings').style.display = 'flex';
+}
+
 /* ═══════════════════════════════════════
    다크 모드
 ═══════════════════════════════════════ */
@@ -4237,6 +4387,7 @@ function doLogout(){
   fsTokenExpiry = 0;
   fsAuthedEmail = null;
   Object.keys(cache).forEach(k => delete cache[k]);
+  colorPrefsCache = null;
   showScreen('screen-setup');
   document.getElementById('setupName').value = '';
   document.getElementById('setupGym').value = '';
@@ -4559,12 +4710,30 @@ const CHANGELOG = {
     '회원가입 화면이 새로 생겼어요 (전화번호, 헬스장, 직책도 함께 등록해요)',
     '로그인할 때 이름뿐 아니라 전화번호나 이메일로도 가능해요',
     '비밀번호를 영문/숫자 6자 이상으로 설정할 수 있어요 (기존 4자리 비밀번호도 계속 쓸 수 있어요)'
+  ],
+  '2.4.2': [
+    '운동 부위별 색상을 트레이너님이 직접 정할 수 있어요 (일지 화면 톱니바퀴 → 부위별 색상)',
+    '종목 색을 직접 바꾸면 그 종목명은 다음에도 같은 색으로 기억돼요',
+    '일지 작성 화면에 전용 설정(말투 학습, 부위별 색상) 톱니바퀴가 따로 생겼어요',
+    '색상 선택 표시를 체크마크로 더 잘 보이게 바꿨어요',
+    '업데이트를 새로고침으로 받으면 이번에 뭐가 바뀌었는지 바로 보여드려요',
+    '인터넷 끊김 경고가 일지 저장뿐 아니라 회원가입, 설정 저장 등 모든 저장에 적용돼요'
   ]
 };
 
 async function checkAppVersion(){
+  const currentVersion = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
+
+  // 방금 새로고침해서 이 버전을 처음 받은 경우, 서버와 비교할 필요 없이 바로
+  // "이번에 뭐가 바뀌었는지" 보여줌 — 이걸 안 하면 트레이너는 새로고침해서
+  // 최신을 받아도 뭐가 달라졌는지 전혀 알 길이 없었음(버전 숫자만 조용히 바뀜)
+  const lastSeenVersion = localStorage.getItem('last_seen_app_version');
+  if(lastSeenVersion && lastSeenVersion !== currentVersion && isNewerVersion(currentVersion, lastSeenVersion)){
+    showJustUpdatedBanner(currentVersion);
+  }
+  localStorage.setItem('last_seen_app_version', currentVersion);
+
   try{
-    const currentVersion = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
     // Firestore에 수동으로 기록해두는 버전이 아니라, 지금 실제 배포된 index.html을 직접
     // 받아와서 그 안의 버전 태그와 비교함 (깃허브 push → Cloudflare 자동배포라서
     // 대표님이 따로 "배포" 버튼을 누를 필요가 없어짐)
@@ -4589,13 +4758,18 @@ function isNewerVersion(server, current){
   return false;
 }
 
-function showUpdateBanner(newVersion){
-  const notes = CHANGELOG[newVersion];
-  const notesHtml = (notes && notes.length)
+function changelogNotesHtml(version){
+  const notes = CHANGELOG[version];
+  return (notes && notes.length)
     ? '<ul style="text-align:left;font-size:12px;color:var(--t2);line-height:1.7;margin:0 0 20px;padding-left:18px;">'
       + notes.map(n=>'<li>'+n+'</li>').join('')
       + '</ul>'
     : '';
+}
+
+// 아직 구버전을 보고 있는 트레이너에게 "새로고침하면 업데이트돼요"라고 안내함
+function showUpdateBanner(newVersion){
+  const notesHtml = changelogNotesHtml(newVersion);
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
   overlay.innerHTML = `
@@ -4605,6 +4779,24 @@ function showUpdateBanner(newVersion){
       <div style="font-size:13px;color:var(--t3);margin-bottom:${notesHtml?'12px':'20px'};">v${newVersion} 업데이트가 있어요.</div>
       ${notesHtml}
       <button onclick="location.reload(true)" style="width:100%;padding:13px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+// 방금 새로고침해서 이미 최신 버전을 받은 트레이너에게 "이번에 뭐가 바뀌었는지"
+// 보여줌 — showUpdateBanner와 달리 새로고침을 유도할 필요가 없어서 버튼이 그냥 닫기
+function showJustUpdatedBanner(newVersion){
+  const notesHtml = changelogNotesHtml(newVersion);
+  if(!notesHtml) return; // 보여줄 변경 내용이 없으면 굳이 팝업 안 띄움
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
+  overlay.innerHTML = `
+    <div style="background:var(--sf);border-radius:var(--r16);padding:28px 24px;max-width:300px;width:90%;text-align:center;">
+      <div style="font-size:24px;margin-bottom:12px;">✨</div>
+      <div style="font-size:16px;font-weight:700;color:var(--t);margin-bottom:6px;">v${newVersion}(으)로 업데이트됐어요</div>
+      <div style="font-size:13px;color:var(--t3);margin-bottom:12px;">이번에 이런 점이 달라졌어요</div>
+      ${notesHtml}
+      <button onclick="this.closest('div').parentElement.remove()" style="width:100%;padding:13px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
     </div>`;
   document.body.appendChild(overlay);
 }
@@ -5733,6 +5925,11 @@ function setExColor(ei, colorId){
   exercises[ei].color = colorId;
   exercises[ei].colorManual = true; // 사용자가 직접 골랐으니 종목명이 바뀌어도 자동 추측이 덮어쓰지 않게
   refreshExColorDots(ei, colorId);
+  // 트레이너가 이 종목명에 직접 이 색을 지정했다는 걸 기억해뒀다가, 다음에 같은
+  // 종목명을 쓸 때 자동으로 이 색이 붙게 함 (자동 추측 결과는 학습 대상이 아님 —
+  // 여기는 사용자가 실제로 클릭해서 고른 경우만 옴)
+  const name = exercises[ei].name;
+  if(name) learnExerciseColor(name, colorId);
 }
 
 /* ═══════════════════════════════════════
@@ -5857,14 +6054,9 @@ const _journalSaveInFlight = new Set();
 
 async function saveJournal(){
   if(!currentMember) return;
-  // 오프라인이면 fetch가 어차피 실패할 텐데, 그 실패를 기다렸다가 알리는 것보다
-  // 시도 전에 바로 막아서 "여러 번 눌러도 계속 안 됨"을 트레이너가 더 빨리
-  // 알아채게 함. 인터넷 끊긴 헬스장에서 반복 저장하다가 결국 아무것도 서버에
-  // 안 남았던 실제 사고 이후 추가함
-  if(!navigator.onLine){
-    alert('⚠️ 인터넷 연결이 끊겨있어요.\n연결을 확인한 뒤 다시 저장해주세요.\n(지금 저장하면 안 될 수 있어요)');
-    return false;
-  }
+  // 오프라인 체크는 fsSet() 안에 공통으로 있어서 여기서 따로 안 해도 됨 —
+  // 이 함수 안에서 실제로 저장을 시도하는 saveMemberHistory 등이 결국 fsSet을
+  // 거치기 때문에, 오프라인이면 거기서 알아서 막히고 경고가 뜸
   // 저장 시작 시점의 회원 ID를 고정 (비동기 중 currentMember 바뀌는 거 방지)
   const memberId = currentMember.id;
 
