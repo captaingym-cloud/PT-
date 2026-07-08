@@ -12,5 +12,22 @@
       "binding": "SMS_KV",
       "id": "1828df33d7ad4159a7b00dc0723a11e2"
     }
-  ]
+  ],
+  // 매일 자동 전체 백업을 저장하는 R2 버킷 (data/hist_/journal_/memo2_ 등
+  // 모든 Firestore 데이터의 스냅샷을 날짜별 JSON 파일로 보관)
+  "r2_buckets": [
+    {
+      "binding": "PT_BACKUPS",
+      "bucket_name": "pt-backups"
+    }
+  ],
+  // 매일 새벽 4시~5시 55분(KST, UTC 19:00~20:55)에 5분 간격으로 실행.
+  // 회원/트레이너가 많아 한 번의 Worker 실행으로 못 끝내는 경우를 대비해
+  // 여러 번 나눠서 이어감(runFullBackup이 진행 상태를 R2에 저장해뒀다가
+  // 이어서 처리함). 이미 오늘치가 끝나 있으면 곧바로 skip하고 리턴함.
+  // 2시간(24회) 안에 못 끝낼 정도로 트레이너/회원이 늘어나면 배치 크기
+  // (TRAINERS_PER_BATCH/MEMBERS_PER_BATCH, worker.js)를 키워야 함
+  "triggers": {
+    "crons": ["*/5 19-20 * * *"]
+  }
 }

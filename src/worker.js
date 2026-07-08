@@ -1,10 +1,16 @@
-// SMS 인증 API + 정적 파일 서빙을 함께 처리하는 Worker.
-// 기존 pt 프로젝트는 정적 파일만 서빙했는데(assets 전용), 여기에 /api/* 경로만
-// 가로채서 서버 로직(알리고 SMS 발송)을 처리하고 나머지는 그대로 정적 파일로
+// SMS 인증 API + 정적 파일 서빙 + 매일 자동 전체 백업(cron)을 함께 처리하는
+// Worker. 기존 pt 프로젝트는 정적 파일만 서빙했는데(assets 전용), 여기에
+// /api/* 경로만 가로채서 서버 로직을 처리하고 나머지는 그대로 정적 파일로
 // 넘겨서 index.html 등 기존 배포는 전혀 안 건드림.
 
 const CODE_TTL_SECONDS = 5 * 60; // 인증번호 5분 유효
 const RESEND_COOLDOWN_SECONDS = 60; // 같은 번호로 재발송은 60초 간격 제한 (SMS 스팸/비용 남용 방지)
+
+const FS_PROJECT = 'captaingym-1ccd2';
+const FS_API_KEY = 'AIzaSyCXtPpKkFZuDnkZViRheHMq9mePKDUbUt8';
+const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
+const AUTH_BASE = 'https://identitytoolkit.googleapis.com/v1';
+const BACKUP_RETENTION_DAYS = 30; // 이보다 오래된 백업은 자동 삭제 (용량 관리)
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -128,6 +134,191 @@ async function handleVerifySms(request, env) {
   return jsonResponse({ ok: true });
 }
 
+/* ═══════════════════════════════════════
+   매일 자동 전체 백업
+   (2026-07-08 데이터 유실 사고 이후 추가 — 배열 문서를 항목당 문서로 바꾼
+   구조 개선과는 별개로, "어떤 원인으로든 통째 유실이 나도 되돌릴 수 있게"
+   매일 밤 전체 데이터를 R2에 스냅샷 떠서 보관함)
+═══════════════════════════════════════ */
+
+function trainerEmail(trainerId) {
+  const safe = encodeURIComponent(trainerId).replace(/%/g, '_');
+  return `${safe}@captaingym.local`;
+}
+
+// 대표님 마스터 계정(__admin__)으로 로그인 — 이 계정만 모든 트레이너의
+// ownerId 검사를 통과하도록 firestore.rules에 예외가 있어서, 백업이
+// 전체 데이터에 접근하려면 이 계정이 필요함
+async function backupAuth(adminPin) {
+  const email = trainerEmail('__admin__');
+  const password = 'pw_' + adminPin + '_captaingym';
+  const res = await fetch(`${AUTH_BASE}/accounts:signInWithPassword?key=${FS_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.idToken;
+}
+
+async function fsListAll(token, col) {
+  const results = [];
+  let pageToken = '';
+  do {
+    const url = `${FS_BASE}/${col}?pageSize=300${pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''}`;
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) break;
+    const data = await res.json();
+    (data.documents || []).forEach((doc) => {
+      if (doc.fields && doc.fields.v) {
+        try {
+          results.push(JSON.parse(doc.fields.v.stringValue));
+        } catch (e) {}
+      }
+    });
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
+  return results;
+}
+
+// Worker 1회 실행당 subrequest 한도(기본 50개)를 넘지 않도록, 백업을 두
+// 단계(phase)로 나누고 각 단계 안에서도 배치로 쪼갬:
+//   phase 'list'  — trainer_directory 순회하며 트레이너별 members_* 조회
+//                    (트레이너 1명당 subrequest 1개)를 TRAINERS_PER_BATCH씩
+//   phase 'fetch' — worklist(=회원 1명 단위)를 MEMBERS_PER_BATCH씩,
+//                    회원 1명당 최대 4개 subrequest(journal/memo2/inbody/meal)
+// 두 단계를 합치지 않고 완전히 분리해야 "trainer_directory 조회 +
+// 트레이너별 members 조회"가 이미 다 써버린 subrequest 위에 회원 데이터
+// 조회가 겹쳐서 한도를 넘는 문제(실제로 발생)를 피할 수 있음.
+const TRAINERS_PER_BATCH = 15;
+const MEMBERS_PER_BATCH = 10;
+const BACKUP_PROGRESS_KEY = 'backups/_progress.json';
+
+async function fsListAllForMember(token, tid, mid) {
+  const [journal, memos, inbody, meal] = await Promise.all([
+    fsListAll(token, `journal_${tid}_${mid}`),
+    fsListAll(token, `memo2_${tid}_${mid}`),
+    fsListAll(token, `inbody_${tid}_${mid}`),
+    fsListAll(token, `meal_${tid}_${mid}`),
+  ]);
+  return { journal, memos, inbody, meal };
+}
+
+// 하루치 백업을 여러 번의 Worker 실행에 걸쳐 이어감. env.PT_BACKUPS에 진행
+// 상태(현재 phase, 다음 인덱스, 지금까지 모은 데이터)를 저장해두고, 매
+// 호출마다 정해진 배치 크기만큼만 처리한 뒤 남았으면 done:false를 반환함 —
+// 호출한 쪽(continueBackupIfNeeded)이 이걸 보고 새 요청으로 다시 호출함.
+async function runFullBackup(env) {
+  const adminPin = env.DASH_ADMIN_PIN;
+  if (!adminPin) {
+    return { ok: false, error: 'DASH_ADMIN_PIN secret이 설정되지 않았어요' };
+  }
+
+  const dateKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // cron이 5분마다 도는 동안, 오늘치 백업이 이미 완료돼서 파일이 있으면
+  // 곧바로 스킵함 — 이 체크가 없으면 완료 후에도 계속 처음부터 재시작하게 됨
+  const existing = await env.PT_BACKUPS.head(`backups/${dateKey}.json`);
+  if (existing) {
+    return { ok: true, done: true, skipped: true, key: `backups/${dateKey}.json` };
+  }
+
+  const token = await backupAuth(adminPin);
+  if (!token) {
+    return { ok: false, error: '관리자 인증에 실패했어요' };
+  }
+
+  const progressObj = await env.PT_BACKUPS.get(BACKUP_PROGRESS_KEY);
+  let progress = progressObj ? await progressObj.json().catch(() => null) : null;
+
+  // 진행 상태가 없거나, 있어도 오늘 날짜가 아니면(=어제 백업이 처리 도중
+  // 끊긴 채 남아있는 상태면) 오늘 것으로 새로 시작함 — phase 'list'부터
+  if (!progress || progress.dateKey !== dateKey) {
+    const trainers = await fsListAll(token, 'trainer_directory');
+    progress = {
+      dateKey,
+      phase: 'list',
+      trainers,
+      trainerIndex: 0,
+      trainerMeta: {},
+      worklist: [],
+      memberIndex: 0,
+      byTrainer: {},
+    };
+  }
+
+  if (progress.phase === 'list') {
+    const { trainers } = progress;
+    const endIndex = Math.min(progress.trainerIndex + TRAINERS_PER_BATCH, trainers.length);
+    for (let i = progress.trainerIndex; i < endIndex; i++) {
+      const trainer = trainers[i];
+      const tid = trainer.trainerId;
+      if (!tid) continue;
+      progress.trainerMeta[tid] = { trainerId: tid, name: trainer.name, gym: trainer.gym };
+      const members = await fsListAll(token, `members_${tid}`);
+      for (const member of members) {
+        if (!member.id) continue;
+        progress.worklist.push({ tid, member });
+      }
+    }
+    progress.trainerIndex = endIndex;
+
+    if (progress.trainerIndex < trainers.length) {
+      await env.PT_BACKUPS.put(BACKUP_PROGRESS_KEY, JSON.stringify(progress), {
+        httpMetadata: { contentType: 'application/json' },
+      });
+      return { ok: true, done: false, phase: 'list', processed: progress.trainerIndex, total: trainers.length };
+    }
+    progress.phase = 'fetch';
+  }
+
+  // phase === 'fetch'
+  const { worklist, trainerMeta, byTrainer } = progress;
+  const endIndex = Math.min(progress.memberIndex + MEMBERS_PER_BATCH, worklist.length);
+  for (let i = progress.memberIndex; i < endIndex; i++) {
+    const { tid, member } = worklist[i];
+    const data = await fsListAllForMember(token, tid, member.id);
+    if (!byTrainer[tid]) byTrainer[tid] = [];
+    byTrainer[tid].push({ member, ...data });
+  }
+  progress.memberIndex = endIndex;
+
+  const done = progress.memberIndex >= worklist.length;
+
+  if (!done) {
+    await env.PT_BACKUPS.put(BACKUP_PROGRESS_KEY, JSON.stringify(progress), {
+      httpMetadata: { contentType: 'application/json' },
+    });
+    return { ok: true, done: false, phase: 'fetch', processed: progress.memberIndex, total: worklist.length };
+  }
+
+  // 전부 끝났으면 트레이너별로 묶어서 최종 스냅샷을 날짜별 파일로 저장
+  const snapshot = {
+    generatedAt: new Date().toISOString(),
+    trainers: Object.keys(trainerMeta).map((tid) => ({
+      ...trainerMeta[tid],
+      members: byTrainer[tid] || [],
+    })),
+  };
+  const key = `backups/${dateKey}.json`;
+  await env.PT_BACKUPS.put(key, JSON.stringify(snapshot), {
+    httpMetadata: { contentType: 'application/json' },
+  });
+  await env.PT_BACKUPS.delete(BACKUP_PROGRESS_KEY);
+
+  // 오래된 백업 정리 (용량 관리)
+  const cutoff = Date.now() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const list = await env.PT_BACKUPS.list({ prefix: 'backups/' });
+  for (const obj of list.objects) {
+    if (obj.uploaded && new Date(obj.uploaded).getTime() < cutoff && obj.key !== BACKUP_PROGRESS_KEY) {
+      await env.PT_BACKUPS.delete(obj.key);
+    }
+  }
+
+  return { ok: true, done: true, key, trainerCount: Object.keys(trainerMeta).length };
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -138,8 +329,46 @@ export default {
     if (url.pathname === '/api/verify-sms' && request.method === 'POST') {
       return handleVerifySms(request, env);
     }
+    if (url.pathname === '/api/backup-now' && request.method === 'POST') {
+      // 매일 자동으로 도는 것과 별개로, 필요할 때 수동으로 즉시 백업을 뜰 수
+      // 있게 하는 관리자 전용 엔드포인트. 요청 본문에 관리자 PIN을 넣어야
+      // 실행됨(아무나 못 부르게) — cron이 쓰는 것과 같은 PIN을 재사용
+      let payload;
+      try {
+        payload = await request.json();
+      } catch (e) {
+        return jsonResponse({ ok: false, error: '요청 형식이 올바르지 않아요.' }, 400);
+      }
+      if (!payload.pin || payload.pin !== env.DASH_ADMIN_PIN) {
+        return jsonResponse({ ok: false, error: '권한이 없어요.' }, 403);
+      }
+      // 배치 구조라 한 번 호출로 안 끝날 수 있음(done:false) — 그럴 땐
+      // 응답의 done 값을 보고 /api/backup-continue를 반복 호출해야 함.
+      // 자동 매일 백업은 5분 간격 cron이 알아서 이어서 처리함.
+      const result = await runFullBackup(env);
+      return jsonResponse(result, result.ok ? 200 : 500);
+    }
+    if (url.pathname === '/api/backup-continue' && request.method === 'POST') {
+      // /api/backup-now가 done:false를 반환했을 때, 다음 배치를 이어서
+      // 처리하기 위해 수동으로 반복 호출하는 엔드포인트. PIN은
+      // 쿼리스트링으로 받음(스크립트에서 반복 호출하기 편하게)
+      const pin = url.searchParams.get('pin');
+      if (!pin || pin !== env.DASH_ADMIN_PIN) {
+        return jsonResponse({ ok: false, error: '권한이 없어요.' }, 403);
+      }
+      const result = await runFullBackup(env);
+      return jsonResponse(result, result.ok ? 200 : 500);
+    }
 
     // API 경로가 아니면 기존처럼 정적 파일(index.html 등)로 그대로 넘김
     return env.ASSETS.fetch(request);
+  },
+
+  // Cloudflare cron trigger가 5분마다 자동 호출함 (wrangler.jsonc의
+  // triggers.crons 설정 참고). 한 번에 한 배치만 처리하고, 오늘치 백업이
+  // 이미 끝나 있으면 runFullBackup이 곧바로 skip 처리해서 조용히 리턴함 —
+  // 그래서 하루 종일 돌아도 실제로는 새벽에 몇 번만 의미 있게 실행됨.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runFullBackup(env));
   },
 };

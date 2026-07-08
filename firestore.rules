@@ -76,9 +76,21 @@ service cloud.firestore {
       allow read, write: if isOwnerOrLegacy();
     }
 
-    // members_<트레이너ID> 처럼 트레이너마다 이름이 다른 회원 목록 컬렉션
+    // members_<트레이너ID> 처럼 트레이너마다 이름이 다른 회원 목록 컬렉션.
+    // journal_/memo2_/inbody_/meal_ <트레이너ID>_<회원ID>는 일지/메모/인바디/
+    // 식단 기록을 회원당 배열 문서 하나가 아니라 항목 하나당 문서 하나로
+    // 저장하는 컬렉션 — 여러 기기에서 동시에 다른 항목을 써도 서로 다른
+    // 문서라 덮어쓸 일이 없게 하기 위함(2026-07-08 데이터 유실 사고 이후
+    // 배열 문서 구조에서 전환)
     match /{collection}/{docId} {
-      allow read, write: if collection.matches('^members_.*') && isOwnerOrLegacy();
+      allow read, write: if (
+        collection.matches('^members_.*') ||
+        collection.matches('^journal_.*') ||
+        collection.matches('^memo2_.*') ||
+        collection.matches('^inbody_.*') ||
+        collection.matches('^meal_.*') ||
+        collection.matches('^trash_.*')
+      ) && isOwnerOrLegacy();
     }
   }
 }
