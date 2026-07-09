@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.4.7"/>
+<meta name="app-version" content="2.4.8"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -2124,10 +2124,20 @@ document.addEventListener('DOMContentLoaded', async function(){
 
   // 새로고침/탭 닫기 전 임시저장
   window.addEventListener('beforeunload', ()=>{ autoSaveDraft(); });
-  // 홈으로 나가거나 백그라운드 갈 때 임시저장
+  // 홈으로 나가거나 백그라운드 갈 때 임시저장. 반대로 다시 돌아올 때(화면을
+  // 다시 보게 될 때)는 새 배포가 있었는지 재확인함 — 예전엔 로그인 시점에만
+  // checkAppVersion()을 불러서, 로그인 상태를 오래 유지한 채 앱을 계속
+  // 켜두고 쓰는 트레이너는 몇 번을 배포해도 업데이트 배너를 영영 못 봤음
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState === 'hidden') autoSaveDraft();
+    if(document.visibilityState === 'hidden'){
+      autoSaveDraft();
+    } else if(TRAINER_ID){
+      checkAppVersion();
+    }
   });
+  // 화면을 아예 안 벗어나고 계속 켜놓은 채 오래 쓰는 경우(visibilitychange가
+  // 한 번도 안 일어남)도 있어서, 15분마다 한 번씩도 같이 확인함
+  setInterval(()=>{ if(TRAINER_ID && document.visibilityState === 'visible') checkAppVersion(); }, 15*60*1000);
 
   initCalSwipe();
 
@@ -5163,6 +5173,9 @@ const CHANGELOG = {
   '2.4.7': [
     '일지 작성 설정에 "지금 작성 중인 내용 초기화" 버튼을 추가했어요',
     '업데이트 안내 배너가 가끔 안 뜨던 문제를 고쳤어요'
+  ],
+  '2.4.8': [
+    '앱을 켜놓은 채 오래 써도 새 업데이트가 있으면 알려드려요 (예전엔 로그인할 때만 확인했어요)'
   ]
 };
 
@@ -5220,10 +5233,14 @@ function changelogNotesHtml(version){
     : '';
 }
 
-// 아직 구버전을 보고 있는 트레이너에게 "새로고침하면 업데이트돼요"라고 안내함
+// 아직 구버전을 보고 있는 트레이너에게 "새로고침하면 업데이트돼요"라고 안내함.
+// checkAppVersion()이 화면 복귀/주기적 타이머로 여러 번 돌 수 있어서, 이미
+// 배너가 떠 있으면 또 띄우지 않게 막음(안 막으면 겹쳐서 계속 쌓일 수 있음)
 function showUpdateBanner(newVersion){
+  if(document.getElementById('updateBannerOverlay')) return;
   const notesHtml = changelogNotesHtml(newVersion);
   const overlay = document.createElement('div');
+  overlay.id = 'updateBannerOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
   overlay.innerHTML = `
     <div style="background:var(--sf);border-radius:var(--r16);padding:28px 24px;max-width:300px;width:90%;text-align:center;">
