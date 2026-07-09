@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.5.3"/>
+<meta name="app-version" content="2.5.4"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1536,6 +1536,28 @@ async function fsListSafe(col){
     } while(pageToken);
     return { ok:true, value:results };
   } catch(e){ return { ok:false, value:results }; }
+}
+
+// 컬렉션 안의 문서를 전부(문서ID까지) 지움. fsListSafe는 문서 내용(v 필드)만
+// 반환하고 문서ID는 버리는데, 트레이너 완전 삭제처럼 "이 컬렉션 자체를 통째로
+// 없앤다"는 경우엔 문서ID가 필요해서 별도로 구현함
+async function fsDeleteAllInCollection(col){
+  try{
+    await ensureFreshToken();
+    let pageToken = '';
+    do {
+      const url = `${FS_BASE}/${col}?pageSize=300${pageToken ? '&pageToken='+encodeURIComponent(pageToken) : ''}`;
+      const res = await fetch(url, {headers: fsAuthHeaders()});
+      if(!res.ok) return;
+      const data = await res.json();
+      const docs = data.documents || [];
+      await Promise.all(docs.map(doc => {
+        const docId = doc.name.split('/').pop();
+        return fsDel(col, docId);
+      }));
+      pageToken = data.nextPageToken || '';
+    } while(pageToken);
+  } catch(e){}
 }
 
 /* ── 메모리 캐시 (빠른 UI용) ── */
@@ -5425,6 +5447,10 @@ const CHANGELOG = {
   ],
   '2.5.3': [
     '대표 대시보드에서 로그아웃하면 트레이너 회원목록이 아니라 로그인 화면으로 이동해요'
+  ],
+  '2.5.4': [
+    '트레이너 삭제 기능이 대표 화면에서 관리자 화면으로 옮겨졌어요',
+    '트레이너를 삭제하면 회원·일지·메모·식단 데이터까지 완전히 삭제돼요 (예전엔 목록에서만 숨겨지고 데이터는 남아있었어요)'
   ]
 };
 
@@ -5770,7 +5796,7 @@ async function loadDashTrainerList(){
           <div style="font-size:20px;font-weight:800;color:${allDone?'var(--g0)':hasUnsent?'var(--red)':'var(--t3)'};">${todayTotal?todaySent+'/'+todayTotal:'—'}</div>
           <div style="font-size:10px;color:var(--t3);">전송</div>
         </div>
-        <button onclick="event.stopPropagation();deleteTrainerFromDir('${t.trainerId}','${t.name}')" style="background:none;border:none;padding:4px 6px;font-size:11px;color:var(--t3);cursor:pointer;font-family:inherit;flex-shrink:0;opacity:0.5;">✕</button>
+        ${dashEntryMode === 'admin' ? `<button onclick="event.stopPropagation();deleteTrainerFromDir('${t.trainerId}','${t.name}')" style="background:none;border:none;padding:4px 6px;font-size:11px;color:var(--red);cursor:pointer;font-family:inherit;flex-shrink:0;opacity:0.6;">🗑️</button>` : ''}
       </div>
       ${todayTotal?`
       <div style="height:8px;background:var(--sf2);border-radius:4px;overflow:hidden;margin-bottom:4px;">
@@ -5954,9 +5980,53 @@ function openDashDetail(storeKey){
   document.getElementById('modal-dash-detail').style.display = 'flex';
 }
 
+// 관리자 전용 — 트레이너와 그 회원/일지/메모/식단 데이터를 Firestore에서
+// 완전히 지움. Firebase Auth 로그인 계정 자체는 안 지움(별도 관리자 API가
+// 필요해서 범위 밖) — 그래서 같은 이름+비밀번호로 재가입을 시도하면 "이미
+// 가입된 계정"으로 막힐 수 있는데, 실무적으로는 문제가 거의 없어서 감수함.
+// 삭제 전 대표 지정(ownerTrainerId/ownerPending)이었으면 그 헬스장도 정리함
 async function deleteTrainerFromDir(trainerId, name){
-  if(!confirm(`${name} 트레이너를 목록에서 삭제할까요?\n(트레이너 데이터는 유지돼요)`)) return;
-  await fsDel('trainer_directory', trainerId);
+  if(!confirm(`${name} 트레이너와 소속 회원의 모든 데이터(일지·메모·식단 포함)를\n완전히 삭제할까요?\n\n이 작업은 되돌릴 수 없어요.`)) return;
+  if(!confirm(`정말로 삭제할까요?\n"${name}"의 데이터가 전부 사라져요.`)) return;
+
+  const trainer = await fsGet('trainer_directory', trainerId);
+  const members = await fsList('members_'+trainerId) || [];
+
+  await Promise.all(members.flatMap(m => [
+    fsDeleteAllInCollection(`journal_${trainerId}_${m.id}`),
+    fsDeleteAllInCollection(`memo2_${trainerId}_${m.id}`),
+    fsDeleteAllInCollection(`inbody_${trainerId}_${m.id}`),
+    fsDeleteAllInCollection(`meal_${trainerId}_${m.id}`),
+    fsDel('data', `dietmeta_${trainerId}_${m.id}`),
+    fsDel('data', `hist_${trainerId}_${m.id}`), // 예전 배열 문서 구조 잔재가 있을 수 있어 같이 정리
+  ]));
+
+  await fsDeleteAllInCollection(`members_${trainerId}`);
+  await fsDeleteAllInCollection(`trash_${trainerId}`);
+  const loginKeyDeletes = [];
+  if(trainer && trainer.phone) loginKeyDeletes.push(fsDel('login_lookup', normalizeLoginKey(trainer.phone)));
+  if(trainer && trainer.contact) loginKeyDeletes.push(fsDel('login_lookup', normalizeLoginKey(trainer.contact)));
+  await Promise.all([
+    fsDel('data', `tone_${trainerId}`),
+    fsDel('data', `sent_${trainerId}`),
+    fsDel('trainers', trainerId),
+    fsDel('trainer_directory', trainerId),
+    ...loginKeyDeletes,
+  ]);
+
+  // 이 트레이너가 자기 헬스장의 대표(또는 승인 대기 중)였으면 그 지정도 풀어줌
+  if(trainer && trainer.gymId){
+    const gym = await fsGet('gym_directory', trainer.gymId);
+    if(gym && (gym.ownerTrainerId === trainerId || gym.ownerPending === trainerId)){
+      await fsSet('gym_directory', trainer.gymId, {
+        ...gym,
+        ownerTrainerId: gym.ownerTrainerId === trainerId ? null : gym.ownerTrainerId,
+        ownerPending: gym.ownerPending === trainerId ? null : gym.ownerPending,
+      });
+    }
+  }
+
+  showToast(`${name} 트레이너 데이터를 삭제했어요`);
   loadDashTrainerList();
 }
 
