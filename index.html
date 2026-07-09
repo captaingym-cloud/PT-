@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.4.4"/>
+<meta name="app-version" content="2.4.5"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -220,10 +220,10 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .cal-dow span:first-child{color:#E24B4A;}
 .cal-dow span:last-child{color:#378ADD;}
 .cal-grid-clip{overflow:hidden;}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;transition:transform .24s cubic-bezier(.4,0,.2,1), opacity .24s ease;}
-.cal-grid.cal-slide-out-left{transform:translateX(-46%);opacity:0;}
-.cal-grid.cal-slide-out-right{transform:translateX(46%);opacity:0;}
-.cal-grid.cal-slide-in{transform:translateX(0);opacity:1;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;transition:transform .26s cubic-bezier(.25,.1,.25,1);}
+.cal-grid.cal-slide-out-left{transform:translateX(-100%);}
+.cal-grid.cal-slide-out-right{transform:translateX(100%);}
+.cal-grid.cal-slide-in{transform:translateX(0);}
 .cal-cell{aspect-ratio:var(--dp-aspect, 0.68);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;border-radius:var(--r8);cursor:pointer;position:relative;touch-action:manipulation;transition:background .1s;overflow:hidden;min-width:0;}
 .cal-cell:active{background:var(--sf2);}
 .cal-cell.empty{cursor:default;}
@@ -2730,9 +2730,11 @@ function calSelectDate(key, d){
 }
 
 function calMove(dir){
-  const grid = document.getElementById('calGrid');
-  const outClass = dir > 0 ? 'cal-slide-out-left' : 'cal-slide-out-right';
-  const inClass  = dir > 0 ? 'cal-slide-out-right' : 'cal-slide-out-left';
+  // 카카오톡 달력처럼 "새 달이 넘어가는 방향 반대편에서 등장해 한 번에 쭉
+  // 밀려 들어오는" 단일 동작으로 처리함. 이전엔 현재 달이 먼저 빠져나가고
+  // 그 다음 새 달이 들어오는 2단계였는데, 그 사이 텀 때문에 끊겨 보이고
+  // "지나쳤다 돌아오는" 것처럼 느껴졌음
+  const inClass = dir > 0 ? 'cal-slide-out-right' : 'cal-slide-out-left';
 
   calMonth += dir;
   if(calMonth > 11){ calMonth=0; calYear++; }
@@ -2740,26 +2742,23 @@ function calMove(dir){
   calSelected = null;
   document.getElementById('calSelectedEntries').style.display = 'none';
 
-  if(!grid){ renderCalendar(); return; }
+  renderCalendar();
+  const newGrid = document.getElementById('calGrid');
+  if(!newGrid) return;
 
-  // 이전 달로 넘어갈 땐 화면이 오른쪽으로 빠지고, 다음 달로 넘어갈 땐 왼쪽으로
-  // 빠지게 해서 스와이프한 방향과 애니메이션 방향이 일치하도록 함. 연속으로
-  // 화살표를 눌렀을 때 직전 애니메이션의 cal-slide-in이 남아있으면 새
-  // 트랜지션과 충돌해서 안 움직이는 것처럼 보이므로, 먼저 싹 지우고 시작함
-  grid.classList.remove('cal-slide-out-left', 'cal-slide-out-right', 'cal-slide-in');
-  void grid.offsetWidth;
-  grid.classList.add(outClass);
+  // 트랜지션 없이 즉시 반대편 바깥으로 이동시킨 뒤, 다음 틱에 트랜지션과
+  // 함께 제자리로 돌아오게 해서 "반대편에서 등장" 애니메이션을 만듦.
+  // requestAnimationFrame은 탭이 배경 상태면 브라우저가 아예 실행을 미뤄서
+  // 애니메이션이 멈춘 것처럼 보일 수 있어 setTimeout(0)을 씀
+  newGrid.style.transition = 'none';
+  newGrid.classList.remove('cal-slide-out-left', 'cal-slide-out-right', 'cal-slide-in');
+  newGrid.classList.add(inClass);
+  void newGrid.offsetWidth;
   setTimeout(() => {
-    renderCalendar();
-    const newGrid = document.getElementById('calGrid');
-    newGrid.classList.remove('cal-slide-out-left', 'cal-slide-out-right');
-    newGrid.classList.add(inClass);
-    // 다음 프레임에 트랜지션 클래스를 걸어야 "반대편에서 등장" 애니메이션이 재생됨
-    requestAnimationFrame(() => {
-      newGrid.classList.remove(inClass);
-      newGrid.classList.add('cal-slide-in');
-    });
-  }, 140);
+    newGrid.style.transition = '';
+    newGrid.classList.remove(inClass);
+    newGrid.classList.add('cal-slide-in');
+  }, 0);
 }
 
 // 달력을 좌우로 스와이프하면 이전/다음 달로 넘어가게 함. 세로 스크롤(화면 넘기기)과
@@ -5091,6 +5090,9 @@ const CHANGELOG = {
   ],
   '2.4.4': [
     '달력에서 이전/다음 달로 넘어갈 때 슬라이드 애니메이션이 보여요 (화살표, 스와이프 둘 다)'
+  ],
+  '2.4.5': [
+    '달력 월 이동 애니메이션을 더 자연스럽게 다듬었어요'
   ]
 };
 
