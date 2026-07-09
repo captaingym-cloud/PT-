@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.5.0"/>
+<meta name="app-version" content="2.5.2"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -564,7 +564,30 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     <div id="loginError" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;"></div>
     <button class="setup-btn" onclick="doLogin()">로그인</button>
     <button class="setup-switch" onclick="showScreen('screen-signup')">처음이세요? 회원가입</button>
+    <button onclick="showScreen('screen-owner-login')" style="margin-top:20px;background:none;border:none;font-size:11px;color:var(--t3);cursor:pointer;font-family:inherit;text-decoration:underline;">대표님이세요?</button>
   </div>
+  </div>
+</div>
+
+<!-- 대표 로그인 화면 — 트레이너 로그인과 별개 입력창. 여기서 로그인하면
+     Worker(/api/owner-auth)가 대표 권한을 확인한 뒤 곧바로 대시보드로 감 -->
+<div class="screen" id="screen-owner-login">
+  <div class="setup-wrap">
+    <div class="setup-logo">📊</div>
+    <div class="setup-title">대표님 로그인</div>
+    <div class="setup-sub">소속 헬스장의 전체 트레이너 현황을<br/>확인할 수 있어요</div>
+    <div class="setup-field">
+      <label>이름, 전화번호 또는 이메일</label>
+      <input id="ownerLoginName" placeholder="이름 / 전화번호 / 이메일" maxlength="60"/>
+    </div>
+    <div class="setup-field">
+      <label>비밀번호</label>
+      <input id="ownerLoginPin" type="password" placeholder="비밀번호" maxlength="30"
+        style="text-align:center;font-size:18px;"/>
+    </div>
+    <div id="ownerLoginError" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;"></div>
+    <button class="setup-btn" onclick="doOwnerLogin()">로그인</button>
+    <button class="setup-switch" onclick="showScreen('screen-setup')">← 트레이너 로그인으로</button>
   </div>
 </div>
 
@@ -641,9 +664,6 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
       <div class="greeting-name" id="greetingName"></div>
       <div class="greeting-sub" id="greetingMeta"></div>
     </div>
-    <button id="ownerDashboardEntryBtn" onclick="enterOwnerDashboard()" style="display:none;width:100%;padding:12px;margin-bottom:14px;background:var(--sf);border:0.5px solid var(--bd2);border-radius:var(--r12);font-size:13px;font-weight:600;color:var(--t);cursor:pointer;font-family:inherit;align-items:center;justify-content:center;gap:6px;">
-      📊 트레이너 현황 보기
-    </button>
     <div class="section-label">내 회원</div>
     <div id="memberCards"></div>
   </div>
@@ -2339,21 +2359,68 @@ async function doLogin(){
   }
   await saveTrainer(name, pin, existing.gym, existing.contact, existing.phone, existing.role);
   checkAppVersion();
-
-  // 승인된 대표 계정이면 회원 목록을 거치지 않고 곧바로 대시보드로 들어감 —
-  // 예전 마스터 PIN 방식 대시보드가 로그인하자마자 바로 현황을 보여주던 흐름과
-  // 같게 맞춘 것. 회원 관리가 필요 없는(회원 0명인 경우가 많은) 대표 입장에서
-  // 자기 회원 목록 화면을 먼저 보여주는 게 의미 없어서 이렇게 함
-  if(existing.gymId){
-    const gym = await fsGet('gym_directory', existing.gymId);
-    if(gym && gym.ownerTrainerId === tid){
-      await enterOwnerDashboard();
-      return;
-    }
-  }
-
   showScreen('screen-members');
   renderMemberList();
+}
+
+// 트레이너 로그인과 완전히 분리된 입력창(screen-owner-login)에서 대표가
+// 직접 로그인. 성공하면 doLogin()처럼 회원 목록으로 보내지 않고 항상
+// enterOwnerDashboard()로 보냄 — 여기로 온 이상 "대표로서 보러 왔다"는
+// 의도가 명확하므로, 자동 판별에 기대지 않고 바로 시도하고 실패하면
+// 명확한 이유를 보여줌
+async function doOwnerLogin(){
+  const input = document.getElementById('ownerLoginName').value.trim();
+  const pin = document.getElementById('ownerLoginPin').value.trim();
+  const errEl = document.getElementById('ownerLoginError');
+  errEl.style.display = 'none';
+
+  if(!input){ document.getElementById('ownerLoginName').focus(); return; }
+  if(!pin){
+    errEl.textContent = '비밀번호를 입력해주세요';
+    errEl.style.display = 'block';
+    document.getElementById('ownerLoginPin').focus();
+    return;
+  }
+
+  let name = input;
+  if(looksLikeLoginKey(input)){
+    const lookup = await fsGet('login_lookup', normalizeLoginKey(input));
+    if(!lookup || !lookup.trainerId){
+      errEl.textContent = '가입되지 않은 계정이에요.';
+      errEl.style.display = 'block';
+      return;
+    }
+    const lastUnderscore = lookup.trainerId.lastIndexOf('_');
+    name = lastUnderscore >= 0 ? lookup.trainerId.slice(0, lastUnderscore) : lookup.trainerId;
+  }
+
+  const tid = nameToId(name, pin);
+  const authOk = await fsAuthEnsure(tid, pin);
+  if(!authOk){
+    errEl.textContent = '로그인 정보가 올바르지 않아요.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const existing = await fsGet('trainer_directory', tid);
+  if(!existing){
+    errEl.textContent = '가입되지 않은 계정이에요.';
+    errEl.style.display = 'block';
+    return;
+  }
+  await saveTrainer(name, pin, existing.gym, existing.contact, existing.phone, existing.role);
+
+  const ok = await enterOwnerDashboard();
+  if(!ok){
+    // enterOwnerDashboard가 이미 alert로 구체적인 이유를 보여줬음(대표 권한
+    // 없는 계정 등). 로그인 자체는 유효하니 트레이너 로그인 화면으로 보내서
+    // 일반 트레이너로 계속 쓸 수 있게 함
+    errEl.textContent = '대표 권한이 없는 계정이에요. 트레이너로 로그인할게요.';
+    errEl.style.display = 'block';
+    setTimeout(() => {
+      showScreen('screen-members');
+      renderMemberList();
+    }, 1200);
+  }
 }
 
 async function doSetup(){
@@ -2473,26 +2540,7 @@ function getChosungGroup(name){
   return CHOSUNG_GROUP[choIdx] || ch;
 }
 
-// 지금 로그인된 트레이너가 자기 헬스장의 승인된 대표인지 확인해서, 맞으면
-// 회원 목록 화면에 "트레이너 현황 보기" 버튼을 보여줌. 매번 서버를 조회하지만
-// 회원 목록 화면 진입 시 1번만 실행되니 부담은 적음
-async function checkOwnerDashboardButton(){
-  const btn = document.getElementById('ownerDashboardEntryBtn');
-  if(!btn || !TRAINER_ID) return;
-  btn.style.display = 'none';
-  try{
-    const trainer = await fsGet('trainer_directory', TRAINER_ID);
-    if(!trainer || !trainer.gymId) return;
-    const gym = await fsGet('gym_directory', trainer.gymId);
-    if(gym && gym.ownerTrainerId === TRAINER_ID){
-      btn.style.display = 'flex';
-      btn.dataset.gymId = trainer.gymId;
-      btn.dataset.gymName = gym.name || '';
-    }
-  } catch(e){}
-}
-
-// 대표가 "트레이너 현황 보기"를 눌렀을 때 진입. 관리자와 같은 화면
+// 대표가 로그인 화면의 "대표님이세요?"를 통해 들어왔을 때 진입. 관리자와 같은 화면
 // (screen-trainer-select)을 재사용하되, 관리자 전용인 "목록으로" 버튼은 숨겨서
 // 대표는 자기 헬스장 밖으로 못 나가게 함(대표는 다른 헬스장을 볼 권한이 없음).
 //
@@ -2502,7 +2550,10 @@ async function checkOwnerDashboardButton(){
 // 직접 바꿔치기해서, 이후 대시보드 화면의 fsGet/fsList 호출들이 관리자
 // 권한으로 동작하게 만듦
 async function enterOwnerDashboard(){
-  if(!TRAINER_ID) return;
+  if(!TRAINER_ID){
+    console.error('enterOwnerDashboard: TRAINER_ID가 없어서 중단됨');
+    return false;
+  }
   const trainerPin = localStorage.getItem('trainer_pin') || '0000';
 
   let res;
@@ -2513,13 +2564,15 @@ async function enterOwnerDashboard(){
       body: JSON.stringify({ trainerId: TRAINER_ID, trainerPin }),
     });
   } catch(e){
-    alert('대시보드 진입에 실패했어요. 인터넷 연결을 확인해주세요.');
-    return;
+    console.error('enterOwnerDashboard: fetch 실패', e);
+    alert('⚠️ 대시보드 진입에 실패했어요 (네트워크 오류).\n인터넷 연결을 확인해주세요.');
+    return false;
   }
   const data = await res.json().catch(() => null);
   if(!res.ok || !data || !data.ok){
-    alert((data && data.error) || '대시보드 진입에 실패했어요.');
-    return;
+    console.error('enterOwnerDashboard: 서버 거부', res.status, data);
+    alert('⚠️ ' + ((data && data.error) || '대표 권한이 없는 계정이에요.'));
+    return false;
   }
 
   // Worker가 발급한 관리자 idToken을 그대로 씀 (만료 시간은 Firebase Auth
@@ -2537,6 +2590,7 @@ async function enterOwnerDashboard(){
   if(backBtn) backBtn.style.display = 'none'; // 대표는 다른 헬스장으로 못 넘어가야 함
   showScreen('screen-trainer-select');
   loadDashTrainerList();
+  return true;
 }
 
 async function renderMemberList(){
@@ -2549,8 +2603,6 @@ async function renderMemberList(){
   document.getElementById('greetingMeta').textContent =
     `${now.getMonth()+1}월 ${now.getDate()}일 ${days[now.getDay()]}요일  ·  회원 ${members.length}명`;
   document.getElementById('trainerBadge').textContent = trainer;
-
-  checkOwnerDashboardButton();
 
   const container = document.getElementById('memberCards');
   container.innerHTML = '';
@@ -5364,6 +5416,12 @@ const CHANGELOG = {
     '"이 헬스장의 대표입니다" 체크로 대표 권한을 신청할 수 있어요',
     '승인된 대표는 로그인하면 바로 소속 트레이너 현황을 볼 수 있어요',
     '일지 작성 설정에 "지금 작성 중인 내용 초기화" 버튼을 추가했어요'
+  ],
+  '2.5.1': [
+    '대표 로그인 시 대시보드 진입 오류 메시지를 더 자세히 보여드려요'
+  ],
+  '2.5.2': [
+    '로그인 화면에 "대표님이세요?" 버튼이 다시 생겼어요 — 트레이너 로그인과 완전히 구분해서, 대표 로그인 성공 시 바로 트레이너 현황으로 이동해요'
   ]
 };
 
