@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.4.8"/>
+<meta name="app-version" content="2.5.0"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -564,7 +564,6 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     <div id="loginError" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;"></div>
     <button class="setup-btn" onclick="doLogin()">로그인</button>
     <button class="setup-switch" onclick="showScreen('screen-signup')">처음이세요? 회원가입</button>
-    <button onclick="showScreen('screen-dashboard-login')" style="margin-top:20px;background:none;border:none;font-size:11px;color:var(--t3);cursor:pointer;font-family:inherit;text-decoration:underline;">대표님이세요?</button>
   </div>
   </div>
 </div>
@@ -613,6 +612,10 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
       </select>
       <input id="setupRoleCustom" placeholder="직책을 입력하세요" maxlength="20" style="display:none;margin-top:8px;"/>
     </div>
+    <div class="setup-field" style="display:flex;align-items:center;gap:8px;">
+      <input id="setupIsOwner" type="checkbox" style="width:18px;height:18px;margin:0;"/>
+      <label for="setupIsOwner" style="margin:0;font-weight:400;">이 헬스장의 대표(관리자)입니다</label>
+    </div>
 
     <div id="setupError" style="font-size:12px;color:var(--red);max-width:320px;text-align:center;margin-bottom:8px;display:none;"></div>
     <button class="setup-btn" onclick="doSetup()">가입하기</button>
@@ -638,6 +641,9 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
       <div class="greeting-name" id="greetingName"></div>
       <div class="greeting-sub" id="greetingMeta"></div>
     </div>
+    <button id="ownerDashboardEntryBtn" onclick="enterOwnerDashboard()" style="display:none;width:100%;padding:12px;margin-bottom:14px;background:var(--sf);border:0.5px solid var(--bd2);border-radius:var(--r12);font-size:13px;font-weight:600;color:var(--t);cursor:pointer;font-family:inherit;align-items:center;justify-content:center;gap:6px;">
+      📊 트레이너 현황 보기
+    </button>
     <div class="section-label">내 회원</div>
     <div id="memberCards"></div>
   </div>
@@ -1092,12 +1098,12 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
   </div>
 </div>
 
-<!-- 대표님 로그인 화면 -->
+<!-- 관리자 전용 로그인 화면 (로그인 화면 이름칸에 암호 단어를 입력해야 진입됨) -->
 <div class="screen" id="screen-dashboard-login">
   <div class="setup-wrap">
     <div class="setup-logo">📊</div>
-    <div class="setup-title">대표님 로그인</div>
-    <div class="setup-sub">마스터 비밀번호를 입력하면<br/>트레이너 현황을 볼 수 있어요</div>
+    <div class="setup-title">관리자 로그인</div>
+    <div class="setup-sub">관리자 비밀번호를 입력하면<br/>전체 헬스장 현황을 볼 수 있어요</div>
     <div class="setup-field">
       <input id="dashMasterPin" type="password" inputmode="numeric" placeholder="• • • • • •" maxlength="10" style="letter-spacing:0.2em;text-align:center;font-size:20px;"/>
     </div>
@@ -1107,13 +1113,33 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
   </div>
 </div>
 
-<!-- 트레이너 선택 화면 -->
+<!-- 관리자 전용: 전체 헬스장 목록 -->
+<div class="screen" id="screen-gym-select">
+  <nav class="nav">
+    <div class="nav-inner">
+      <span class="nav-title">헬스장 현황</span>
+      <div style="display:flex;gap:6px;">
+        <button onclick="loadGymList()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">🔄 새로고침</button>
+        <button onclick="doDashLogout()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">로그아웃</button>
+      </div>
+    </div>
+  </nav>
+  <div style="padding:16px;max-width:480px;margin:0 auto;">
+    <div id="gymOwnerPendingSection"></div>
+    <div class="eyebrow">전체 헬스장 (<span id="gymTotalCount">0</span>)</div>
+    <div id="gymList"></div>
+  </div>
+</div>
+
+<!-- 트레이너 선택 화면 (관리자가 헬스장을 골랐을 때 / 대표가 로그인했을 때 둘 다 재사용) -->
 <div class="screen" id="screen-trainer-select">
   <nav class="nav">
     <div class="nav-inner">
+      <button id="dashBackToGymListBtn" onclick="showScreen('screen-gym-select')" style="display:none;background:none;border:none;cursor:pointer;padding:4px 6px 4px 0;color:var(--t2);display:none;align-items:center;gap:2px;font-size:12px;font-family:inherit;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>목록
+      </button>
       <span class="nav-title">트레이너 현황</span>
       <div style="display:flex;gap:6px;">
-        <button onclick="openDashPinChange()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">⚙️</button>
         <button onclick="markAllSent()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">✓ 전체 전송됨</button>
         <button onclick="loadDashTrainerList()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">🔄 새로고침</button>
         <button onclick="doDashLogout()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">로그아웃</button>
@@ -1540,6 +1566,35 @@ async function saveTrainer(name, pin, gym, contact, phone, role){
   await registerToDirectory(name, TRAINER_ID, g, c, ph, r);
 }
 
+// 헬스장 이름 문자열로 gym_directory에서 헬스장을 찾거나 없으면 새로 만들어서
+// gymId를 돌려줌. "완전히 같은 문자열"만 같은 헬스장으로 취급함 — "캡틴짐"과
+// "캡틴짐 월영점"처럼 오타/변형이 있으면 일부러 다른 헬스장으로 분리 생성됨
+// (자동으로 유사한 것끼리 합쳐버리면 실제로 다른 지점인 경우 잘못 묶일 위험이
+// 있어서, 병합은 사람이 관리자 화면에서 판단하도록 남겨둠)
+async function findOrCreateGym(gymName, createdByTrainerId){
+  const name = (gymName||'').trim() || '미확인';
+  try{
+    const all = await fsListSafe('gym_directory');
+    if(all.ok){
+      const found = all.value.find(g => g.name === name);
+      if(found) return found.gymId;
+    }
+    // 못 찾았으면(혹은 목록 조회가 실패했으면) 새로 만듦. 목록 조회 실패 시에도
+    // 그냥 새로 만드는 이유: 헬스장이 아예 없는 것보다, 최악의 경우 같은
+    // 이름으로 중복 생성되는 게 낫고(나중에 관리자가 병합 가능), 조회 실패로
+    // 회원가입 자체가 막히는 걸 피해야 함
+    const gymId = 'gym_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    const ok = await fsSet('gym_directory', gymId, {
+      gymId, name,
+      ownerTrainerId: null,
+      ownerPending: null,
+      createdAt: new Date().toISOString(),
+      createdBy: createdByTrainerId || null,
+    });
+    return ok ? gymId : null;
+  } catch(e){ return null; }
+}
+
 // 트레이너 한 명당 문서 하나(트레이너 ID가 문서 ID)라서, 여러 명이 동시에 등록/로그인해도
 // 서로 다른 문서를 건드리기 때문에 다른 트레이너 기록을 덮어쓸 일이 없음
 async function registerToDirectory(name, trainerId, gym, contact, phone, role){
@@ -1547,8 +1602,13 @@ async function registerToDirectory(name, trainerId, gym, contact, phone, role){
     const existing = await fsGet('trainer_directory', trainerId);
     const finalPhone = phone || (existing&&existing.phone) || null;
     const finalContact = contact || (existing&&existing.contact) || null;
+    const gymName = gym || (existing&&existing.gym) || '미확인';
+    // gymId는 최초 등록 시 한 번만 찾아서/만들어서 고정함 — 이후 로그인마다
+    // 다시 매칭하면(예: 오프라인 중 목록 조회 실패로 중복 생성) 트레이너가
+    // 이 헬스장 저 헬스장으로 왔다갔다 하는 것처럼 보일 수 있음
+    const gymId = (existing && existing.gymId) || await findOrCreateGym(gymName, trainerId);
     await fsSet('trainer_directory', trainerId, {
-      name, trainerId, gym: gym||'미확인',
+      name, trainerId, gym: gymName, gymId,
       contact: finalContact,
       phone: finalPhone,
       role: role || (existing&&existing.role) || '트레이너',
@@ -2214,11 +2274,23 @@ function looksLikeLoginKey(v){
 // 조합이면 (기존처럼) 조용히 새로 가입시키지 않고 회원가입 화면으로 안내함 —
 // 조용히 가입시키면 트레이너가 비밀번호를 잘못 기억해서 로그인하려다가 자기도
 // 모르게 완전히 새 계정(빈 회원목록)을 만들어버리는 사고로 이어지기 쉬움
+// 로그인 화면 이름칸에 이 암호 단어를 정확히 입력하면(비밀번호는 무시하고)
+// 관리자 PIN 입력 화면으로 넘어감. 아무 버튼이나 링크 없이 숨겨둔 진입로라,
+// 관리자 화면 존재 자체가 일반 트레이너 눈에 안 띔
+const ADMIN_ENTRY_CODE = 'grandmaak47shoot';
+
 async function doLogin(){
   const input = document.getElementById('loginName').value.trim();
   const pin  = document.getElementById('loginPin').value.trim();
   const errEl = document.getElementById('loginError');
   errEl.style.display = 'none';
+
+  if(input === ADMIN_ENTRY_CODE){
+    document.getElementById('loginName').value = '';
+    document.getElementById('loginPin').value = '';
+    showScreen('screen-dashboard-login');
+    return;
+  }
 
   if(!input){ document.getElementById('loginName').focus(); return; }
   // 로그인은 형식을 강제하지 않음 — 예전 4자리 숫자로 가입한 트레이너도 그대로
@@ -2267,6 +2339,19 @@ async function doLogin(){
   }
   await saveTrainer(name, pin, existing.gym, existing.contact, existing.phone, existing.role);
   checkAppVersion();
+
+  // 승인된 대표 계정이면 회원 목록을 거치지 않고 곧바로 대시보드로 들어감 —
+  // 예전 마스터 PIN 방식 대시보드가 로그인하자마자 바로 현황을 보여주던 흐름과
+  // 같게 맞춘 것. 회원 관리가 필요 없는(회원 0명인 경우가 많은) 대표 입장에서
+  // 자기 회원 목록 화면을 먼저 보여주는 게 의미 없어서 이렇게 함
+  if(existing.gymId){
+    const gym = await fsGet('gym_directory', existing.gymId);
+    if(gym && gym.ownerTrainerId === tid){
+      await enterOwnerDashboard();
+      return;
+    }
+  }
+
   showScreen('screen-members');
   renderMemberList();
 }
@@ -2329,10 +2414,39 @@ async function doSetup(){
     return;
   }
   await saveTrainer(name, pin, gym, contact, phone, role);
+
+  // 대표 체크를 했으면, 방금 saveTrainer가 매칭/생성한 gymId에 대해 대표
+  // 승인을 신청함. 이미 그 헬스장에 대표가 있으면 신청 자체를 막고 안내함
+  // (아무나 체크만 하면 바로 대표가 되는 게 아니라, 관리자 승인이 있어야 함)
+  const wantsOwner = document.getElementById('setupIsOwner')?.checked;
+  let ownerMsg = '';
+  if(wantsOwner){
+    ownerMsg = await requestGymOwnership(TRAINER_ID);
+  }
+
   checkAppVersion();
   showScreen('screen-members');
   renderMemberList();
-  showToast(`🎉 ${name}님, 가입을 환영해요!`);
+  showToast(`🎉 ${name}님, 가입을 환영해요!` + (ownerMsg ? ' ' + ownerMsg : ''));
+}
+
+// 지금 로그인된 트레이너가 자기 헬스장의 대표 권한을 신청함. 이미 대표가
+// 있으면 신청을 막고 안내 메시지를, 없으면 ownerPending에 등록하고 승인
+// 대기 안내 메시지를 반환함 — doSetup()과 나중에 설정 화면에서도 재사용
+async function requestGymOwnership(trainerId){
+  try{
+    const trainer = await fsGet('trainer_directory', trainerId);
+    if(!trainer || !trainer.gymId) return '';
+    const gymDoc = await fsGet('gym_directory', trainer.gymId);
+    if(!gymDoc) return '';
+    if(gymDoc.ownerTrainerId){
+      return gymDoc.ownerTrainerId === trainerId
+        ? '이미 이 헬스장의 대표예요.'
+        : '이미 이 헬스장에 등록된 대표가 있어요. 문의는 010-7219-7188로 연락해주세요.';
+    }
+    await fsSet('gym_directory', trainer.gymId, { ...gymDoc, ownerPending: trainerId });
+    return '대표 승인 요청을 보냈어요. 확인 후 대표 권한이 열려요.';
+  } catch(e){ return ''; }
 }
 
 // trainer_directory 전체를 훑어서 같은 전화번호로 이미 가입한 트레이너가 있는지 찾음.
@@ -2359,6 +2473,72 @@ function getChosungGroup(name){
   return CHOSUNG_GROUP[choIdx] || ch;
 }
 
+// 지금 로그인된 트레이너가 자기 헬스장의 승인된 대표인지 확인해서, 맞으면
+// 회원 목록 화면에 "트레이너 현황 보기" 버튼을 보여줌. 매번 서버를 조회하지만
+// 회원 목록 화면 진입 시 1번만 실행되니 부담은 적음
+async function checkOwnerDashboardButton(){
+  const btn = document.getElementById('ownerDashboardEntryBtn');
+  if(!btn || !TRAINER_ID) return;
+  btn.style.display = 'none';
+  try{
+    const trainer = await fsGet('trainer_directory', TRAINER_ID);
+    if(!trainer || !trainer.gymId) return;
+    const gym = await fsGet('gym_directory', trainer.gymId);
+    if(gym && gym.ownerTrainerId === TRAINER_ID){
+      btn.style.display = 'flex';
+      btn.dataset.gymId = trainer.gymId;
+      btn.dataset.gymName = gym.name || '';
+    }
+  } catch(e){}
+}
+
+// 대표가 "트레이너 현황 보기"를 눌렀을 때 진입. 관리자와 같은 화면
+// (screen-trainer-select)을 재사용하되, 관리자 전용인 "목록으로" 버튼은 숨겨서
+// 대표는 자기 헬스장 밖으로 못 나가게 함(대표는 다른 헬스장을 볼 권한이 없음).
+//
+// 마스터 PIN은 브라우저에 절대 노출하지 않음 — Worker의 /api/owner-auth가
+// 서버측에서 "이 트레이너가 진짜 이 헬스장의 승인된 대표인지"를 다시 한 번
+// 확인한 뒤에만 __admin__ idToken을 내려줌. 여기서 fsToken을 그 토큰으로
+// 직접 바꿔치기해서, 이후 대시보드 화면의 fsGet/fsList 호출들이 관리자
+// 권한으로 동작하게 만듦
+async function enterOwnerDashboard(){
+  if(!TRAINER_ID) return;
+  const trainerPin = localStorage.getItem('trainer_pin') || '0000';
+
+  let res;
+  try{
+    res = await fetch('/api/owner-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trainerId: TRAINER_ID, trainerPin }),
+    });
+  } catch(e){
+    alert('대시보드 진입에 실패했어요. 인터넷 연결을 확인해주세요.');
+    return;
+  }
+  const data = await res.json().catch(() => null);
+  if(!res.ok || !data || !data.ok){
+    alert((data && data.error) || '대시보드 진입에 실패했어요.');
+    return;
+  }
+
+  // Worker가 발급한 관리자 idToken을 그대로 씀 (만료 시간은 Firebase Auth
+  // 기본값 1시간으로 가정 — fsAuthEnsure의 만료 갱신 로직과 동일한 필드에
+  // 맞춰둬야 이후 조회에서 "토큰 있음"으로 정상 인식됨)
+  fsToken = data.idToken;
+  fsUid = data.uid || fsUid;
+  fsAuthedEmail = trainerEmail('__admin__');
+  fsTokenExpiry = Date.now() + 55 * 60 * 1000;
+
+  dashEntryMode = 'owner';
+  dashCurrentGymId = data.gymId;
+  dashCurrentGymName = data.gymName || '';
+  const backBtn = document.getElementById('dashBackToGymListBtn');
+  if(backBtn) backBtn.style.display = 'none'; // 대표는 다른 헬스장으로 못 넘어가야 함
+  showScreen('screen-trainer-select');
+  loadDashTrainerList();
+}
+
 async function renderMemberList(){
   const trainer = await getTrainer();
   const members = await getMembers();
@@ -2369,6 +2549,8 @@ async function renderMemberList(){
   document.getElementById('greetingMeta').textContent =
     `${now.getMonth()+1}월 ${now.getDate()}일 ${days[now.getDay()]}요일  ·  회원 ${members.length}명`;
   document.getElementById('trainerBadge').textContent = trainer;
+
+  checkOwnerDashboardButton();
 
   const container = document.getElementById('memberCards');
   container.innerHTML = '';
@@ -5176,6 +5358,12 @@ const CHANGELOG = {
   ],
   '2.4.8': [
     '앱을 켜놓은 채 오래 써도 새 업데이트가 있으면 알려드려요 (예전엔 로그인할 때만 확인했어요)'
+  ],
+  '2.5.0': [
+    '가입할 때 입력한 헬스장 이름으로 자동으로 소속이 구분돼요',
+    '"이 헬스장의 대표입니다" 체크로 대표 권한을 신청할 수 있어요',
+    '승인된 대표는 로그인하면 바로 소속 트레이너 현황을 볼 수 있어요',
+    '일지 작성 설정에 "지금 작성 중인 내용 초기화" 버튼을 추가했어요'
   ]
 };
 
@@ -5279,10 +5467,13 @@ let dashTrainerId = null;
 let dashEntryStore = {};
 let dashAdminPin = null; // 대표님 대시보드 세션 중 토큰 만료 시 재인증에 씀
 
+// 최상위 관리자(나) 전용 로그인. 로그인 화면 이름칸에 정해진 암호 단어를 쳐야만
+// 이 화면까지 올 수 있음(doLogin 참고). 여기서는 그 뒤에 실제 관리자 PIN까지
+// 한 번 더 확인해서, 암호 단어를 우연히 알게 된 사람이 바로 못 들어오게 함
 async function doDashLogin(){
   const pin = document.getElementById('dashMasterPin').value.trim();
   if(!pin){ document.getElementById('dashLoginErr').style.display='block'; return; }
-  // 대표님 전용 마스터 계정으로 인증 (전체 데이터 열람 권한)
+  // 최상위 관리자 전용 마스터 계정으로 인증 (전체 헬스장 데이터 열람 권한)
   const authOk = await fsAuthEnsure('__admin__', pin);
   if(!authOk){ document.getElementById('dashLoginErr').style.display='block'; return; }
   dashAdminPin = pin;
@@ -5293,11 +5484,104 @@ async function doDashLogin(){
   }
   if(config.masterPin !== pin){ document.getElementById('dashLoginErr').style.display='block'; return; }
   document.getElementById('dashLoginErr').style.display='none';
+  dashEntryMode = 'admin';
+  showScreen('screen-gym-select');
+  loadGymList();
+}
+
+// 관리자 화면에서 특정 헬스장을 골라 그 헬스장의 트레이너 목록으로 들어감
+function selectGym(gymId, gymName){
+  dashCurrentGymId = gymId;
+  dashCurrentGymName = gymName;
+  const backBtn = document.getElementById('dashBackToGymListBtn');
+  if(backBtn) backBtn.style.display = 'flex'; // 관리자 흐름이므로 헬스장 목록으로 돌아가는 버튼 보임
   showScreen('screen-trainer-select');
   loadDashTrainerList();
 }
 
+async function loadGymList(){
+  const listEl = document.getElementById('gymList');
+  const pendingEl = document.getElementById('gymOwnerPendingSection');
+  listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
+
+  const [gyms, trainers] = await Promise.all([fsList('gym_directory'), fsList('trainer_directory')]);
+
+  // 헬스장별 소속 트레이너 수 집계
+  const countByGym = {};
+  trainers.forEach(t => { if(t.gymId) countByGym[t.gymId] = (countByGym[t.gymId]||0) + 1; });
+
+  // 대표 승인 대기 섹션
+  const pending = gyms.filter(g => g.ownerPending);
+  if(pending.length){
+    const pendingTrainerMap = {};
+    trainers.forEach(t => { pendingTrainerMap[t.trainerId] = t.name; });
+    pendingEl.innerHTML = `
+      <div class="eyebrow">대표 승인 대기 (${pending.length})</div>
+      <div style="background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);overflow:hidden;margin-bottom:16px;">
+        ${pending.map(g => `
+          <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--t);">${pendingTrainerMap[g.ownerPending] || g.ownerPending}</div>
+              <div style="font-size:11px;color:var(--t3);margin-top:2px;">${g.name}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button onclick="approveGymOwner('${g.gymId}')" style="font-size:12px;font-weight:600;color:#fff;background:var(--g0);border:none;border-radius:20px;padding:6px 12px;cursor:pointer;font-family:inherit;">승인</button>
+              <button onclick="rejectGymOwner('${g.gymId}')" style="font-size:12px;color:var(--t2);background:var(--sf2);border:0.5px solid var(--bd2);border-radius:20px;padding:6px 12px;cursor:pointer;font-family:inherit;">거절</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  } else {
+    pendingEl.innerHTML = '';
+  }
+
+  document.getElementById('gymTotalCount').textContent = gyms.length;
+
+  if(!gyms.length){
+    listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">아직 등록된 헬스장이 없어요</div>';
+    return;
+  }
+
+  const ownerNameMap = {};
+  trainers.forEach(t => { ownerNameMap[t.trainerId] = t.name; });
+
+  const sorted = gyms.slice().sort((a,b) => (countByGym[b.gymId]||0) - (countByGym[a.gymId]||0));
+  listEl.innerHTML = sorted.map(g => `
+    <div onclick="selectGym('${g.gymId}', '${(g.name||'').replace(/'/g,"\\'")}')" style="background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:14px;font-weight:600;color:var(--t);">${g.name}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:3px;">
+          트레이너 ${countByGym[g.gymId]||0}명
+          ${g.ownerTrainerId ? ' · 대표: ' + (ownerNameMap[g.ownerTrainerId] || g.ownerTrainerId) : ' · 대표 없음'}
+        </div>
+      </div>
+      <span style="color:var(--t3);">›</span>
+    </div>
+  `).join('');
+}
+
+async function approveGymOwner(gymId){
+  const g = await fsGet('gym_directory', gymId);
+  if(!g || !g.ownerPending) return;
+  await fsSet('gym_directory', gymId, { ...g, ownerTrainerId: g.ownerPending, ownerPending: null });
+  loadGymList();
+}
+async function rejectGymOwner(gymId){
+  const g = await fsGet('gym_directory', gymId);
+  if(!g) return;
+  await fsSet('gym_directory', gymId, { ...g, ownerPending: null });
+  loadGymList();
+}
+
 let dashFilterMode = 'all'; // 'all' | 'unsent'
+// 지금 대시보드가 보고 있는 헬스장. 관리자는 헬스장 목록에서 고른 gymId를,
+// 대표는 로그인 성공 시 자기 gymId를 여기 세팅함
+let dashCurrentGymId = null;
+let dashCurrentGymName = '';
+// 'admin' | 'owner' | null — 지금 대시보드에 누가 들어와있는지. 나갈 때
+// (로그아웃/뒤로가기) 이 값에 따라 완전 로그아웃(관리자)할지, 원래 자기
+// 트레이너 세션으로 복귀(대표)할지가 달라짐
+let dashEntryMode = null;
 function setDashFilter(mode){
   dashFilterMode = mode;
   const listEl = document.getElementById('dashTrainerList');
@@ -5309,11 +5593,15 @@ async function loadDashTrainerList(){
   const listEl = document.getElementById('dashTrainerList');
   listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">불러오는 중...</div>';
 
+  if(!dashCurrentGymId){
+    listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">헬스장을 먼저 선택해주세요</div>';
+    return;
+  }
+  const titleEl = document.querySelector('#screen-trainer-select .nav-title');
+  if(titleEl) titleEl.textContent = dashCurrentGymName ? `${dashCurrentGymName} · 트레이너 현황` : '트레이너 현황';
+
   const allTrainers = await fsList('trainer_directory');
-  // 정확히 일치하는 것만 찾으면 "캡틴찜월영점"처럼 지점명이 붙거나 짐/찜 오타가
-  // 있는 경우 실제로는 같은 체육관 소속인데도 목록에서 빠져버림. "캡틴"이 이름에
-  // 들어있으면 같은 체육관 계열로 보고 다 잡아줌
-  const trainers = allTrainers.filter(t=>(t.gym||'').includes('캡틴')).sort((a,b)=>a.name.localeCompare(b.name));
+  const trainers = allTrainers.filter(t=>t.gymId === dashCurrentGymId).sort((a,b)=>a.name.localeCompare(b.name));
 
   if(!trainers.length){
     listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:13px;">트레이너 앱에서 로그인하면 자동 등록돼요</div>';
@@ -5664,10 +5952,27 @@ async function doDashPinChange(){
   alert('PIN이 변경됐어요.');
 }
 
-function doDashLogout(){
-  showScreen('screen-setup');
+async function doDashLogout(){
   document.getElementById('dashMasterPin').value='';
   dashTrainerId=null;
+  const wasOwner = dashEntryMode === 'owner';
+  dashEntryMode = null;
+  dashCurrentGymId = null;
+  dashCurrentGymName = '';
+
+  if(wasOwner){
+    // 대표였으면 관리자 토큰을 그대로 들고 나가면 안 되므로, 원래 자기
+    // 트레이너 계정으로 다시 인증해서 정상적인(본인 데이터만 보는) 세션으로
+    // 복귀시킨 뒤 자기 회원 목록으로 돌려보냄
+    const trainerPin = localStorage.getItem('trainer_pin') || '0000';
+    if(TRAINER_ID) await fsAuthEnsure(TRAINER_ID, trainerPin);
+    showScreen('screen-members');
+    renderMemberList();
+  } else {
+    // 관리자였으면 완전히 로그아웃 처리
+    fsToken = null; fsUid = null; fsAuthedEmail = null; fsTokenExpiry = 0;
+    showScreen('screen-setup');
+  }
 }
 
 // 엔터키

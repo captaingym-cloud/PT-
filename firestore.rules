@@ -55,6 +55,16 @@ service cloud.firestore {
       allow write: if isOwnerOrLegacy();
     }
 
+    // 헬스장 하나당 문서 하나(gymId가 문서ID). 관리자/대표 대시보드가 헬스장
+    // 목록이나 소속 트레이너 수를 봐야 해서 읽기는 로그인만 하면 허용. 쓰기는
+    // 가입 시 자동 생성/매칭, 대표 승인/거절 때 갱신되므로 본인 것만으로 제한
+    // 하면 다른 트레이너가 만든 헬스장에 못 써서, 로그인만 하면 쓰기도 허용함
+    // (ownerTrainerId를 아무나 자기 걸로 바꿔치기하는 악용은 관리자 승인
+    // 단계에서 걸러짐 — ownerPending은 신청일 뿐 실제 권한은 ownerTrainerId만 봄)
+    match /gym_directory/{docId} {
+      allow read, write: if isLoggedIn();
+    }
+
     // 전화번호/이메일로 로그인하려면 "이 번호가 어느 트레이너 계정인지"를 로그인
     // *하기 전에* 찾아야 하는데, 위 trainer_directory는 로그인 후에만 읽을 수 있어서
     // 이 조회에 못 씀. 그래서 이름/문서ID(tid)만 담은 최소한의 별도 컬렉션을 두고
@@ -66,9 +76,13 @@ service cloud.firestore {
       allow write: if isLoggedIn();
     }
 
-    // 대표님 마스터 PIN 등 — 트레이너 구분 없이 로그인만 하면 허용 (기존과 동일)
+    // 마스터 PIN이 담긴 컬렉션 — 로그인만 하면 아무나 읽을 수 있게 열려있으면
+    // 트레이너 계정으로 로그인한 사람이 개발자도구로 마스터 PIN을 그대로
+    // 읽어갈 수 있음. 이제 대표 대시보드 인증은 Worker(/api/owner-auth)가
+    // 서버측에서만 이 값을 쓰도록 바뀌었으므로, 브라우저에서는 최상위
+    // 관리자(__admin__) 본인만 읽을 수 있으면 됨
     match /admin/{docId} {
-      allow read, write: if isLoggedIn();
+      allow read, write: if isAdmin();
     }
 
     // hist_/diet_/memo_/sent_/tone_ 등 회원별 데이터

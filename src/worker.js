@@ -52,6 +52,7 @@ async function sendAligoSms(env, phone, code) {
   const data = await res.json().catch(() => null);
   // 알리고는 성공해도 HTTP 200 + result_code로 성공/실패를 구분함
   const ok = res.ok && data && String(data.result_code) === '1';
+  console.log('sendAligoSms result:', JSON.stringify(data));
   return { ok, raw: data };
 }
 
@@ -150,6 +151,11 @@ function trainerEmail(trainerId) {
 // ownerId 검사를 통과하도록 firestore.rules에 예외가 있어서, 백업이
 // 전체 데이터에 접근하려면 이 계정이 필요함
 async function backupAuth(adminPin) {
+  const res = await adminAuthFull(adminPin);
+  return res ? res.idToken : null;
+}
+
+async function adminAuthFull(adminPin) {
   const email = trainerEmail('__admin__');
   const password = 'pw_' + adminPin + '_captaingym';
   const res = await fetch(`${AUTH_BASE}/accounts:signInWithPassword?key=${FS_API_KEY}`, {
@@ -159,7 +165,7 @@ async function backupAuth(adminPin) {
   });
   if (!res.ok) return null;
   const data = await res.json();
-  return data.idToken;
+  return { idToken: data.idToken, uid: data.localId };
 }
 
 async function fsListAll(token, col) {
@@ -319,6 +325,74 @@ async function runFullBackup(env) {
   return { ok: true, done: true, key, trainerCount: Object.keys(trainerMeta).length };
 }
 
+/* ═══════════════════════════════════════
+   대표(헬스장 관리자) 대시보드 인증
+   (2026-07-10 헬스장/대표/트레이너 3단계 구조 도입 — 대표가 자기 헬스장
+   트레이너들의 데이터를 봐야 하는데, firestore.rules상 그러려면 __admin__
+   마스터 계정 권한이 필요함. 마스터 PIN을 브라우저에 그대로 노출하면 누구나
+   개발자도구로 읽어갈 수 있어서, 이 엔드포인트가 "요청자가 진짜 승인된
+   대표인지"를 서버에서 직접 확인한 뒤에만 __admin__ idToken을 발급함)
+═══════════════════════════════════════ */
+async function handleOwnerAuth(request, env) {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ ok: false, error: '요청 형식이 올바르지 않아요.' }, 400);
+  }
+  const trainerId = (payload.trainerId || '').trim();
+  const trainerPin = (payload.trainerPin || '').trim();
+  if (!trainerId || !trainerPin) {
+    return jsonResponse({ ok: false, error: '요청이 올바르지 않아요.' }, 400);
+  }
+
+  // 1) 요청자 본인 인증 — 자기 트레이너 계정(이름+비밀번호)으로 로그인이
+  // 되는지부터 확인함. 이게 없으면 trainerId만 알아도(=이름만 알아도) 아무나
+  // 대표 행세를 할 수 있음
+  const email = trainerEmail(trainerId);
+  const password = 'pw_' + trainerPin + '_captaingym';
+  const selfAuthRes = await fetch(`${AUTH_BASE}/accounts:signInWithPassword?key=${FS_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  });
+  if (!selfAuthRes.ok) {
+    return jsonResponse({ ok: false, error: '로그인 정보가 올바르지 않아요.' }, 401);
+  }
+  const selfToken = (await selfAuthRes.json()).idToken;
+
+  // 2) 이 트레이너가 실제로 자기 헬스장의 승인된 대표인지 확인. 본인 인증
+  // 토큰으로 자기 trainer_directory 문서와 그 gymId의 gym_directory 문서를
+  // 조회함(둘 다 로그인만 하면 읽기 허용된 컬렉션이라 본인 토큰으로 충분함)
+  const trainerRes = await fetch(`${FS_BASE}/trainer_directory/${encodeURIComponent(trainerId)}`, {
+    headers: { Authorization: 'Bearer ' + selfToken },
+  });
+  if (!trainerRes.ok) return jsonResponse({ ok: false, error: '트레이너 정보를 찾을 수 없어요.' }, 404);
+  const trainerDoc = await trainerRes.json();
+  const trainerData = trainerDoc.fields && trainerDoc.fields.v ? JSON.parse(trainerDoc.fields.v.stringValue) : null;
+  const gymId = trainerData && trainerData.gymId;
+  if (!gymId) return jsonResponse({ ok: false, error: '소속 헬스장 정보가 없어요.' }, 403);
+
+  const gymRes = await fetch(`${FS_BASE}/gym_directory/${encodeURIComponent(gymId)}`, {
+    headers: { Authorization: 'Bearer ' + selfToken },
+  });
+  if (!gymRes.ok) return jsonResponse({ ok: false, error: '헬스장 정보를 찾을 수 없어요.' }, 404);
+  const gymDoc = await gymRes.json();
+  const gymData = gymDoc.fields && gymDoc.fields.v ? JSON.parse(gymDoc.fields.v.stringValue) : null;
+  if (!gymData || gymData.ownerTrainerId !== trainerId) {
+    return jsonResponse({ ok: false, error: '이 헬스장의 대표가 아니에요.' }, 403);
+  }
+
+  // 3) 여기까지 왔으면 진짜 승인된 대표 — __admin__ 계정으로 대신 인증해서
+  // idToken을 내려줌 (마스터 PIN 자체는 응답에 안 실림, env secret에서만 씀)
+  const adminPin = env.DASH_ADMIN_PIN;
+  if (!adminPin) return jsonResponse({ ok: false, error: '대시보드 설정이 아직 안 됐어요.' }, 500);
+  const adminAuth = await adminAuthFull(adminPin);
+  if (!adminAuth) return jsonResponse({ ok: false, error: '대시보드 인증에 실패했어요.' }, 500);
+
+  return jsonResponse({ ok: true, idToken: adminAuth.idToken, uid: adminAuth.uid, gymId, gymName: gymData.name || '' });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -358,6 +432,9 @@ export default {
       }
       const result = await runFullBackup(env);
       return jsonResponse(result, result.ok ? 200 : 500);
+    }
+    if (url.pathname === '/api/owner-auth' && request.method === 'POST') {
+      return handleOwnerAuth(request, env);
     }
 
     // API 경로가 아니면 기존처럼 정적 파일(index.html 등)로 그대로 넘김
