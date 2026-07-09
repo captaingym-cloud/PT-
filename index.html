@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.5.2"/>
+<meta name="app-version" content="2.5.3"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -5422,6 +5422,9 @@ const CHANGELOG = {
   ],
   '2.5.2': [
     '로그인 화면에 "대표님이세요?" 버튼이 다시 생겼어요 — 트레이너 로그인과 완전히 구분해서, 대표 로그인 성공 시 바로 트레이너 현황으로 이동해요'
+  ],
+  '2.5.3': [
+    '대표 대시보드에서 로그아웃하면 트레이너 회원목록이 아니라 로그인 화면으로 이동해요'
   ]
 };
 
@@ -6013,24 +6016,17 @@ async function doDashPinChange(){
 async function doDashLogout(){
   document.getElementById('dashMasterPin').value='';
   dashTrainerId=null;
-  const wasOwner = dashEntryMode === 'owner';
   dashEntryMode = null;
   dashCurrentGymId = null;
   dashCurrentGymName = '';
 
-  if(wasOwner){
-    // 대표였으면 관리자 토큰을 그대로 들고 나가면 안 되므로, 원래 자기
-    // 트레이너 계정으로 다시 인증해서 정상적인(본인 데이터만 보는) 세션으로
-    // 복귀시킨 뒤 자기 회원 목록으로 돌려보냄
-    const trainerPin = localStorage.getItem('trainer_pin') || '0000';
-    if(TRAINER_ID) await fsAuthEnsure(TRAINER_ID, trainerPin);
-    showScreen('screen-members');
-    renderMemberList();
-  } else {
-    // 관리자였으면 완전히 로그아웃 처리
-    fsToken = null; fsUid = null; fsAuthedEmail = null; fsTokenExpiry = 0;
-    showScreen('screen-setup');
-  }
+  // 대표든 관리자든, 대시보드에서 로그아웃하면 완전히 로그아웃해서 로그인
+  // 화면으로 보냄 — 대표는 "트레이너"가 아니므로 자기 회원목록으로 돌아갈
+  // 이유가 없음 (예전엔 대표를 트레이너 세션으로 복귀시켰는데, 그러면
+  // 로그아웃을 눌렀는데 트레이너 화면이 뜨는 것처럼 보여서 혼란스러웠음)
+  await saveTrainer(null);
+  fsToken = null; fsUid = null; fsAuthedEmail = null; fsTokenExpiry = 0;
+  showScreen('screen-setup');
 }
 
 // 엔터키
