@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.5.4"/>
+<meta name="app-version" content="2.5.9"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -414,6 +414,11 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 .ex-name-inp::placeholder{color:var(--t3);font-weight:400;}
 .ex-del-btn{width:26px;height:26px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t3);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .ex-del-btn:active{background:var(--red-l);color:var(--red);}
+.ss-btn{width:26px;height:26px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t3);font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit;}
+.ss-btn.on{background:var(--g0);border-color:var(--g0);color:#fff;}
+.ex-card.ss-linked{margin-bottom:0;border-radius:var(--r16) var(--r16) 0 0;border-bottom:none;}
+.ex-card.ss-linked-next{border-radius:0 0 var(--r16) var(--r16);margin-bottom:10px;}
+.ss-label{font-size:10px;font-weight:700;color:var(--g0);letter-spacing:.06em;padding:6px 14px 0;text-transform:uppercase;}
 .prev-auto-row{padding:6px 14px 8px;font-size:11px;color:var(--t3);border-bottom:0.5px solid var(--bd);min-height:0;}
 .prev-auto-row strong{color:var(--t2);font-weight:600;}
 .sets-area{padding:0 14px;border-top:0.5px solid var(--bd);}
@@ -1000,7 +1005,6 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
         <span style="font-size:13px;font-weight:700;color:var(--t);">메모</span>
         <span style="font-size:11px;color:var(--g0);font-weight:600;">다음 수업 때 위에 보여요</span>
       </div>
-      <div id="sessionMemoPrev" style="display:none;background:var(--sf2);border-radius:var(--r12);padding:10px 14px;margin-bottom:6px;font-size:13px;color:var(--t2);line-height:1.6;border:0.5px solid var(--bd);"></div>
       <textarea id="sessionMemoInput" rows="2" placeholder="다음 수업 때 기억할 것, 회원 전달사항 등..."
         style="width:100%;border:1px solid var(--g3);border-radius:var(--r12);padding:10px 14px;font-size:13px;font-family:inherit;outline:none;resize:none;background:var(--g2);color:var(--t);line-height:1.6;"
         oninput="syncNoteBoxes(this.value, 'sessionMemoInput')"></textarea>
@@ -4148,7 +4152,9 @@ async function openDetailModal(e, idx){
       const c = (typeof EX_COLORS !== 'undefined') ? EX_COLORS.find(c=>c.id===ex.color) : null;
       const nameColor = c ? c.text : 'var(--t)';
       const nameBg = c ? `background:${c.bg};border:1px solid ${c.border};border-radius:6px;padding:2px 8px;` : '';
-      if(i > 0) html += '<div style="border-top:0.5px solid var(--bd);margin:4px 0 10px;"></div>';
+      const linkedToPrev = i>0 && e.exercises[i-1].superset;
+      if(i > 0 && !linkedToPrev) html += '<div style="border-top:0.5px solid var(--bd);margin:4px 0 10px;"></div>';
+      if(linkedToPrev) html += '<div style="font-size:10px;font-weight:700;color:var(--g0);letter-spacing:.05em;padding:2px 0 4px;">🔗 슈퍼세트</div>';
       html += '<div class="detail-card" style="margin-bottom:4px;">';
       html += '<div class="detail-ex-header">'
         +'<span class="detail-ex-name" style="'+nameBg+'color:'+nameColor+';">'+ex.name+'</span>'
@@ -4251,10 +4257,8 @@ async function openNewJournal(){
 
   setEntryDate(todayISO());
 
-  // 최근 메모 표시
+  // 최근 메모 표시 (최대 3개, 수정/다시 보지 않기 가능)
   renderRecentMemoBar();
-  // 회차 위 이전 메모 표시
-  renderSessionMemoPrev();
   // 메모 입력 칸 초기화 (세션 메모 + 입력탭 메모는 연동된 하나라 같이 초기화.
   // 메모 탭(inlineMemoInput)은 별개라 안 건드림)
   const memoInput = document.getElementById('sessionMemoInput');
@@ -4359,45 +4363,98 @@ async function saveMemberNote(){
   showToast('저장 완료 ✓');
 }
 
-async function renderSessionMemoPrev(){
-  if(!currentMember) return;
-  const prevEl = document.getElementById('sessionMemoPrev');
-  if(!prevEl) return;
-  // 가장 최근에 "쓴" 메모가 아니라, 바로 직전 일지(가장 최근 수업)에 달린 메모만
-  // 보여줘야 함. 안 그러면 직전 수업엔 메모를 안 남겼는데 그 전전 수업 메모가
-  // 마치 최신인 것처럼 계속 떠서 헷갈림
-  const hist = await getMemberHistory(currentMember.id);
-  if(!hist.length){ prevEl.style.display='none'; return; }
-  const lastEntryDate = hist[hist.length-1].date;
-  const memos = (await getMemos(currentMember.id)).filter(m=>m.id!=='note' && m.sessionMemo);
-  const latest = memos.find(m=>m.date===lastEntryDate);
-  if(!latest){ prevEl.style.display='none'; return; }
-  prevEl.style.display = 'block';
-  prevEl.innerHTML = `<span style="font-size:11px;font-weight:600;color:var(--t3);">${latest.date} 메모</span><br>${latest.content.replace(/\n/g,'<br>')}`;
-}
+// 최근 세션 메모 최대 몇 개까지 안내 카드로 띄울지 — 너무 많으면 화면이 길어져서 3개로 제한.
+// 그 이상 오래된 건 '다시 보지 않기' 안 눌러도 자연스럽게 목록에서 밀려남 (메모 탭 기록은 안 지워짐)
+const RECENT_MEMO_LIMIT = 3;
 
 async function renderRecentMemoBar(){
   const bar = document.getElementById('recentMemoBar');
   if(!bar || !currentMember) return;
-  // 메모함 전체에서 그냥 마지막 항목이 아니라, 바로 직전 일지(가장 최근 수업)
-  // 날짜에 달린 메모만 보여줘야 함. 안 그러면 그 회차엔 메모가 없어도 훨씬 이전
-  // 회차(예: 1회차) 메모가 배열 마지막에 남아있어서 계속 떠버림
-  const hist = await getMemberHistory(currentMember.id);
-  if(!hist.length){ bar.style.display='none'; return; }
-  const lastEntryDate = hist[hist.length-1].date;
-  const memos = (await getMemos(currentMember.id)).filter(m=>m.id!=='note');
-  const latest = memos.find(m=>m.date===lastEntryDate);
-  if(!latest){ bar.style.display='none'; return; }
+  const memos = (await getMemos(currentMember.id))
+    .filter(m=>m.id!=='note' && m.sessionMemo && !m.dismissed)
+    .sort((a,b)=> (b.dateTime||b.date||'').localeCompare(a.dateTime||a.date||''))
+    .slice(0, RECENT_MEMO_LIMIT);
+  if(!memos.length){ bar.style.display='none'; bar.innerHTML=''; return; }
   bar.style.display = 'block';
-  bar.innerHTML = `
-    <div style="display:flex;align-items:flex-start;gap:8px;">
+  bar.innerHTML = memos.map(m => `
+    <div class="recent-memo-card" data-memo-id="${m.id}" style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--g3);">
       <span style="font-size:14px;flex-shrink:0;">📝</span>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:11px;color:var(--t3);margin-bottom:3px;">${dateWithWeekday(latest.date)} 메모</div>
-        <div style="font-size:13px;color:var(--t);line-height:1.6;white-space:pre-wrap;word-break:break-word;">${latest.content}</div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:3px;">${dateWithWeekday(m.date)} 메모</div>
+        <div class="recent-memo-text" style="font-size:13px;color:var(--t);line-height:1.6;white-space:pre-wrap;word-break:break-word;">${m.content}</div>
+        <div class="recent-memo-actions" style="display:flex;gap:10px;margin-top:6px;">
+          <button onclick="editRecentMemo('${m.id}')" style="font-size:11px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:0;">수정</button>
+          <button onclick="dismissRecentMemo('${m.id}')" style="font-size:11px;color:var(--t3);background:none;border:none;cursor:pointer;font-family:inherit;padding:0;">다시 보지 않기</button>
+        </div>
       </div>
-      <button onclick="document.getElementById('recentMemoBar').style.display='none'" style="background:none;border:none;color:var(--t3);font-size:16px;cursor:pointer;padding:0;flex-shrink:0;">×</button>
-    </div>`;
+    </div>`).join('');
+  // 마지막 카드 밑줄 제거
+  const cards = bar.querySelectorAll('.recent-memo-card');
+  if(cards.length) cards[cards.length-1].style.borderBottom = 'none';
+}
+
+async function dismissRecentMemo(memoId){
+  if(!currentMember) return;
+  const allMemos = await getMemos(currentMember.id);
+  const target = allMemos.find(m=>m.id===memoId);
+  if(!target) return;
+  target.dismissed = true;
+  await saveMemos(currentMember.id, allMemos);
+  renderRecentMemoBar();
+}
+
+function editRecentMemo(memoId){
+  const card = document.querySelector(`.recent-memo-card[data-memo-id="${memoId}"]`);
+  if(!card) return;
+  const textEl = card.querySelector('.recent-memo-text');
+  if(!textEl || card._editTa) return;
+  const original = textEl.textContent;
+  textEl.style.display = 'none';
+  const actionsEl = card.querySelector('.recent-memo-actions');
+  if(actionsEl) actionsEl.style.display = 'none';
+
+  const ta = document.createElement('textarea');
+  ta.value = original;
+  ta.style.cssText = 'display:block;width:100%;box-sizing:border-box;font-size:13px;border:0.5px solid var(--g3);border-radius:var(--r8);padding:8px 10px;background:var(--sf2);color:var(--t);outline:none;resize:none;font-family:inherit;line-height:1.6;min-height:50px;';
+  ta.oninput = () => { ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; };
+  textEl.insertAdjacentElement('afterend', ta);
+  ta.focus();
+  ta.style.height = ta.scrollHeight+'px';
+
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:6px;';
+  btns.innerHTML = `
+    <button onclick="cancelEditRecentMemo('${memoId}')" style="font-size:11px;color:var(--t2);background:none;border:0.5px solid var(--bd2);border-radius:var(--r8);padding:5px 10px;cursor:pointer;font-family:inherit;">취소</button>
+    <button onclick="saveEditRecentMemo('${memoId}')" style="font-size:11px;color:#fff;background:var(--g0);border:none;border-radius:var(--r8);padding:5px 10px;cursor:pointer;font-family:inherit;font-weight:600;">저장</button>`;
+  ta.insertAdjacentElement('afterend', btns);
+  card._editTa = ta;
+  card._editBtns = btns;
+}
+
+function cancelEditRecentMemo(memoId){
+  const card = document.querySelector(`.recent-memo-card[data-memo-id="${memoId}"]`);
+  if(!card) return;
+  if(card._editTa) card._editTa.remove();
+  if(card._editBtns) card._editBtns.remove();
+  card._editTa = null; card._editBtns = null;
+  const textEl = card.querySelector('.recent-memo-text');
+  if(textEl) textEl.style.display = '';
+  const actionsEl = card.querySelector('.recent-memo-actions');
+  if(actionsEl) actionsEl.style.display = '';
+}
+
+async function saveEditRecentMemo(memoId){
+  if(!currentMember) return;
+  const card = document.querySelector(`.recent-memo-card[data-memo-id="${memoId}"]`);
+  if(!card || !card._editTa) return;
+  const content = card._editTa.value.trim();
+  if(!content) return;
+  const allMemos = await getMemos(currentMember.id);
+  const target = allMemos.find(m=>m.id===memoId);
+  if(!target) return;
+  target.content = content;
+  await saveMemos(currentMember.id, allMemos);
+  renderRecentMemoBar();
 }
 
 async function openEditJournal(idx){
@@ -4529,6 +4586,18 @@ async function learnExerciseColor(name, colorId){
   const prefs = await getColorPrefs();
   prefs.exerciseColors[key] = colorId;
   await saveColorPrefs(prefs);
+}
+
+// 수동 지정 색을 취소했을 때 학습된 기록도 같이 지움 — 안 지우면 다음에 같은
+// 종목명 입력 시 autoSetExColor가 학습값을 다시 최우선으로 불러와버림
+async function unlearnExerciseColor(name){
+  const key = exerciseColorKey(name);
+  if(!key) return;
+  const prefs = await getColorPrefs();
+  if(key in prefs.exerciseColors){
+    delete prefs.exerciseColors[key];
+    await saveColorPrefs(prefs);
+  }
 }
 
 async function openColorPrefs(){
@@ -5451,6 +5520,23 @@ const CHANGELOG = {
   '2.5.4': [
     '트레이너 삭제 기능이 대표 화면에서 관리자 화면으로 옮겨졌어요',
     '트레이너를 삭제하면 회원·일지·메모·식단 데이터까지 완전히 삭제돼요 (예전엔 목록에서만 숨겨지고 데이터는 남아있었어요)'
+  ],
+  '2.5.5': [
+    '종목 카드에 🔗 버튼을 누르면 다음 종목과 슈퍼세트로 묶어서 표시돼요',
+    '슈퍼세트로 묶인 종목은 일지 작성 화면과 회원·대표 조회 화면 모두에서 하나로 이어져 보여요'
+  ],
+  '2.5.6': [
+    '종목 색상을 골랐다가 마음이 바뀌면, 선택된 색을 다시 눌러서 취소하고 기본 색으로 되돌릴 수 있어요'
+  ],
+  '2.5.7': [
+    '무게·개수 숫자 직접 입력창이 취소해도 2~3번 연달아 다시 뜨던 문제를 고쳤어요'
+  ],
+  '2.5.8': [
+    '일지 작성 화면에 지난 세션 메모를 최신순으로 최대 3개까지 계속 띄워요',
+    '각 메모마다 수정 / 다시 보지 않기 버튼이 생겼어요 (다시 보지 않기는 그 메모만 숨기고, 메모 탭 기록은 그대로 남아요)'
+  ],
+  '2.5.9': [
+    '지난 세션 메모에서 수정 버튼을 눌러도 입력창이 안 나타나던 문제를 고쳤어요'
   ]
 };
 
@@ -5954,7 +6040,9 @@ function openDashDetail(storeKey){
   </div>`;
   if((e.exercises||[]).length){
     html += '<div style="font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.05em;margin-bottom:8px;">운동 종목</div>';
-    e.exercises.forEach(ex=>{
+    e.exercises.forEach((ex,exi)=>{
+      const ssLinkedPrev = exi>0 && e.exercises[exi-1].superset;
+      if(ssLinkedPrev) html += '<div style="font-size:10px;font-weight:700;color:var(--g0);letter-spacing:.05em;margin:-4px 0 4px;">🔗 슈퍼세트</div>';
       html += `<div style="background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r12);margin-bottom:8px;overflow:hidden;">
         <div style="padding:10px 14px;font-size:14px;font-weight:700;">${ex.name||'종목'}</div>`;
       if(isAssist(ex)) html += '<div style="padding:0 14px 8px;font-size:11px;color:var(--t3);">☝️ 총 볼륨에 적용되지 않아요</div>';
@@ -6612,6 +6700,11 @@ function attachDial(el){
   // 마우스 (PC)
   let mouseActive = false;
   el.addEventListener('mousedown', e=>{
+    // 터치 기기에서 같은 탭에 대해 mousedown이 중복 합성되거나, 이전 mouseup을
+    // 놓쳐 리스너가 아직 안 풀린 상태로 또 mousedown이 들어오면 mousemove/mouseup
+    // 리스너가 계속 쌓여서, 한 번의 클릭에 openDialInput(=숫자입력창)이 여러 번
+    // 열리는 원인이 됨 — 이미 진행 중이면 무시
+    if(mouseActive) return;
     startY=e.clientY; startVal=getVal(); dragging=true; moved=false; mouseActive=true;
     el.classList.add('active');
     e.preventDefault();
@@ -6638,27 +6731,34 @@ function attachDial(el){
 }
 
 // 탭 시 숫자 직접 입력
+let _dialInputOpen = false; // 터치+마우스 이벤트가 같은 탭에 겹쳐 잡혀도 prompt가 중복으로 안 뜨게 막는 전역 가드
 function openDialInput(ei, si, type, di){
-  const isW = type==='w'||type==='dw';
-  const timeMode = !!exercises[ei].timeMode;
-  const unit = isW?'kg':(timeMode?'초':'개');
-  let cur;
-  if(di>=0) cur = isW ? exercises[ei].sets[si].drops[di].w : exercises[ei].sets[si].drops[di].r;
-  else      cur = isW ? exercises[ei].sets[si].w : exercises[ei].sets[si].r;
-  const val = prompt((isW?'무게 (kg)':'횟수 (개)') + ' 직접 입력', cur||'');
-  if(val===null) return;
-  const num = isW ? parseFloat(val) : parseInt(val);
-  if(isNaN(num)) return;
-  if(di>=0){
-    if(isW) exercises[ei].sets[si].drops[di].w=num;
-    else    exercises[ei].sets[si].drops[di].r=num;
-  } else {
-    if(isW) exercises[ei].sets[si].w=num;
-    else    exercises[ei].sets[si].r=num;
+  if(_dialInputOpen) return;
+  _dialInputOpen = true;
+  try{
+    const isW = type==='w'||type==='dw';
+    const timeMode = !!exercises[ei].timeMode;
+    const unit = isW?'kg':(timeMode?'초':'개');
+    let cur;
+    if(di>=0) cur = isW ? exercises[ei].sets[si].drops[di].w : exercises[ei].sets[si].drops[di].r;
+    else      cur = isW ? exercises[ei].sets[si].w : exercises[ei].sets[si].r;
+    const val = prompt((isW?'무게 (kg)':'횟수 (개)') + ' 직접 입력', cur||'');
+    if(val===null) return;
+    const num = isW ? parseFloat(val) : parseInt(val);
+    if(isNaN(num)) return;
+    if(di>=0){
+      if(isW) exercises[ei].sets[si].drops[di].w=num;
+      else    exercises[ei].sets[si].drops[di].r=num;
+    } else {
+      if(isW) exercises[ei].sets[si].w=num;
+      else    exercises[ei].sets[si].r=num;
+    }
+    buildSetRows(ei);
+    updateExFooter(ei);
+    recalcAll();
+  } finally {
+    _dialInputOpen = false;
   }
-  buildSetRows(ei);
-  updateExFooter(ei);
-  recalcAll();
 }
 
 function addSet(ei){
@@ -6699,7 +6799,9 @@ function autoGrow(el){
 function buildExCard(ei){
   const ex = exercises[ei];
   const card = document.createElement('div');
-  card.className = 'ex-card';
+  const linkedToPrev = ei>0 && exercises[ei-1].superset;
+  const linkedToNext = !!ex.superset && ei<exercises.length-1;
+  card.className = 'ex-card'+(linkedToPrev?' ss-linked-next':'')+(linkedToNext?' ss-linked':'');
   card.id = 'exCard-'+ei;
   const colorDots = EX_COLORS.map(c =>
     `<span class="ex-color-dot${ex.color===c.id?' selected':''}"
@@ -6707,12 +6809,18 @@ function buildExCard(ei){
       style="background:${c.bg};border-color:${ex.color===c.id?c.border:'transparent'};"
       onclick="setExColor(${ei},'${c.id}')"></span>`
   ).join('');
+  const ssLabel = linkedToPrev ? '' : (linkedToNext ? '<div class="ss-label">🔗 슈퍼세트</div>' : '');
+  const ssBtn = ei<exercises.length-1
+    ? `<button class="ss-btn${ex.superset?' on':''}" onclick="toggleSuperset(${ei})" title="다음 종목과 슈퍼세트로 묶기">🔗</button>`
+    : '';
   card.innerHTML=`
+      ${ssLabel}
       <div class="ex-header">
         <span class="ex-drag-handle" title="드래그하여 순서 변경">⠿</span>
         <input class="ex-name-inp" value="${ex.name}" placeholder="종목명 입력"
           oninput="exercises[${ei}].name=this.value;autoFillPrev(${ei},this.value);buildSetRows(${ei});autoSetExColor(${ei},this.value);"/>
         <button onclick="toggleTimeMode(${ei})" title="등척성/일반 전환" style="background:${ex.timeMode?'var(--g0)':'none'};color:${ex.timeMode?'#fff':'var(--t3)'};border:1px solid ${ex.timeMode?'var(--g0)':'var(--bd)'};border-radius:6px;font-size:11px;padding:2px 6px;cursor:pointer;font-family:inherit;margin-right:4px;">⏱</button>
+        ${ssBtn}
         <button class="ex-del-btn" onclick="removeExercise(${ei})">×</button>
       </div>
       <div class="ex-color-row">
@@ -6820,7 +6928,17 @@ async function autoFillPrev(ei, name){
   recalcAll();
 }
 
-function setExColor(ei, colorId){
+async function setExColor(ei, colorId){
+  // 이미 선택된 색을 다시 누르면 "선택 취소" — 수동 지정을 풀고 자동 추측 색으로 되돌림
+  if(exercises[ei].color === colorId && exercises[ei].colorManual){
+    const name = exercises[ei].name;
+    exercises[ei].color = null;
+    exercises[ei].colorManual = false;
+    refreshExColorDots(ei, null); // 추측 결과 나오기 전까지 잠깐 무선택 상태로 표시
+    await unlearnExerciseColor(name);
+    await autoSetExColor(ei, name); // 내부에서 refreshExColorDots까지 마무리
+    return;
+  }
   exercises[ei].color = colorId;
   exercises[ei].colorManual = true; // 사용자가 직접 골랐으니 종목명이 바뀌어도 자동 추측이 덮어쓰지 않게
   refreshExColorDots(ei, colorId);
@@ -6932,7 +7050,7 @@ function initExDrag(card, ei){
 
 function addExercise(){
   const ei = exercises.length;
-  exercises.push({name:'',prevMaxW:0,prevVol:0,comment:'',color:null,sets:[{w:0,r:10}]});
+  exercises.push({name:'',prevMaxW:0,prevVol:0,comment:'',color:null,superset:false,sets:[{w:0,r:10}]});
   const container = document.getElementById('exCards');
   const card = buildExCard(ei);
   container.appendChild(card);
@@ -6943,7 +7061,12 @@ function addExercise(){
 function removeExercise(ei){
   const name = exercises[ei]?.name || '이 종목';
   if(!confirm(`'${name}'을(를) 삭제할까요?`)) return;
+  if(ei>0) exercises[ei-1].superset = false;
   exercises.splice(ei,1);renderExCards();recalcAll();
+}
+function toggleSuperset(ei){
+  exercises[ei].superset = !exercises[ei].superset;
+  renderExCards();
 }
 
 /* ═══════════════════════════════════════
@@ -6999,6 +7122,7 @@ async function _saveJournalInner(memberId){
     const existing = memos.find(m=>m.id!=='note' && m.date===entryDateShort && m.sessionMemo);
     if(existing){
       existing.content = sessionMemoText;
+      delete existing.dismissed; // 내용을 새로 고쳐 썼으니 다시 안내에 떠야 함
     } else {
       memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:entryDateShort, dateTime:entryDateIso, content:sessionMemoText, sessionMemo:true });
     }
