@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.6.1"/>
+<meta name="app-version" content="2.6.4"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -224,7 +224,8 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .cal-grid.cal-slide-out-left{transform:translateX(-100%);}
 .cal-grid.cal-slide-out-right{transform:translateX(100%);}
 .cal-grid.cal-slide-in{transform:translateX(0);}
-.cal-cell{aspect-ratio:var(--dp-aspect, 0.68);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;border-radius:var(--r8);cursor:pointer;position:relative;touch-action:manipulation;transition:background .1s;overflow:hidden;min-width:0;}
+.cal-cell{min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;padding-bottom:4px;border-radius:var(--r8);cursor:pointer;position:relative;touch-action:manipulation;transition:background .1s;min-width:0;}
+.cal-cell.empty{min-height:0;}
 .cal-cell:active{background:var(--sf2);}
 .cal-cell.empty{cursor:default;}
 .cal-cell.today .cal-num{background:var(--g0);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;}
@@ -257,9 +258,8 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
   padding:3px 2px;
   text-align:center;
   width:100%;
-  overflow:hidden;
-  white-space:nowrap;
-  text-overflow:ellipsis;
+  display:block;
+  word-break:break-word;
 }
 .cal-color-dots{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;margin-top:3px;padding:0 2px;}
 .cal-color-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
@@ -326,6 +326,8 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .je-note{font-size:12px;color:var(--t3);margin-top:8px;padding-top:8px;border-top:0.5px solid var(--bd);line-height:1.6;}
 .je-del-btn{position:absolute;top:12px;right:12px;width:26px;height:26px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t3);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .je-del-btn:active{background:var(--red-l);color:var(--red);}
+.je-copy-btn{position:absolute;top:12px;right:46px;width:26px;height:26px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t3);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.je-copy-btn:active{background:var(--g2);color:var(--g0);}
 
 /* DETAIL MODAL */
 .detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:flex-end;justify-content:center;}
@@ -518,7 +520,7 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
 
 /* 폰 (480px 이하) — 달력 칸 작게, 배지/점 축소 */
 @media (max-width: 480px){
-  .cal-cell{aspect-ratio:var(--dp-aspect, 0.78);}
+  .cal-cell{min-height:46px;}
   .cal-num{font-size:11px;width:20px;height:20px;}
   .cal-cell.today .cal-num{width:20px;height:20px;}
   .cal-badge{font-size:8.5px;padding:2px 1px;border-radius:4px;}
@@ -530,7 +532,7 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
 @media (min-width: 481px){
   .cal-dot-mobile-wrap{display:none;}
   .cal-ex-desktop{display:block;}
-  .cal-cell{aspect-ratio:var(--dp-aspect, 0.55);overflow:hidden;}
+  .cal-cell{min-height:60px;}
 }
 
 /* 다크모드 토글 스위치 */
@@ -2930,34 +2932,32 @@ function renderCalendar(){
     if(dayEntries && dayEntries.length){
       const first = dayEntries[0].entry;
       const sessionNum = first.session || first.streak || '';
-      const partLabel = (first.parts && first.parts.length) ? first.parts[0] : '';
-      badgeHtml = `<span class="cal-badge">${sessionNum}회차${partLabel ? ' · '+partLabel : ''}</span>`;
+      // 부위 텍스트는 뺌 — 종목이 많은 날 자리를 차지해서, 이미 종목 색으로
+      // 구분되는 정보를 굳이 텍스트로 또 보여줄 필요가 없다고 판단함
+      badgeHtml = `<span class="cal-badge">${sessionNum}회차</span>`;
 
       const exList = (first.exercises||[]).filter(ex=>ex.name);
       if(exList.length){
-        // 패드/컴터: 종목 이름 배지 (CSS로 폰에서 숨김)
-        const nameBadges = exList.slice(0,4).map(ex => {
+        // 패드/컴터: 종목 이름 배지를 개수 제한 없이 전부 표시 (CSS로 폰에서 숨김).
+        // 셀 높이가 aspect-ratio로 고정돼있던 걸 min-height로 바꿔서, 종목이
+        // 많은 날은 grid가 그 주(행) 전체를 자동으로 그 높이에 맞춰 늘려줌
+        const nameBadges = exList.map(ex => {
           const c = EX_COLORS.find(c=>c.id===ex.color);
           const bg     = c ? c.bg     : 'var(--sf2)';
           const border = c ? c.border : 'var(--bd2)';
           const text   = c ? c.text   : 'var(--t2)';
           return `<span class="cal-ex cal-ex-desktop" style="background:${bg};border-color:${border};color:${text};">${ex.name}</span>`;
         }).join('');
-        const rest = exList.length - 4;
-        const restBadge = rest > 0 ? `<span class="cal-ex cal-ex-desktop">+${rest}</span>` : '';
 
-        // 폰: 색깔 점만 (CSS로 패드/컴터에서 숨김)
-        const dots = exList.slice(0,6).map(ex => {
+        // 폰: 색깔 점을 개수 제한 없이 전부 표시 (CSS로 패드/컴터에서 숨김)
+        const dots = exList.map(ex => {
           const c = EX_COLORS.find(c=>c.id===ex.color);
           const bg = c ? c.bg : '#BBBBBB';
           return `<span class="cal-color-dot cal-dot-mobile" style="background:${bg};"></span>`;
         }).join('');
 
-        badgeHtml = `<span class="cal-badge">${sessionNum}회차${partLabel ? ' · '+partLabel : ''}</span>`;
-        badgeHtml += nameBadges + restBadge;
+        badgeHtml += nameBadges;
         badgeHtml += `<div class="cal-color-dots cal-dot-mobile-wrap">${dots}</div>`;
-      } else {
-        badgeHtml = `<span class="cal-badge">${sessionNum}회차${partLabel ? ' · '+partLabel : ''}</span>`;
       }
     }
     cell.innerHTML = `<span class="cal-num">${d}</span>${badgeHtml}`;
@@ -4065,6 +4065,7 @@ function buildJournalCard(e, realIdx){
   card.className = 'journal-entry-card';
   card.innerHTML =
     '<button class="je-del-btn" onclick="event.stopPropagation();deleteEntry('+realIdx+')" aria-label="삭제">×</button>'
+    +'<button class="je-copy-btn" onclick="event.stopPropagation();copyJournalToNew('+realIdx+')" aria-label="이 일지로 새로 작성" title="이 일지로 새로 작성">⧉</button>'
     +'<div class="je-header">'
       +'<div class="je-date-block">'
         +'<div class="je-month">'+month+'</div>'
@@ -4092,6 +4093,17 @@ async function renderJournalList(){
   renderCalendar();
   await updateMemberInfoCard();
   renderMemberNote();
+}
+
+// 지난 일지를 통째로 불러와서 새 일지 작성을 시작함 — 회차·날짜는 평소 "새
+// 일지 작성"과 똑같이 자동(다음 회차·오늘)으로 잡히고, 종목·세트·부위·색만
+// 복제됨. 메모·편지·강도는 그날그날 다른 내용이라 복제하지 않음
+async function copyJournalToNew(idx){
+  if(!currentMember) return;
+  const hist = await getMemberHistory(currentMember.id);
+  const entry = hist[idx];
+  if(!entry) return;
+  await openNewJournal(entry);
 }
 
 async function deleteEntry(idx){
@@ -4232,7 +4244,7 @@ async function openDetailModal(e, idx){
   document.getElementById('modal-detail').style.display = 'flex';
 }
 
-async function openNewJournal(){
+async function openNewJournal(copyFrom){
   if(!currentMember) return;
   editingEntryIdx = null;
   _justSavedSnapshot = null; // 새 폼을 여는 거니 이전 회원/이전 일지의 "저장 완료" 상태를 안 물려받게 함
@@ -4240,8 +4252,10 @@ async function openNewJournal(){
   const copyBtn = document.getElementById('copyBtn');
   if(copyBtn){ copyBtn.classList.remove('done'); copyBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> 저장 + 카톡 전송'; }
 
-  // 임시저장 복구 확인
-  if(hasDraft(currentMember.id)){
+  // 임시저장 복구 확인 — 다만 "이 일지로 새로 작성"(copyFrom)으로 들어온
+  // 경우엔 트레이너의 의도가 명확(이 회차 내용으로 새로 시작)하니, 안 쓰던
+  // 임시저장 때문에 "이어서 작성할까요?" 확인창이 끼어들지 않게 건너뜀
+  if(!copyFrom && hasDraft(currentMember.id)){
     const resume = confirm('이어서 작성할까요?\n(취소하면 새로 시작해요)');
     if(resume){
       await loadDraftToForm();
@@ -4259,8 +4273,19 @@ async function openNewJournal(){
   // 회차/기록 등을 덮어쓰는 걸 방지함
   const forMember = currentMember;
 
-  exercises = [{name:'',prevMaxW:0,prevVol:0,comment:'',color:null,sets:[{w:0,r:10}]}];
-  selectedParts = [];
+  // 종목명·세트·색상만 복제하고 지난 기록 비교용 필드(prevMaxW 등)는 다시
+  // 계산되게 비워둠 — 코멘트도 그날그날 다른 내용이라 복제 안 함
+  exercises = copyFrom && (copyFrom.exercises||[]).length
+    ? copyFrom.exercises.map(ex => ({
+        name: ex.name || '', prevMaxW:0, prevVol:0, comment:'', color: ex.color || null,
+        timeMode: !!ex.timeMode,
+        sets: (ex.sets||[]).map(st => ({
+          w: st.w, r: st.r,
+          ...(st.drops && st.drops.length ? { drops: st.drops.map(d => ({w:d.w, r:d.r})) } : {}),
+        })),
+      }))
+    : [{name:'',prevMaxW:0,prevVol:0,comment:'',color:null,sets:[{w:0,r:10}]}];
+  selectedParts = copyFrom ? [...(copyFrom.parts||[])] : [];
 
   document.getElementById('journalMemberName').textContent = forMember.name + '님';
   document.getElementById('journalFormTitle') && (document.getElementById('journalFormTitle').textContent = '새 일지 작성');
@@ -4286,7 +4311,9 @@ async function openNewJournal(){
   if(inputTabMemo) inputTabMemo.value = '';
 
   renderParts();
+  window._journalCopyMode = !!copyFrom; // initExCard가 세트 자동덮어쓰기를 건너뛰게 하는 신호
   renderExCards();
+  window._journalCopyMode = false;
   recalcAll();
 
   // 회원 데이터 요약 카드 렌더링
@@ -4296,6 +4323,8 @@ async function openNewJournal(){
   updateIntensity(70);
   document.getElementById('iIntensity').value = 70;
   document.getElementById('iLetter').value = '';
+
+  if(copyFrom) showToast('지난 일지 내용을 불러왔어요 ✓');
 
   switchTab('input');
   showScreen('screen-journal');
@@ -4503,6 +4532,12 @@ async function openEditJournal(idx){
     prevVol:  ex.prevVol  || 0,
     comment:  ex.comment  || '',
     color:    ex.color    || null,
+    // 저장된 일지에는 colorManual이 안 남아있어서 항상 false(자동)로 시작했음 —
+    // 그래서 수정 화면에서 색을 다시 눌러 "해제"하려 해도 setExColor의 해제
+    // 조건(color===colorId && colorManual)이 절대 안 걸려서, 오히려 같은 색을
+    // 수동 지정한 걸로 덮어써버리는 문제가 있었음. 저장된 색이 자동 추측
+    // 결과(학습된 색 또는 부위 기본색)와 다르면 트레이너가 직접 고른 것으로 판단
+    colorManual: false, // buildExCard 렌더 후 initExCard에서 실제 값으로 보정됨
     sets: (ex.sets||[]).map(st => ({
       w: st.w, r: st.r,
       ...(st.drops && st.drops.length ? { drops: st.drops.map(d => ({w: d.w, r: d.r})) } : {}),
@@ -5655,6 +5690,17 @@ const CHANGELOG = {
   ],
   '2.6.1': [
     '일지 작성 중 뒤로가기에서 "저장 안 함"을 눌러도 계속 "작성 중"으로 남아있던 문제를 고쳤어요'
+  ],
+  '2.6.2': [
+    '저장했던 일지를 수정할 때, 직접 골랐던 종목 색을 다시 눌러서 해제해도 원래 기본 색으로 안 돌아가던 문제를 고쳤어요'
+  ],
+  '2.6.3': [
+    '지난 일지 카드에 복제(⧉) 버튼이 생겼어요 — 누르면 그날 했던 종목·무게·횟수·부위를 그대로 불러와서 새 일지 작성을 바로 시작해요 (회차와 날짜는 평소처럼 자동으로 잡혀요)'
+  ],
+  '2.6.4': [
+    '달력에서 운동 종목이 많은 날 일부만 보이고 나머지가 가려지던 문제를 고쳤어요 — 이제 종목이 몇 개든 그 날짜 칸에서 다 보여요',
+    '달력 칸에 있던 "부위" 표시는 뺐어요 (종목은 이미 색깔로 구분되니까요)',
+    '지난 일지를 복제해서 저장하면 같은 날짜의 기존 일지에 안 덮어써지고 따로 생기던 문제를 고쳤어요'
   ]
 };
 
@@ -6966,6 +7012,18 @@ function buildExCard(ei){
   return card;
 }
 
+async function resolveColorManualOnEdit(ei){
+  const ex = exercises[ei];
+  if(!ex.name || !ex.color) return;
+  const prefs = await getColorPrefs();
+  const learnedColor = prefs.exerciseColors[exerciseColorKey(ex.name)];
+  const part = guessPartFromName(ex.name);
+  const autoColorId = learnedColor || (part && (prefs.partColors[part] || partToColorId(part)));
+  // 저장된 색이 지금 기준 자동 추측 결과와 다르면, 트레이너가 그때 직접
+  // 고른 색이라는 뜻 — 그래야 색 점을 다시 눌렀을 때 "해제" 동작이 걸림
+  ex.colorManual = autoColorId ? (ex.color !== autoColorId) : true;
+}
+
 function initExCard(ei){
   buildSetRows(ei);
   updateExFooter(ei);
@@ -6973,8 +7031,14 @@ function initExCard(ei){
   if(card) initExDrag(card, ei);
   const ex = exercises[ei];
   if(ex.name && editingEntryIdx === null){
-    autoFillPrev(ei, ex.name);
-  } else if(ex.name && (ex.prevMaxW || ex.prevVol || ex.prevMaxR)){
+    // 다른 일지를 복제해서 시작한 경우, 세트는 이미 그 일지 내용 그대로
+    // 채워져 있으니 autoFillPrev가 지난 기록 요약(prevMaxW 등)만 갱신하고
+    // 세트 값 자체는 덮어쓰지 않게 함(skipSetFill)
+    autoFillPrev(ei, ex.name, window._journalCopyMode);
+  } else if(ex.name && editingEntryIdx !== null){
+    resolveColorManualOnEdit(ei);
+  }
+  if(ex.name && (ex.prevMaxW || ex.prevVol || ex.prevMaxR)){
     const infoEl = document.getElementById('prevInfo-'+ei);
     if(infoEl){
       if(ex.prevMaxR > 0){
@@ -6998,10 +7062,11 @@ function renderExCards(){
   });
 }
 
-async function autoFillPrev(ei, name){
-  // 등척성 자동 감지 (수동 토글 아닌 경우만)
+async function autoFillPrev(ei, name, skipSetFill){
+  // 등척성 자동 감지 (수동 토글 아닌 경우만) — 다른 일지를 복제해온 경우엔
+  // 이미 그 종목의 실제 세트값이 들어있으니 건드리면 안 됨(skipSetFill)
   const nowTime = ISOMETRIC_KEYWORDS.some(k=>(name||'').toLowerCase().includes(k));
-  if(!exercises[ei]._manualTimeMode){
+  if(!exercises[ei]._manualTimeMode && !skipSetFill){
     if(nowTime && !exercises[ei].timeMode){
       exercises[ei].timeMode = true;
       exercises[ei].sets.forEach(s=>{ s.w=0; s.r=30; delete s.drops; });
@@ -7050,7 +7115,7 @@ async function autoFillPrev(ei, name){
   // 필요 없이, 지난 기록 위에 오늘 실제로 한 값으로 바로 고쳐 쓰면 되고
   // (다이얼을 만지는 즉시 "이전 기록" 표시가 사라짐), 점진적 과부하 여부도
   // 박스 하나하나에서 바로 비교됨. 시간(등척성) 모드는 세트 구조가 달라서 제외
-  if(!exercises[ei].timeMode && !nowTime && (prev.sets||[]).length){
+  if(!skipSetFill && !exercises[ei].timeMode && !nowTime && (prev.sets||[]).length){
     exercises[ei].sets = prev.sets.map(s=>({
       w: s.w||0, r: s.r||0, _prevFilled:true,
       ...(s.drops && s.drops.length ? { drops: s.drops.map(d=>({w:d.w||0, r:d.r||0, _prevFilled:true})) } : {}),
@@ -7297,11 +7362,11 @@ async function _saveJournalInner(memberId){
     const entryDate = getShortDate(entryDateIso);
     const sessionNum = parseInt(document.getElementById('iSession').value)||1;
 
-    // 같은 날짜 + 같은 회차면 덮어쓰기
-    const existIdx = hist.findIndex(e =>
-      getShortDate(e.dateTime||e.date) === entryDate &&
-      (e.session||e.streak) === sessionNum
-    );
+    // 같은 날짜면 덮어쓰기 — 원래는 회차까지 같아야 했는데, "지난 일지 복제"로
+    // 새로 시작하면 회차가 자동으로 다음 번호로 잡혀서 같은 날짜의 기존
+    // 일지와 회차가 어긋나 버려 덮어쓰기가 안 되던 문제가 있었음. 하루에
+    // 일지를 여러 회차로 나눠 쓰는 경우는 없다고 보고 날짜만으로 판단함
+    const existIdx = hist.findIndex(e => getShortDate(e.dateTime||e.date) === entryDate);
 
     const entry = {
       id: existIdx >= 0 ? hist[existIdx].id : 'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7),
