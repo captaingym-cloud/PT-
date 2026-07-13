@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.5.9"/>
+<meta name="app-version" content="2.6.0"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -410,7 +410,7 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 .ex-drag-handle:active{cursor:grabbing;background:var(--g2);color:var(--g0);}
 .ex-card.dragging{opacity:0.4;border:1.5px dashed var(--g0);}
 .ex-card.drag-over{border-top:2.5px solid var(--g0);}
-.ex-name-inp{flex:1;font-size:15px;font-weight:600;border:none;background:transparent;color:var(--t);outline:none;font-family:inherit;height:auto;padding:0;width:auto;}
+.ex-name-inp{flex:1;min-width:0;font-size:15px;font-weight:600;border:none;background:transparent;color:var(--t);outline:none;font-family:inherit;height:auto;padding:0;width:auto;}
 .ex-name-inp::placeholder{color:var(--t3);font-weight:400;}
 .ex-del-btn{width:26px;height:26px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t3);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .ex-del-btn:active{background:var(--red-l);color:var(--red);}
@@ -1019,7 +1019,10 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
       </div>
     </div>
 
-    <div class="eyebrow">오늘 운동 부위</div>
+    <div class="eyebrow" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>오늘 운동 부위</span>
+      <button onclick="openWorkoutGuide()" style="text-transform:none;letter-spacing:normal;font-size:11px;font-weight:600;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:4px 10px;cursor:pointer;font-family:inherit;">💡 오늘 뭐 하면 좋을지 추천받기</button>
+    </div>
     <div class="card"><div class="card-section"><div class="parts-row" id="partsRow"></div></div></div>
 
     <div class="eyebrow">운동 종목</div>
@@ -1340,24 +1343,33 @@ async function callGeminiAPI({ system, messages, max_tokens }){
     }
   });
 
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role:'user', parts }],
-      generationConfig: { maxOutputTokens: max_tokens || 1000 }
-    })
+  const body = JSON.stringify({
+    contents: [{ role:'user', parts }],
+    generationConfig: { maxOutputTokens: max_tokens || 1000 }
   });
+
+  // 무료 티어는 분당 요청 한도가 낮아서(전체 트레이너 공유) 짧은 시간에
+  // 몰리면 429가 잦음 — 바로 실패 처리하지 않고 한 번은 잠깐 기다렸다 재시도
+  let res = await fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body });
+  if(res.status === 429){
+    await new Promise(r=>setTimeout(r, 3000));
+    res = await fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body });
+  }
 
   if(!res.ok){
     const errText = await res.text();
+    if(res.status === 429) throw new Error('AI 사용량이 잠시 많아요. 30초 후 다시 시도해주세요.');
     throw new Error('Gemini API '+res.status+': '+errText.slice(0,200));
   }
 
   const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('') || '';
+  const candidate = data?.candidates?.[0];
+  const text = candidate?.content?.parts?.map(p=>p.text||'').join('') || '';
+  // 글자 수 제한(max_tokens)에 걸려 중간에 잘린 응답을 그대로 완성된 것처럼
+  // 보여주면 안 되니 표시해둠 — 호출부에서 이 신호로 잘림 여부를 판단
+  const truncated = candidate?.finishReason === 'MAX_TOKENS';
   // Anthropic 응답 형식과 비슷하게 맞춰서 반환 (기존 코드 재사용 위해)
-  return { content: [{ type:'text', text }] };
+  return { content: [{ type:'text', text }], truncated };
 }
 
 /* ── Firebase Auth: TRAINER_ID 기반 가이메일 로그인 ── */
@@ -4274,8 +4286,6 @@ async function openNewJournal(){
   renderMemberDataSummary();
   // 잔여 회차 알림
   checkRemainingSession(nextSession);
-  // 10회차 단위면 자동 편지 작성
-  checkMilestoneAndAutoLetter();
   updateIntensity(70);
   document.getElementById('iIntensity').value = 70;
   document.getElementById('iLetter').value = '';
@@ -4888,34 +4898,112 @@ function checkRemainingSession(sessionNum){
   window._totalSession = total;
 }
 
-async function checkMilestoneAndAutoLetter(){
+/* ═══════════════════════════════════════
+   오늘 운동 가이드 (AI 추천) — 일지 작성 폼과 완전히 분리된 참고용 기능.
+   여기서 나온 결과는 exercises/selectedParts 등 실제 일지 데이터를 전혀
+   건드리지 않고, 그냥 읽고 참고만 하는 팝업으로 끝남
+═══════════════════════════════════════ */
+async function openWorkoutGuide(){
   if(!currentMember) return;
-  const sessionNum = parseInt(document.getElementById('iSession')?.value || '0');
-  if(!sessionNum || sessionNum % 10 !== 0) return;
+  const forMember = currentMember;
+  const overlay = document.createElement('div');
+  overlay.className = 'dv2-modal-overlay';
+  overlay.id = 'workoutGuideOverlay';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="dv2-modal-box">
+      <div class="dv2-modal-handle"></div>
+      <div class="dv2-modal-nav">
+        <span class="dv2-modal-title">💡 오늘 운동 추천</span>
+        <button class="dv2-modal-close" onclick="document.getElementById('workoutGuideOverlay').remove()">×</button>
+      </div>
+      <div class="dv2-modal-scroll" id="workoutGuideBody">
+        <div style="text-align:center;padding:30px 0;color:var(--t3);font-size:13px;">${forMember.name}님의 최근 기록을 분석하고 있어요...</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
 
-  // 10회차 단위면 자동으로 편지 작성
-  const letterEl = document.getElementById('iLetter');
-  if(!letterEl || letterEl.value.trim()) return; // 이미 편지 있으면 건너뜀
+  try{
+    const hist = await getMemberHistory(forMember.id);
+    if(currentMember !== forMember) return; // 그 사이 다른 회원으로 넘어갔으면 중단
 
-  const btn = document.getElementById('autoWriteLetterBtn');
-  if(btn){ btn.disabled=true; btn.textContent='✨ '+sessionNum+'회차 편지 작성 중...'; }
+    // 부위별 최근 수행일 + 최근 3회 볼륨 추이 (최근 8회 일지 기준)
+    const recentHist = hist.slice(-8);
+    const partLastDate = {};
+    const partVolTrend = {};
+    recentHist.forEach(e=>{
+      (e.exercises||[]).filter(ex=>ex.name).forEach(ex=>{
+        const part = guessPartFromName(ex.name) || '기타';
+        partLastDate[part] = e.date;
+        if(!partVolTrend[part]) partVolTrend[part] = [];
+        const vol = (ex.sets||[]).reduce((s,st)=>s+((st.w||0)*(st.r||0)),0);
+        if(vol>0) partVolTrend[part].push(vol);
+      });
+    });
+    const partSummary = PARTS_LIST.map(part=>{
+      const last = partLastDate[part];
+      const trend = (partVolTrend[part]||[]).slice(-3);
+      return `${part}: ${last?last+' 이후 마지막':'기록 없음'}${trend.length?', 최근 볼륨 '+trend.join('→')+'kg':''}`;
+    }).join('\n');
 
-  await autoWriteLetter();
+    const totalSessions = hist.length ? Math.max(...hist.map(e=>parseInt(e.session||e.streak)||0)) : 0;
+    const lastEntry = hist[hist.length-1];
+    const lastExNames = lastEntry ? (lastEntry.exercises||[]).map(e=>e.name).filter(Boolean).join(', ') : '없음';
 
-  if(btn){ btn.disabled=false; btn.textContent='✨ 자동 작성'; }
+    const prompt = `너는 PT 트레이너를 돕는 운동 프로그램 어드바이저야. 회원의 최근 부위별 운동 이력을 보고, 오늘 어떤 부위/종목 위주로 하면 좋을지 추천해줘.
+
+[회원: ${forMember.name}, 총 ${totalSessions}회차 진행]
+
+[부위별 최근 수행 현황 — 오늘은 ${todayISO()}]
+${partSummary}
+
+[직전 수업(${lastEntry?lastEntry.date:'없음'})에 한 종목]
+${lastExNames}
+
+[작성 지침]
+- 오래 쉰 부위나 회복이 됐을 부위를 우선 추천해. 근육 회복에 보통 48~72시간 걸리는 걸 감안해
+- 최근 볼륨이 정체돼 있으면 살짝 언급해도 좋아 (과부하 필요성)
+- 추천 부위 1~2개와, 그 부위에 어울리는 구체적인 종목 예시 2~4개를 제시해
+- 트레이너가 참고만 하는 용도야. 확정된 처방이 아니라 "이런 방향은 어때요?" 톤으로, 짧고 실용적으로
+- 5~8문장 내외, 번호 매기기나 마크다운 없이 자연스러운 문단으로
+- 다른 설명 없이 추천 내용만 반환해`;
+
+    const data = await callGeminiAPI({ max_tokens:800, messages:[{role:'user', content: prompt}] });
+    const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
+
+    if(currentMember !== forMember) return; // 응답 기다리는 동안 화면이 바뀌었으면 버림
+    const bodyEl = document.getElementById('workoutGuideBody');
+    if(!bodyEl) return; // 그 사이 모달을 닫았으면 아무것도 안 함
+
+    if(!text){
+      bodyEl.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--t3);font-size:13px;">추천 결과를 받지 못했어요. 다시 시도해주세요.</div>`;
+      return;
+    }
+    bodyEl.innerHTML = `<div style="font-size:14px;color:var(--t);line-height:1.7;white-space:pre-wrap;padding:4px 2px 8px;">${text}</div>
+      <div style="font-size:11px;color:var(--t3);text-align:center;padding-top:8px;border-top:0.5px solid var(--bd);margin-top:8px;">참고용 추천이에요 · 일지 내용에는 영향을 주지 않아요</div>`;
+  } catch(err){
+    if(currentMember !== forMember) return;
+    const bodyEl = document.getElementById('workoutGuideBody');
+    if(bodyEl) bodyEl.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--red);font-size:13px;">추천을 가져오지 못했어요: ${(err.message||err)}</div>`;
+  }
 }
 
 async function autoWriteLetter(){
   if(!currentMember) return;
+  // 요청 시작 시점의 회원을 고정해둠 — API 응답을 기다리는 동안 트레이너가
+  // 다른 회원 화면으로 넘어가면, 늦게 도착한 응답이 엉뚱한(현재) 회원의
+  // 편지칸에 꽂히던 문제(안 눌렀는데 편지가 자동으로 채워짐)를 막기 위함
+  const forMember = currentMember;
   const btn = document.getElementById('autoWriteLetterBtn');
   if(btn){ btn.disabled = true; btn.textContent = '✨ 작성 중...'; }
 
   try{
     // 1) 회원 데이터 수집
-    const hist = await getMemberHistory(currentMember.id);
-    const memos = (await getMemos(currentMember.id)).filter(m=>m.id!=='note');
-    const noteEntry = (await getMemos(currentMember.id)).find(m=>m.id==='note');
-    const dietData = await getDietData(currentMember.id);
+    const hist = await getMemberHistory(forMember.id);
+    const allMemos = await getMemos(forMember.id);
+    const memos = allMemos.filter(m=>m.id!=='note');
+    const noteEntry = allMemos.find(m=>m.id==='note');
+    const dietData = await getDietData(forMember.id);
     const tone = await getTrainerTone();
 
     // 현재 작성 중인 일지 (오늘) 정보
@@ -4978,7 +5066,7 @@ async function autoWriteLetter(){
     const prompt = `너는 PT 트레이너야. 회원에게 보낼 편지(카톡 메시지)를 작성해줘.
 
 [회원 정보]
-이름: ${currentMember.name}
+이름: ${forMember.name}
 오늘 회차: ${sessionNum}회차
 총 진행 회차: ${totalSessions}회차 (${firstDate} ~ ${lastDate})
 ${window._remainingSession !== undefined && window._remainingSession <= 5 ?
@@ -5004,7 +5092,7 @@ ${dietSummary}
 
 [작성 지침]
 ${toneInstruction}
-- 호칭은 반드시 "${currentMember.name} 회원님"으로 시작해. 이름만 부르거나 "님"만 붙이지 말고 꼭 "회원님"으로 불러줘
+- 호칭은 반드시 "${forMember.name} 회원님"으로 시작해. 이름만 부르거나 "님"만 붙이지 말고 꼭 "회원님"으로 불러줘
 - 위 [종목별 전체 성장 기록]을 가장 중요하게 활용해. 처음보다 무게가 늘었거나 횟수가 늘었거나 꾸준히 기록을 쌓아온 점을 구체적인 수치로 짚어서 칭찬해줘
 - 총 ${totalSessions}회차 동안 꾸준히 해온 점도 자연스럽게 언급해도 좋아
 - 절대 주어진 정보에 없는 사실을 지어내지 마
@@ -5026,13 +5114,17 @@ ${toneInstruction}
 
     if(!letterText) throw new Error('편지 생성 결과가 비어있어요');
 
+    // 응답을 기다리는 동안 다른 회원 화면으로 넘어갔으면, 지금 화면의
+    // 편지칸에 엉뚱한 회원 내용을 채워넣지 않고 조용히 버림
+    if(currentMember !== forMember) return;
+
     document.getElementById('iLetter').value = letterText;
     autoSaveDraft();
-    showToast('편지 작성 완료 ✓');
+    showToast(data.truncated ? '편지 작성 완료 (내용이 길어 일부 잘렸어요, 확인해주세요) ⚠️' : '편지 작성 완료 ✓');
   } catch(err){
-    alert('편지 자동 작성에 실패했어요: ' + (err.message||err));
+    if(currentMember === forMember) alert('편지 자동 작성에 실패했어요: ' + (err.message||err));
   } finally {
-    if(btn){ btn.disabled = false; btn.textContent = '✨ 자동 작성'; }
+    if(currentMember === forMember && btn){ btn.disabled = false; btn.textContent = '✨ 자동 작성'; }
   }
 }
 
@@ -5537,6 +5629,13 @@ const CHANGELOG = {
   ],
   '2.5.9': [
     '지난 세션 메모에서 수정 버튼을 눌러도 입력창이 안 나타나던 문제를 고쳤어요'
+  ],
+  '2.6.0': [
+    '종목명이 길면 슈퍼세트(🔗)·삭제(×) 버튼이 화면 밖으로 밀려나 안 보이던 문제를 고쳤어요',
+    'AI 편지가 트레이너가 안 눌렀는데도 자동으로 (그것도 잘린 채로) 채워지던 문제를 고쳤어요 — 이제 "자동 작성" 버튼을 눌렀을 때만 작성돼요',
+    'AI 기능이 몰릴 때 뜨던 "429" 오류를 자동으로 한 번 재시도하도록 개선했어요',
+    '종목명을 입력하면 지난 회차에 같은 종목을 한 기록(무게·횟수·드롭셋 전체)이 자동으로 불러와져요. 각 박스에는 작게 "지난번 그대로"라고 표시되고, 직접 값을 고치면 그 박스만 표시가 사라져서 점진적 과부하를 바로 비교할 수 있어요',
+    '일지 작성 화면에 "오늘 뭐 하면 좋을지 추천받기" 버튼이 생겼어요 — 최근에 쉰 부위를 분석해서 AI가 참고용으로 추천해줘요 (일지 작성 내용에는 영향 없어요)'
   ]
 };
 
@@ -6558,6 +6657,7 @@ function buildSetRows(ei){
             ${s.w?wDisplay(exercises[ei],s.w)+'<span class="dial-unit">kg</span>':'kg'}
             <div class="dial-arrows"><span>▲</span><span>▼</span></div>
           </div>
+          <div class="prev-fill-tag" id="pf-w-${ei}-${si}" style="font-size:9px;color:var(--g1);text-align:center;margin-top:2px;${s._prevFilled?'':'display:none;'}">지난번 그대로</div>
         </div>
         <div class="dial-wrap">
           <div style="font-size:9px;color:var(--t3);text-align:center;margin-bottom:2px;">${si===0?(timeMode?'시간':'횟수'):''}</div>
@@ -6565,6 +6665,7 @@ function buildSetRows(ei){
             ${s.r?s.r+'<span class="dial-unit">개</span>':'개수'}
             <div class="dial-arrows"><span>▲</span><span>▼</span></div>
           </div>
+          <div class="prev-fill-tag" id="pf-r-${ei}-${si}" style="font-size:9px;color:var(--g1);text-align:center;margin-top:2px;${s._prevFilled?'':'display:none;'}">지난번 그대로</div>
         </div>
         <button onclick="addDrop(${ei},${si})" style="font-size:10px;color:var(--red);background:none;border:1px solid var(--red);border-radius:4px;cursor:pointer;font-family:inherit;padding:1px 5px;white-space:nowrap;align-self:flex-end;">↓드롭</button>
         <div style="display:flex;flex-direction:column;align-items:flex-end;align-self:flex-end;">
@@ -6590,12 +6691,14 @@ function buildSetRows(ei){
             ${d.w?wDisplay(exercises[ei],d.w)+'<span class="dial-unit">kg</span>':'kg'}
             <div class="dial-arrows"><span>▲</span><span>▼</span></div>
           </div>
+          <div class="prev-fill-tag" id="pf-dw-${ei}-${si}-${di}" style="font-size:9px;color:var(--g1);text-align:center;margin-top:2px;${d._prevFilled?'':'display:none;'}">지난번 그대로</div>
         </div>
         <div class="dial-wrap">
           <div class="dial-display${d.r?'':' empty'}" id="${drId}" data-ei="${ei}" data-si="${si}" data-di="${di}" data-type="dr">
             ${d.r?d.r+'<span class="dial-unit">개</span>':'개수'}
             <div class="dial-arrows"><span>▲</span><span>▼</span></div>
           </div>
+          <div class="prev-fill-tag" id="pf-dr-${ei}-${si}-${di}" style="font-size:9px;color:var(--g1);text-align:center;margin-top:2px;${d._prevFilled?'':'display:none;'}">지난번 그대로</div>
         </div>
         <span class="set-vol">${d.w&&d.r?volDisplay(exercises[ei],d.w*d.r)+'kg':''}</span>
         <button class="set-del" onclick="removeDrop(${ei},${si},${di})" style="color:var(--red);">×</button>`;
@@ -6629,13 +6732,14 @@ function attachDial(el){
   function setVal(v){
     v = Math.round(v / step) * step;
     v = Math.max(min, Math.min(max, v));
-    if(di>=0){
-      if(isW) exercises[ei].sets[si].drops[di].w=v;
-      else    exercises[ei].sets[si].drops[di].r=v;
-    } else {
-      if(isW) exercises[ei].sets[si].w = v;
-      else    exercises[ei].sets[si].r = v;
-    }
+    const target = di>=0 ? exercises[ei].sets[si].drops[di] : exercises[ei].sets[si];
+    if(isW) target.w = v; else target.r = v;
+    // 트레이너가 직접 값을 조작했으니 "이전 기록 그대로" 표시는 더 이상 유효하지
+    // 않음 — 이 박스의 이전 기록 태그만 지움 (다른 박스는 아직 이전값일 수 있음)
+    delete target._prevFilled;
+    const tagPrefix = di>=0 ? (isW?'pf-dw-':'pf-dr-')+ei+'-'+si+'-'+di : (isW?'pf-w-':'pf-r-')+ei+'-'+si;
+    const tagEl = document.getElementById(tagPrefix);
+    if(tagEl) tagEl.style.display = 'none';
     // 표시 업데이트
     const dispV = isW ? wDisplay(exercises[ei], v) : v;
     el.innerHTML = v
@@ -6746,13 +6850,9 @@ function openDialInput(ei, si, type, di){
     if(val===null) return;
     const num = isW ? parseFloat(val) : parseInt(val);
     if(isNaN(num)) return;
-    if(di>=0){
-      if(isW) exercises[ei].sets[si].drops[di].w=num;
-      else    exercises[ei].sets[si].drops[di].r=num;
-    } else {
-      if(isW) exercises[ei].sets[si].w=num;
-      else    exercises[ei].sets[si].r=num;
-    }
+    const target = di>=0 ? exercises[ei].sets[si].drops[di] : exercises[ei].sets[si];
+    if(isW) target.w=num; else target.r=num;
+    delete target._prevFilled; // 직접 입력했으니 "이전 기록" 표시는 이 박스에서만 해제
     buildSetRows(ei);
     updateExFooter(ei);
     recalcAll();
@@ -6923,6 +7023,24 @@ async function autoFillPrev(ei, name){
       infoEl.innerHTML =
         '지난 기록 &nbsp;최고 <strong>'+wDisplay(exercises[ei],prev.maxW||0)+'kg'+repsStr+'</strong>'
         +'&nbsp;·&nbsp;총 볼륨 <strong>'+volDisplay(exercises[ei],prev.vol||0)+'kg</strong>';
+    }
+  }
+
+  // 종목명이 지난 기록과 일치하면 그 회차 세트 전체(드롭셋 포함)를 그대로
+  // 불러와서 오늘 세트에 프리필함 — 트레이너가 매번 같은 값을 다시 입력할
+  // 필요 없이, 지난 기록 위에 오늘 실제로 한 값으로 바로 고쳐 쓰면 되고
+  // (다이얼을 만지는 즉시 "이전 기록" 표시가 사라짐), 점진적 과부하 여부도
+  // 박스 하나하나에서 바로 비교됨. 시간(등척성) 모드는 세트 구조가 달라서 제외
+  if(!exercises[ei].timeMode && !nowTime && (prev.sets||[]).length){
+    exercises[ei].sets = prev.sets.map(s=>({
+      w: s.w||0, r: s.r||0, _prevFilled:true,
+      ...(s.drops && s.drops.length ? { drops: s.drops.map(d=>({w:d.w||0, r:d.r||0, _prevFilled:true})) } : {}),
+    }));
+    buildSetRows(ei); updateExFooter(ei);
+    // 처음 겪는 트레이너는 "왜 숫자가 이미 채워져있지?" 헷갈릴 수 있어서,
+    // 이 동작을 처음 볼 때만 안내를 한 번 붙여줌 (드래그/색상 힌트와 같은 방식)
+    if(infoEl && !localStorage.getItem('hint_prevfill_seen')){
+      infoEl.innerHTML += '<div style="color:var(--g0);font-weight:600;margin-top:2px;">☝️ 지난번 세트를 그대로 불러왔어요. 오늘 값으로 고쳐 쓰면 돼요</div>';
     }
   }
   recalcAll();
@@ -7207,6 +7325,7 @@ async function _saveJournalInner(memberId){
 
   // 드래그 힌트 영구 숨김
   localStorage.setItem('hint_drag_seen', '1');
+  localStorage.setItem('hint_prevfill_seen', '1');
   const hint = document.getElementById('dragHint');
   if(hint) hint.style.display = 'none';
   const colorHint = document.getElementById('colorHint');
