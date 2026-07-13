@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.6.4"/>
+<meta name="app-version" content="2.6.5"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -729,7 +729,7 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
           <span id="memberNoteToggleIcon" style="font-size:12px;color:var(--t3);">✏️</span>
         </div>
         <div style="font-size:10.5px;color:var(--t3);margin-top:2px;">여기 적어두면 이 화면 위에서 항상 체크할 수 있어요</div>
-        <div id="memberNotePreview" style="font-size:13px;color:var(--t3);margin-top:4px;">메모 없음 — 탭해서 추가</div>
+        <div id="memberNotePreview" style="font-size:13px;color:var(--t3);margin-top:4px;white-space:pre-wrap;">메모 없음 — 탭해서 추가</div>
       </div>
       <div id="memberNoteEdit" style="display:none;background:var(--sf);border:0.5px solid var(--g0);border-radius:var(--r16);padding:12px 16px;margin-bottom:10px;">
         <textarea id="memberNoteInput" rows="4" placeholder="이 회원의 특이사항, 주의사항을 적어요&#10;예) 오른쪽 골반 통증, 왼쪽 어깨 가동범위 제한" style="width:100%;border:none;background:transparent;font-size:13px;color:var(--t);font-family:inherit;resize:none;outline:none;line-height:1.7;"></textarea>
@@ -5701,6 +5701,9 @@ const CHANGELOG = {
     '달력에서 운동 종목이 많은 날 일부만 보이고 나머지가 가려지던 문제를 고쳤어요 — 이제 종목이 몇 개든 그 날짜 칸에서 다 보여요',
     '달력 칸에 있던 "부위" 표시는 뺐어요 (종목은 이미 색깔로 구분되니까요)',
     '지난 일지를 복제해서 저장하면 같은 날짜의 기존 일지에 안 덮어써지고 따로 생기던 문제를 고쳤어요'
+  ],
+  '2.6.5': [
+    '회원 특이사항 메모에서 줄바꿈해서 적어도 화면에는 한 줄로 붙어 보이던 문제를 고쳤어요'
   ]
 };
 
