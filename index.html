@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.6.0"/>
+<meta name="app-version" content="2.6.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -3241,14 +3241,21 @@ async function goToMembers(){
   // autoSaveDraft() 호출보다 반드시 먼저 체크해야 함 (goBack()과 동일한 이유)
   // justSavedAndUnchanged() 설명은 goBack() 참고 — 저장 버튼을 이미 눌렀고
   // 그 뒤로 폼을 안 건드렸으면 재확인 안 함
+  let declinedSave = false;
   if(editingEntryIdx !== null && _editDirty && !justSavedAndUnchanged()){
     if(confirm('작성 중인 일지를 저장할까요?')){
       const saveOk = await saveJournal();
       if(!saveOk) return; // 저장 실패 시 화면에 남아있음 (saveJournal이 이미 안내함)
+    } else {
+      declinedSave = true; // "저장 안 함"을 선택했으니 임시저장도 남기지 않음
     }
   }
-  // 일지 작성 화면에서 바로 나가는 경우를 위한 안전망
-  autoSaveDraft();
+  if(declinedSave){
+    if(currentMember) clearDraft(currentMember.id);
+  } else {
+    // 일지 작성 화면에서 바로 나가는 경우를 위한 안전망
+    autoSaveDraft();
+  }
   _editDirty = false;
   _justSavedSnapshot = null;
   editingEntryIdx = null;
@@ -5347,17 +5354,26 @@ async function goBack(){
   const alreadySaved = justSavedAndUnchanged();
   const hasInput = !alreadySaved && exercises.some(ex => (ex.name||'').trim());
   const isEditDirty = editingEntryIdx !== null && _editDirty && !alreadySaved;
+  let declinedSave = false;
   if(hasInput || isEditDirty){
     if(confirm('작성 중인 일지를 저장할까요?')){
       const saveOk = await saveJournal();
       if(!saveOk) return; // 저장 실패 시 화면에 남아있음 (saveJournal이 이미 안내함)
+    } else {
+      declinedSave = true; // "저장 안 함"을 선택했으니 임시저장도 남기지 않음
     }
   }
-  // 화면 나가기 직전에 마지막 입력 상태를 한 번 더 임시저장함 (oninput 이벤트가
-  // 이미 대부분 저장하지만, 화면 전환 자체는 그 이벤트들에 안 걸려있어서
-  // 놓치는 경우의 안전망 — 새 일지 작성 중일 때만 실제로 저장됨). 저장 직후
-  // 폼이 안 바뀐 상태면 autoSaveDraft() 내부에서 알아서 draft를 안 만듦
-  autoSaveDraft();
+  if(declinedSave){
+    // "저장 안 함"을 골랐는데 바로 아래 autoSaveDraft()가 다시 임시저장해버리면
+    // 다음에 이 회원 목록에서 계속 "작성 중" 배지가 남는 문제가 있었음
+    if(currentMember) clearDraft(currentMember.id);
+  } else {
+    // 화면 나가기 직전에 마지막 입력 상태를 한 번 더 임시저장함 (oninput 이벤트가
+    // 이미 대부분 저장하지만, 화면 전환 자체는 그 이벤트들에 안 걸려있어서
+    // 놓치는 경우의 안전망 — 새 일지 작성 중일 때만 실제로 저장됨). 저장 직후
+    // 폼이 안 바뀐 상태면 autoSaveDraft() 내부에서 알아서 draft를 안 만듦
+    autoSaveDraft();
+  }
   _editDirty = false;
   _justSavedSnapshot = null;
   editingEntryIdx = null;
@@ -5631,11 +5647,14 @@ const CHANGELOG = {
     '지난 세션 메모에서 수정 버튼을 눌러도 입력창이 안 나타나던 문제를 고쳤어요'
   ],
   '2.6.0': [
-    '종목명이 길면 슈퍼세트(🔗)·삭제(×) 버튼이 화면 밖으로 밀려나 안 보이던 문제를 고쳤어요',
-    'AI 편지가 트레이너가 안 눌렀는데도 자동으로 (그것도 잘린 채로) 채워지던 문제를 고쳤어요 — 이제 "자동 작성" 버튼을 눌렀을 때만 작성돼요',
-    'AI 기능이 몰릴 때 뜨던 "429" 오류를 자동으로 한 번 재시도하도록 개선했어요',
-    '종목명을 입력하면 지난 회차에 같은 종목을 한 기록(무게·횟수·드롭셋 전체)이 자동으로 불러와져요. 각 박스에는 작게 "지난번 그대로"라고 표시되고, 직접 값을 고치면 그 박스만 표시가 사라져서 점진적 과부하를 바로 비교할 수 있어요',
-    '일지 작성 화면에 "오늘 뭐 하면 좋을지 추천받기" 버튼이 생겼어요 — 최근에 쉰 부위를 분석해서 AI가 참고용으로 추천해줘요 (일지 작성 내용에는 영향 없어요)'
+    '종목명이 길 때 🔗·× 버튼이 화면 밖으로 밀려나 안 보이던 문제를 고쳤어요',
+    'AI 편지가 누르지도 않았는데 저절로 (그것도 중간까지만) 써지던 문제를 고쳤어요 — 이제 "자동 작성" 버튼을 눌러야만 써져요',
+    'AI 기능을 여러 명이 동시에 쓸 때 실패하던 걸, 자동으로 한 번 더 시도해보도록 고쳤어요',
+    '종목명을 입력하면 지난번에 그 종목을 했던 기록(무게·횟수 전체)이 자동으로 불러와져요. 각 칸에는 작게 "지난번 그대로"라고 표시되고, 직접 값을 바꾸면 그 칸만 표시가 사라져서 오늘 더 잘했는지 바로 비교돼요',
+    '일지 작성 화면에 "오늘 뭐 하면 좋을지 추천받기" 버튼이 생겼어요 — 최근에 안 한 부위를 살펴서 AI가 참고삼아 추천해줘요 (일지 내용은 안 건드려요)'
+  ],
+  '2.6.1': [
+    '일지 작성 중 뒤로가기에서 "저장 안 함"을 눌러도 계속 "작성 중"으로 남아있던 문제를 고쳤어요'
   ]
 };
 
