@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.6.5"/>
+<meta name="app-version" content="2.6.6"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -406,12 +406,11 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 .part-chip.sel{background:var(--g2);color:var(--g0);border-color:var(--g3);font-weight:500;}
 
 /* EXERCISE CARD */
-.ex-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);margin-bottom:10px;overflow:hidden;}
+.ex-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);margin-bottom:10px;overflow:hidden;transition:transform .2s ease;}
 .ex-header{display:flex;align-items:center;gap:8px;padding:12px 14px 10px;border-bottom:0.5px solid var(--bd);}
 .ex-drag-handle{font-size:22px;color:var(--t2);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:6px 8px;line-height:1;background:var(--sf2);border-radius:8px;display:flex;align-items:center;justify-content:center;}
 .ex-drag-handle:active{cursor:grabbing;background:var(--g2);color:var(--g0);}
 .ex-card.dragging{opacity:0.4;border:1.5px dashed var(--g0);}
-.ex-card.drag-over{border-top:2.5px solid var(--g0);}
 .ex-name-inp{flex:1;min-width:0;font-size:15px;font-weight:600;border:none;background:transparent;color:var(--t);outline:none;font-family:inherit;height:auto;padding:0;width:auto;}
 .ex-name-inp::placeholder{color:var(--t3);font-weight:400;}
 .ex-del-btn{width:26px;height:26px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t3);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -730,12 +729,19 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
         </div>
         <div style="font-size:10.5px;color:var(--t3);margin-top:2px;">여기 적어두면 이 화면 위에서 항상 체크할 수 있어요</div>
         <div id="memberNotePreview" style="font-size:13px;color:var(--t3);margin-top:4px;white-space:pre-wrap;">메모 없음 — 탭해서 추가</div>
+        <div id="memberNotePhotos" style="display:none;gap:6px;margin-top:8px;flex-wrap:wrap;"></div>
       </div>
       <div id="memberNoteEdit" style="display:none;background:var(--sf);border:0.5px solid var(--g0);border-radius:var(--r16);padding:12px 16px;margin-bottom:10px;">
         <textarea id="memberNoteInput" rows="4" placeholder="이 회원의 특이사항, 주의사항을 적어요&#10;예) 오른쪽 골반 통증, 왼쪽 어깨 가동범위 제한" style="width:100%;border:none;background:transparent;font-size:13px;color:var(--t);font-family:inherit;resize:none;outline:none;line-height:1.7;"></textarea>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
-          <button onclick="closeMemberNote()" style="padding:6px 14px;background:none;border:0.5px solid var(--bd);border-radius:20px;font-size:12px;color:var(--t2);cursor:pointer;font-family:inherit;">닫기</button>
-          <button onclick="saveMemberNote()" style="padding:6px 14px;background:var(--g0);border:none;border-radius:20px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;">저장</button>
+        <div id="memberNoteExistingPhotos" style="display:none;gap:6px;margin-top:8px;flex-wrap:wrap;"></div>
+        <input type="file" id="memberNotePhotoInput" accept="image/*" multiple style="display:none;" onchange="onMemoPhotoSelect(event, 'note')"/>
+        <div id="memberNotePhotoPreview" style="display:none;gap:6px;margin-top:8px;flex-wrap:wrap;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+          <button onclick="event.stopPropagation();document.getElementById('memberNotePhotoInput').click()" style="font-size:12px;color:var(--t2);background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r8);padding:6px 12px;cursor:pointer;font-family:inherit;">📷 사진 추가</button>
+          <div style="display:flex;gap:8px;">
+            <button onclick="closeMemberNote()" style="padding:6px 14px;background:none;border:0.5px solid var(--bd);border-radius:20px;font-size:12px;color:var(--t2);cursor:pointer;font-family:inherit;">닫기</button>
+            <button onclick="saveMemberNote()" style="padding:6px 14px;background:var(--g0);border:none;border-radius:20px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;">저장</button>
+          </div>
         </div>
       </div>
 
@@ -1022,12 +1028,9 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     </div>
 
     <div class="eyebrow" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>오늘 운동 부위</span>
+      <span>운동 종목</span>
       <button onclick="openWorkoutGuide()" style="text-transform:none;letter-spacing:normal;font-size:11px;font-weight:600;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:4px 10px;cursor:pointer;font-family:inherit;">💡 오늘 뭐 하면 좋을지 추천받기</button>
     </div>
-    <div class="card"><div class="card-section"><div class="parts-row" id="partsRow"></div></div></div>
-
-    <div class="eyebrow">운동 종목</div>
     <div id="exCards"></div>
     <button class="add-ex-btn" onclick="addExercise()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1106,7 +1109,10 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
         <textarea id="inlineMemoInput" rows="3"
           placeholder="수업 중 특이사항, 대화 내용 등 자유롭게..."
           style="width:100%;font-size:14px;border:none;outline:none;padding:14px 16px;background:transparent;color:var(--t);font-family:inherit;line-height:1.6;resize:none;"></textarea>
-        <div style="padding:0 12px 10px;display:flex;justify-content:flex-end;">
+        <div id="inlineMemoPhotoPreview" style="display:none;padding:0 16px 10px;gap:6px;"></div>
+        <input type="file" id="inlineMemoPhotoInput" accept="image/*" multiple style="display:none;" onchange="onMemoPhotoSelect(event, 'inline')"/>
+        <div style="padding:0 12px 10px;display:flex;justify-content:space-between;align-items:center;">
+          <button onclick="document.getElementById('inlineMemoPhotoInput').click()" style="font-size:12px;color:var(--t2);background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r8);padding:6px 12px;cursor:pointer;font-family:inherit;">📷 사진 추가</button>
           <button onclick="saveInlineMemo()" style="font-size:13px;font-weight:600;color:#fff;background:var(--g0);border:none;border-radius:var(--r8);padding:7px 16px;cursor:pointer;font-family:inherit;">저장</button>
         </div>
       </div>
@@ -2148,6 +2154,18 @@ function partToColorId(part){
   return c ? c.id : null;
 }
 
+// colorId → 부위 역매핑. 트레이너가 부위별 색을 커스텀 지정했으면(colorPrefs.partColors)
+// 그 매핑을 우선 쓰고, 없으면 EX_COLORS 기본 매핑을 씀 — "오늘 운동 부위"를 트레이너가
+// 수동 선택하는 대신, 종목마다 고른 색(=트레이너가 이미 확정한 부위 정보)에서 역산하기 위함
+async function colorIdToPart(colorId){
+  if(!colorId) return null;
+  const prefs = await getColorPrefs();
+  const customEntry = Object.entries(prefs.partColors||{}).find(([part, cid]) => cid === colorId);
+  if(customEntry) return customEntry[0];
+  const c = EX_COLORS.find(c=>c.id===colorId);
+  return c ? c.part : null;
+}
+
 function refreshExColorDots(ei, colorId){
   const card = document.getElementById('exCard-'+ei);
   if(!card) return;
@@ -2205,6 +2223,11 @@ async function autoSetExColor(ei, name){
     });
     const aiPart = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
     const colorId = partToColorIdForTrainer(aiPart);
+    // 응답을 기다리는 동안 사용자가 타이핑을 계속해서 종목명이 이미 바뀌었으면
+    // (예: "와" → "와이" → "와이드풀다운" 등 글자마다 이 함수가 매번 새로 호출됨)
+    // 이 응답은 더 이상 지금 종목명 기준이 아니므로 버림 — 안 그러면 이전 글자
+    // 조합에 대한 AI 응답이 뒤늦게 도착해서 방금 입력 완료한 결과를 덮어써버림
+    if(exercises[ei].name !== name) return;
     // 응답 기다리는 동안 사용자가 직접 색을 골랐을 수 있으니 그 경우엔 덮어쓰지 않음
     if(colorId && !(exercises[ei].color && exercises[ei].colorManual)){
       exercises[ei].color = colorId;
@@ -3110,6 +3133,11 @@ async function renderMemoTab(){
     const card = document.createElement('div');
     card.id = 'memoCard-'+realIdx;
     card.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;margin-bottom:8px;';
+    const photosHtml = (m.photos||[]).length
+      ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">${(m.photos||[]).map((p,pi)=>
+          `<img id="memoPhoto-${realIdx}-${pi}" onclick="openMemoPhotoViewerByEl(this)" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:0.5px solid var(--bd);cursor:pointer;background:var(--sf2);"/>`
+        ).join('')}</div>`
+      : '';
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:11px;font-weight:600;color:var(--t3);">${dateWithWeekday(m.date)}</span>
@@ -3118,12 +3146,23 @@ async function renderMemoTab(){
           <button onclick="deleteMemo(${realIdx})" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;">삭제</button>
         </div>
       </div>
-      <div id="memoText-${realIdx}" style="font-size:13px;color:var(--t);line-height:1.7;white-space:pre-wrap;">${m.content}</div>`;
+      <div id="memoText-${realIdx}" style="font-size:13px;color:var(--t);line-height:1.7;white-space:pre-wrap;">${m.content}</div>
+      ${photosHtml}`;
     container.appendChild(card);
+    // /api/memo-photo는 인증 헤더가 필요해서 <img src>로 바로 못 불러옴 —
+    // fetch로 받아서 blob URL로 바꿔치기함
+    (m.photos||[]).forEach((p,pi)=>{
+      loadAuthedImage(p.url).then(blobUrl=>{
+        const imgEl = document.getElementById(`memoPhoto-${realIdx}-${pi}`);
+        if(blobUrl && imgEl){ imgEl.src = blobUrl; imgEl.dataset.fullUrl = blobUrl; }
+      });
+    });
   });
 }
 
-function inlineEditMemo(idx){
+let editMemoRemovedPhotos = {}; // { [memoIdx]: {id,url}[] } — 수정 중 삭제 표시한 기존 사진(저장 시 실제 삭제)
+
+async function inlineEditMemo(idx){
   const textEl = document.getElementById('memoText-'+idx);
   if(!textEl) return;
   const original = textEl.textContent;
@@ -3138,6 +3177,37 @@ function inlineEditMemo(idx){
   ta.focus();
   ta.style.height = ta.scrollHeight+'px';
 
+  editMemoPhotoFiles[idx] = [];
+  editMemoRemovedPhotos[idx] = [];
+
+  // 기존 사진 (탭하면 삭제 표시로 토글)
+  const memos = (await getMemos(currentMember.id)).filter(m=>m.id!=='note');
+  const existingPhotos = memos[idx]?.photos || [];
+  const existingWrap = document.createElement('div');
+  existingWrap.id = 'editMemoExistingPhotos-'+idx;
+  existingWrap.style.cssText = 'display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;';
+  card.appendChild(existingWrap);
+  existingPhotos.forEach((p,pi)=>{
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;width:56px;height:56px;flex-shrink:0;';
+    wrap.innerHTML = `<img id="editExistingPhoto-${idx}-${pi}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;border:0.5px solid var(--bd);background:var(--sf2);"/>
+      <button onclick="toggleRemoveExistingMemoPhoto(${idx},${pi},this)" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer;">×</button>`;
+    existingWrap.appendChild(wrap);
+    wrap._photoData = p;
+    loadAuthedImage(p.url).then(blobUrl=>{
+      if(blobUrl) document.getElementById(`editExistingPhoto-${idx}-${pi}`)?.setAttribute('src', blobUrl);
+    });
+  });
+
+  // 새 사진 추가 UI
+  const photoRow = document.createElement('div');
+  photoRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;';
+  photoRow.innerHTML = `
+    <input type="file" id="editMemoPhotoInput-${idx}" accept="image/*" multiple style="display:none;" onchange="onMemoPhotoSelect(event,'edit',${idx})"/>
+    <button onclick="document.getElementById('editMemoPhotoInput-${idx}').click()" style="font-size:11px;color:var(--t2);background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r8);padding:5px 10px;cursor:pointer;font-family:inherit;">📷 사진 추가</button>
+    <div id="editMemoPhotoPreview-${idx}" style="display:none;gap:6px;flex-wrap:wrap;"></div>`;
+  card.appendChild(photoRow);
+
   // 저장/취소 버튼
   const btns = document.createElement('div');
   btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:8px;';
@@ -3147,6 +3217,22 @@ function inlineEditMemo(idx){
   card.appendChild(btns);
   card._editTa = ta;
   card._editBtns = btns;
+  card._editPhotoRow = photoRow;
+  card._editExistingWrap = existingWrap;
+}
+
+function toggleRemoveExistingMemoPhoto(idx, pi, btnEl){
+  const wrap = btnEl.parentElement;
+  const removed = editMemoRemovedPhotos[idx] || (editMemoRemovedPhotos[idx]=[]);
+  const alreadyMarked = wrap.style.opacity === '0.3';
+  if(alreadyMarked){
+    wrap.style.opacity = '';
+    const i = removed.findIndex(p=>p.id===wrap._photoData.id);
+    if(i>=0) removed.splice(i,1);
+  } else {
+    wrap.style.opacity = '0.3';
+    removed.push(wrap._photoData);
+  }
 }
 
 function cancelInlineEdit(idx){
@@ -3154,6 +3240,10 @@ function cancelInlineEdit(idx){
   if(!card) return;
   if(card._editTa) card._editTa.remove();
   if(card._editBtns) card._editBtns.remove();
+  if(card._editPhotoRow) card._editPhotoRow.remove();
+  if(card._editExistingWrap) card._editExistingWrap.remove();
+  delete editMemoPhotoFiles[idx];
+  delete editMemoRemovedPhotos[idx];
   const textEl = document.getElementById('memoText-'+idx);
   if(textEl) textEl.style.display = '';
 }
@@ -3162,13 +3252,26 @@ async function saveInlineEdit(idx){
   const card = document.getElementById('memoCard-'+idx);
   if(!card || !card._editTa) return;
   const content = card._editTa.value.trim();
+  const newFiles = editMemoPhotoFiles[idx] || [];
+  const removedPhotos = editMemoRemovedPhotos[idx] || [];
   if(!content){ cancelInlineEdit(idx); return; }
   const allMemos = await getMemos(currentMember.id);
   const memos = allMemos.filter(m=>m.id!=='note');
-  memos[idx].content = content;
+  const target = memos[idx];
+  target.content = content;
+
+  const keptPhotos = (target.photos||[]).filter(p => !removedPhotos.some(r=>r.id===p.id));
+  const room = MEMO_PHOTO_LIMIT - keptPhotos.length;
+  const uploaded = newFiles.length && room>0 ? await uploadMemoPhotos(currentMember.id, target.id, newFiles.slice(0,room)) : [];
+  target.photos = [...keptPhotos, ...uploaded];
+
   const noteEntry = allMemos.find(m=>m.id==='note');
   const finalMemos = noteEntry ? [noteEntry, ...memos] : memos;
   await saveMemos(currentMember.id, finalMemos);
+  // R2에서 실제 삭제는 저장이 확정된 뒤에 (취소하면 R2 파일은 그대로 남아있어야 함)
+  for(const p of removedPhotos) deleteMemoPhotoByUrl(p.url);
+  delete editMemoPhotoFiles[idx];
+  delete editMemoRemovedPhotos[idx];
   renderMemoTab();
 }
 
@@ -3223,6 +3326,7 @@ async function deleteMemo(idx){
   const target = memos[idx];
   if(!target) return;
   await deleteMemoEntry(currentMember.id, target.id, target);
+  for(const p of (target.photos||[])) deleteMemoPhotoByUrl(p.url);
   renderMemoTab();
 }
 
@@ -4310,7 +4414,6 @@ async function openNewJournal(copyFrom){
   const inputTabMemo = document.getElementById('inputTabMemoInput');
   if(inputTabMemo) inputTabMemo.value = '';
 
-  renderParts();
   window._journalCopyMode = !!copyFrom; // initExCard가 세트 자동덮어쓰기를 건너뛰게 하는 신호
   renderExCards();
   window._journalCopyMode = false;
@@ -4353,16 +4456,39 @@ async function renderMemberNote(){
       card.style.background = 'var(--sf)';
     }
   }
+  renderMemberNotePhotoThumbs(note?.photos||[]);
 }
+
+function renderMemberNotePhotoThumbs(photos){
+  const el = document.getElementById('memberNotePhotos');
+  if(!el) return;
+  if(!photos.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = photos.map((p,pi) =>
+    `<img id="memberNoteThumb-${pi}" onclick="event.stopPropagation();openMemoPhotoViewerByEl(this)" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:0.5px solid var(--bd);cursor:pointer;background:var(--sf2);"/>`
+  ).join('');
+  photos.forEach((p,pi)=>{
+    loadAuthedImage(p.url).then(blobUrl=>{
+      const imgEl = document.getElementById('memberNoteThumb-'+pi);
+      if(blobUrl && imgEl){ imgEl.src = blobUrl; imgEl.dataset.fullUrl = blobUrl; }
+    });
+  });
+}
+
+let memberNoteRemovedPhotos = []; // 수정 중 삭제 표시한 기존 사진(저장 시 실제 삭제)
 
 function toggleMemberNote(){
   const edit = document.getElementById('memberNoteEdit');
   const card = document.getElementById('memberNoteCard');
   if(edit.style.display==='none'){
+    noteMemoPhotoFiles = [];
+    memberNoteRemovedPhotos = [];
+    renderMemoPhotoPreview('note');
     // 현재 내용 불러오기
     getMemos(currentMember.id).then(memos=>{
       const note = memos.find(m=>m.id==='note');
       document.getElementById('memberNoteInput').value = note ? note.content : '';
+      renderMemberNoteExistingPhotos(note?.photos||[]);
     });
     edit.style.display='block';
     card.style.display='none';
@@ -4373,22 +4499,66 @@ function toggleMemberNote(){
   }
 }
 
+function renderMemberNoteExistingPhotos(photos){
+  const el = document.getElementById('memberNoteExistingPhotos');
+  if(!el) return;
+  if(!photos.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = photos.map((p,pi) => `<div style="position:relative;width:56px;height:56px;flex-shrink:0;">
+      <img id="memberNoteExisting-${pi}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;border:0.5px solid var(--bd);background:var(--sf2);"/>
+      <button onclick="event.stopPropagation();toggleRemoveMemberNotePhoto(${pi},this)" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer;">×</button>
+    </div>`).join('');
+  photos.forEach((p,pi)=>{
+    const wrap = el.children[pi];
+    wrap._photoData = p;
+    loadAuthedImage(p.url).then(blobUrl=>{
+      if(blobUrl) document.getElementById('memberNoteExisting-'+pi)?.setAttribute('src', blobUrl);
+    });
+  });
+}
+
+function toggleRemoveMemberNotePhoto(pi, btnEl){
+  const wrap = btnEl.parentElement;
+  const alreadyMarked = wrap.style.opacity === '0.3';
+  if(alreadyMarked){
+    wrap.style.opacity = '';
+    const i = memberNoteRemovedPhotos.findIndex(p=>p.id===wrap._photoData.id);
+    if(i>=0) memberNoteRemovedPhotos.splice(i,1);
+  } else {
+    wrap.style.opacity = '0.3';
+    memberNoteRemovedPhotos.push(wrap._photoData);
+  }
+}
+
 function closeMemberNote(){
   document.getElementById('memberNoteEdit').style.display='none';
   document.getElementById('memberNoteCard').style.display='block';
+  noteMemoPhotoFiles = [];
+  memberNoteRemovedPhotos = [];
 }
 
 async function saveMemberNote(){
   if(!currentMember) return;
   const text = document.getElementById('memberNoteInput').value.trim();
+  const allMemos = await getMemos(currentMember.id);
+  const existingNote = allMemos.find(m=>m.id==='note');
+  const keptPhotos = (existingNote?.photos||[]).filter(p => !memberNoteRemovedPhotos.some(r=>r.id===p.id));
+  const room = MEMO_PHOTO_LIMIT - keptPhotos.length;
+  let finalPhotos = keptPhotos;
   if(text){
-    const entry = {id:'note', content:text, updatedAt:new Date().toISOString()};
+    const entry = {id:'note', content:text, updatedAt:new Date().toISOString(), photos:keptPhotos};
+    if(noteMemoPhotoFiles.length && room>0){
+      const uploaded = await uploadMemoPhotos(currentMember.id, 'note', noteMemoPhotoFiles.slice(0,room));
+      entry.photos = finalPhotos = [...keptPhotos, ...uploaded];
+    }
     await saveMemos(currentMember.id, [entry]);
   } else {
-    const allMemos = await getMemos(currentMember.id);
-    const noteEntry = allMemos.find(m=>m.id==='note');
-    await deleteMemoEntry(currentMember.id, 'note', noteEntry);
+    await deleteMemoEntry(currentMember.id, 'note', existingNote);
+    finalPhotos = []; // 메모 자체를 지웠으니 사진도 다 같이 지움
+    for(const p of keptPhotos) deleteMemoPhotoByUrl(p.url);
   }
+  // 명시적으로 뺀 사진들은 저장이 확정된 뒤에 R2에서 실제 삭제
+  for(const p of memberNoteRemovedPhotos) deleteMemoPhotoByUrl(p.url);
   closeMemberNote();
   // Firestore 재조회 없이 바로 화면 반영
   const preview = document.getElementById('memberNotePreview');
@@ -4406,6 +4576,7 @@ async function saveMemberNote(){
       card.style.background = 'var(--sf)';
     }
   }
+  renderMemberNotePhotoThumbs(finalPhotos);
   showToast('저장 완료 ✓');
 }
 
@@ -4538,6 +4709,7 @@ async function openEditJournal(idx){
     // 수동 지정한 걸로 덮어써버리는 문제가 있었음. 저장된 색이 자동 추측
     // 결과(학습된 색 또는 부위 기본색)와 다르면 트레이너가 직접 고른 것으로 판단
     colorManual: false, // buildExCard 렌더 후 initExCard에서 실제 값으로 보정됨
+    timeMode: !!ex.timeMode, // 없으면 초로 기록한 종목이 수정 화면에서 개수 모드로 보임
     sets: (ex.sets||[]).map(st => ({
       w: st.w, r: st.r,
       ...(st.drops && st.drops.length ? { drops: st.drops.map(d => ({w: d.w, r: d.r})) } : {}),
@@ -4553,7 +4725,6 @@ async function openEditJournal(idx){
 
   setEntryDate(e.dateTime || todayISO());
 
-  renderParts();
   renderExCards();
   recalcAll();
   const iv = e.intensity || 70;
@@ -4851,9 +5022,16 @@ async function renderMemberDataSummary(){
     lines.push('');
   }
 
-  // 2) 오늘 체크한 운동 부위와 같은 부위가 있는 가장 최근 이전 일지를 찾아서,
-  // 그 날 한 모든 운동의 총 볼륨 vs 오늘(작성 중) 모든 운동의 총 볼륨을 비교함
-  const todaysParts = selectedParts || [];
+  // 2) 오늘 입력한 종목들의 색(=부위)과 같은 부위가 있는 가장 최근 이전 일지를
+  // 찾아서, 그 날 한 모든 운동의 총 볼륨 vs 오늘(작성 중) 모든 운동의 총 볼륨을
+  // 비교함 — "오늘 운동 부위"를 트레이너가 직접 고르던 UI가 없어져서, 종목
+  // 색에서 부위를 역산해 씀 (derivedParts와 동일한 방식)
+  const todaysParts = [];
+  for(const ex of exercises){
+    if(!ex.name || !ex.color) continue;
+    const part = await colorIdToPart(ex.color);
+    if(part && !todaysParts.includes(part)) todaysParts.push(part);
+  }
   if(todaysParts.length){
     let matchEntry = null;
     for(let i = hist.length - 1; i >= 0; i--){
@@ -5446,26 +5624,141 @@ function syncNoteBoxes(value, sourceId){
   autoSaveDraft();
 }
 
+/* ═══════════════════════════════════════
+   회원 메모 사진 (R2: pt-memo-photos)
+   — 저장 버튼을 누르기 전까지는 메모 자체가 아직 안 만들어져서 memoId가
+   없으므로, 선택한 사진은 File 객체 그대로 메모리에만 들고 있다가 메모
+   저장이 확정된 직후(그 memoId가 생긴 뒤) 업로드함
+═══════════════════════════════════════ */
+const MEMO_PHOTO_LIMIT = 3;
+let inlineMemoPhotoFiles = [];
+let editMemoPhotoFiles = {}; // { [memoIdx]: File[] } — 수정 모달에서 새로 추가한 사진
+let noteMemoPhotoFiles = []; // 회원 특이사항(고정 메모)에 새로 추가한 사진
+
+function memoPhotoBucket(mode, idx){
+  if(mode==='inline') return inlineMemoPhotoFiles;
+  if(mode==='note') return noteMemoPhotoFiles;
+  return editMemoPhotoFiles[idx] || (editMemoPhotoFiles[idx]=[]);
+}
+
+function onMemoPhotoSelect(e, mode, idx){
+  const files = Array.from(e.target.files || []);
+  e.target.value = ''; // 같은 파일 다시 선택해도 change가 또 발생하게
+  if(!files.length) return;
+  const bucket = memoPhotoBucket(mode, idx);
+  const room = MEMO_PHOTO_LIMIT - bucket.length;
+  if(room <= 0){ showToast(`사진은 메모 1건당 최대 ${MEMO_PHOTO_LIMIT}장까지예요`, true); return; }
+  files.slice(0, room).forEach(f => bucket.push(f));
+  if(files.length > room) showToast(`사진은 메모 1건당 최대 ${MEMO_PHOTO_LIMIT}장까지예요`, true);
+  renderMemoPhotoPreview(mode, idx);
+}
+
+function renderMemoPhotoPreview(mode, idx){
+  const files = memoPhotoBucket(mode, idx);
+  const el = mode==='inline' ? document.getElementById('inlineMemoPhotoPreview')
+    : mode==='note' ? document.getElementById('memberNotePhotoPreview')
+    : document.getElementById('editMemoPhotoPreview-'+idx);
+  if(!el) return;
+  if(!files.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = files.map((f,fi) => {
+    const url = URL.createObjectURL(f);
+    const removeCall = mode==='inline' ? `removeMemoPhotoFile('inline', null, ${fi})`
+      : mode==='note' ? `removeMemoPhotoFile('note', null, ${fi})`
+      : `removeMemoPhotoFile('edit', ${idx}, ${fi})`;
+    return `<div style="position:relative;width:56px;height:56px;flex-shrink:0;">
+      <img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;border:0.5px solid var(--bd);"/>
+      <button onclick="event.stopPropagation();${removeCall}" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer;">×</button>
+    </div>`;
+  }).join('');
+}
+
+function removeMemoPhotoFile(mode, idx, fi){
+  const bucket = mode==='inline' ? inlineMemoPhotoFiles : mode==='note' ? noteMemoPhotoFiles : editMemoPhotoFiles[idx];
+  if(bucket) bucket.splice(fi,1);
+  renderMemoPhotoPreview(mode, idx);
+}
+
+// /api/memo-photo는 로그인 확인용 Authorization 헤더가 필요해서 <img src>로
+// 바로 못 불러옴 — fetch로 받아서 blob:// URL로 바꿔서 씀
+async function loadAuthedImage(apiUrl){
+  try{
+    const res = await fetch(apiUrl, { headers:{ 'Authorization':'Bearer '+fsToken } });
+    if(!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch(e){ return null; }
+}
+
+function openMemoPhotoViewerByEl(imgEl){
+  const src = imgEl.dataset.fullUrl || imgEl.src;
+  if(!src) return;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.onclick = () => overlay.remove();
+  overlay.innerHTML = `<img src="${src}" style="max-width:100%;max-height:100%;border-radius:8px;object-fit:contain;"/>`;
+  document.body.appendChild(overlay);
+}
+
+async function uploadMemoPhotos(memberId, memoId, files){
+  const uploaded = [];
+  for(const file of files){
+    try{
+      const res = await fetch(`/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}`, {
+        method:'POST',
+        headers:{ 'Authorization':'Bearer '+fsToken, 'Content-Type': file.type||'image/jpeg' },
+        body: file,
+      });
+      const data = await res.json();
+      if(data.ok) uploaded.push({ id:data.photoId, url:data.url });
+    } catch(e){ /* 사진 하나 실패해도 나머지는 계속 시도 */ }
+  }
+  return uploaded;
+}
+
+async function deleteMemoPhotoByUrl(url){
+  const key = new URL(url, location.origin).searchParams.get('key');
+  if(!key) return;
+  try{
+    await fetch(`/api/memo-photo?key=${encodeURIComponent(key)}`, {
+      method:'DELETE',
+      headers:{ 'Authorization':'Bearer '+fsToken },
+    });
+  } catch(e){}
+}
+
 async function saveInlineMemo(){
   if(!currentMember) return;
   const memberId = currentMember.id;
   const inp = document.getElementById('inlineMemoInput');
   const content = (inp.value || '').trim();
-  if(!content) return;
+  const photoFiles = inlineMemoPhotoFiles;
+  if(!content && !photoFiles.length) return;
   const memos = await getMemos(memberId);
   const today = getShortDate();
   // sessionMemo(위/아래 연동 메모)는 별개라 여기 합쳐지면 안 됨 — 그날 쓴 "메모 탭
   // 전용" 항목만 찾아서 이어붙임
-  const todayEntry = memos.find(m=>m.id!=='note' && !m.sessionMemo && m.date===today);
+  let todayEntry = memos.find(m=>m.id!=='note' && !m.sessionMemo && m.date===today);
   if(todayEntry){
-    todayEntry.content = todayEntry.content + '\n' + content;
+    if(content) todayEntry.content = todayEntry.content ? todayEntry.content + '\n' + content : content;
     todayEntry.dateTime = new Date().toISOString();
   } else {
-    memos.push({ id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:today, dateTime:new Date().toISOString(), content });
+    todayEntry = { id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+Math.random().toString(36).slice(2,7), date:today, dateTime:new Date().toISOString(), content };
+    memos.push(todayEntry);
+  }
+  if(photoFiles.length){
+    const existingPhotos = todayEntry.photos || [];
+    const room = MEMO_PHOTO_LIMIT - existingPhotos.length;
+    if(room > 0){
+      const uploaded = await uploadMemoPhotos(memberId, todayEntry.id, photoFiles.slice(0, room));
+      todayEntry.photos = [...existingPhotos, ...uploaded];
+    }
   }
   await saveMemos(memberId, memos);
   inp.value = '';
   inp.style.height = 'auto';
+  inlineMemoPhotoFiles = [];
+  renderMemoPhotoPreview('inline');
   renderMemoTab();
 }
 
@@ -5537,7 +5830,6 @@ async function loadDraftToForm(){
 
   setEntryDate(d.entryDate || todayISO());
   renderRecentMemoBar();
-  renderParts();
   renderExCards();
   recalcAll();
 
@@ -5575,9 +5867,8 @@ function autoSaveDraft(){
   // (새 종목 칸은 기본값이 무게 0 / 횟수 10이라, 횟수만 보고 판단하면 아무것도
   // 안 적어도 "입력함"으로 착각하게 되어서 이름/무게 기준으로만 판단함)
   const hasExercise = exercises.some(ex => (ex.name||'').trim() || (ex.sets||[]).some(s=>s.w>0));
-  const hasParts = selectedParts.length > 0;
   const hasLetter = (document.getElementById('iLetter')?.value||'').trim().length > 0;
-  if(!hasExercise && !hasParts && !hasLetter) return;
+  if(!hasExercise && !hasLetter) return;
 
   const data = {
     parts: [...selectedParts],
@@ -5704,6 +5995,15 @@ const CHANGELOG = {
   ],
   '2.6.5': [
     '회원 특이사항 메모에서 줄바꿈해서 적어도 화면에는 한 줄로 붙어 보이던 문제를 고쳤어요'
+  ],
+  '2.6.6': [
+    '일지 작성 화면에서 "오늘 운동 부위"를 직접 고르던 칸을 없앴어요 — 이제 종목마다 고른 색으로 자동으로 정해져요',
+    '회원 상세 화면 위쪽 "회원 특이사항"에 사진을 첨부할 수 있어요 (최대 3장) — 달력을 볼 때 항상 같이 보여요',
+    '종목명을 지우면 자동으로 채워졌던 무게·횟수도 같이 비워지도록 고쳤어요',
+    '종목 순서를 드래그로 바꾸면 직접 고친 무게·횟수가 지난 기록으로 되돌아가던 문제를 고쳤어요',
+    '종목을 드래그할 때 다른 종목들이 자리를 비켜주는 모습이 부드럽게 보이도록 다듬었어요',
+    '초 단위로 기록한 운동(플랭크 등)이 저장 후 다시 열면 개수 단위로 바뀌어 보이던 문제를 고쳤어요',
+    '키워드로 부위를 못 알아채는 종목명(예: 처음 보는 종목)에 색을 직접 지정해도 다음에 다시 안 불러와지던 문제를 고쳤어요'
   ]
 };
 
@@ -6528,16 +6828,6 @@ function pickDateToday(){
 /* ═══════════════════════════════════════
    PARTS
 ═══════════════════════════════════════ */
-function renderParts(){
-  document.getElementById('partsRow').innerHTML = PARTS_LIST.map(p =>
-    `<span class="part-chip${selectedParts.includes(p)?' sel':''}" onclick="togglePart('${p}',this)">${p}</span>`
-  ).join('');
-}
-function togglePart(p, el){
-  const i = selectedParts.indexOf(p);
-  if(i===-1){selectedParts.push(p);el.classList.add('sel');}
-  else{selectedParts.splice(i,1);el.classList.remove('sel');}
-}
 
 /* ═══════════════════════════════════════
    INTENSITY
@@ -7034,10 +7324,14 @@ function initExCard(ei){
   if(card) initExDrag(card, ei);
   const ex = exercises[ei];
   if(ex.name && editingEntryIdx === null){
-    // 다른 일지를 복제해서 시작한 경우, 세트는 이미 그 일지 내용 그대로
-    // 채워져 있으니 autoFillPrev가 지난 기록 요약(prevMaxW 등)만 갱신하고
-    // 세트 값 자체는 덮어쓰지 않게 함(skipSetFill)
-    autoFillPrev(ei, ex.name, window._journalCopyMode);
+    // 드래그로 순서를 바꾸거나 다른 종목을 추가/삭제하면 renderExCards()가
+    // 모든 카드를 다시 그리면서 initExCard가 재호출되는데, 이때마다
+    // autoFillPrev가 세트를 지난 기록으로 다시 덮어써버리면 트레이너가 이미
+    // 고쳐놓은 오늘 값이 순서만 바꿨는데 사라지는 문제가 있었음. 세트 중
+    // 하나라도 트레이너가 직접 손댄 값(_prevFilled 아님)이 있으면 이미
+    // "초기화 완료"된 카드로 보고 다시 덮어쓰지 않음(skipSetFill)
+    const alreadyTouched = exercises[ei].sets.some(s => !s._prevFilled);
+    autoFillPrev(ei, ex.name, window._journalCopyMode || alreadyTouched);
   } else if(ex.name && editingEntryIdx !== null){
     resolveColorManualOnEdit(ei);
   }
@@ -7084,7 +7378,17 @@ async function autoFillPrev(ei, name, skipSetFill){
   if(!name.trim()){
     exercises[ei].prevMaxW = 0;
     exercises[ei].prevVol  = 0;
+    exercises[ei].prevMaxR = 0;
+    exercises[ei].prevMaxWReps = 0;
     if(infoEl) infoEl.innerHTML = '';
+    // 종목명을 지우면, 아직 트레이너가 손대지 않고 "지난번 그대로" 자동
+    // 프리필된 세트값도 같이 원래 빈 상태로 되돌림 — 안 그러면 이름만 지워지고
+    // 세트 박스엔 이전 종목의 숫자가 그대로 남아서 트레이너가 하나하나 다시
+    // 지워야 했음. 트레이너가 직접 고친 세트(_prevFilled 아닌 것)는 안 건드림
+    if(!skipSetFill && exercises[ei].sets.every(s=>s._prevFilled)){
+      exercises[ei].sets = [{w:0, r:exercises[ei].timeMode?30:10}];
+      buildSetRows(ei); updateExFooter(ei);
+    }
     recalcAll(); return;
   }
   const prev = await getLastExData(name.trim());
@@ -7158,36 +7462,70 @@ async function setExColor(ei, colorId){
    DRAG & DROP - 종목 순서 변경
 ═══════════════════════════════════════ */
 let dragSrcEi = null;
+let dragCurrentOverEi = null; // 드래그 중 현재 카드가 가 있는 위치(자리가 실시간으로 밀리는 애니메이션 기준점)
+
+// FLIP 기법: 재배치 전 각 카드의 위치를 기록해뒀다가(First), DOM 순서를
+// 바꾼 뒤(Last) 그 사이의 이동거리만큼 즉시 역방향 transform을 걸고(Invert),
+// 다음 프레임에 transform을 0으로 되돌리면(Play) 브라우저가 자연스럽게
+// 그 이동을 애니메이션으로 보여줌 — 카드들이 자리를 비켜주는 것처럼 보이게 함
+function animateExCardsReorder(container, mutate){
+  const cards = [...container.querySelectorAll('.ex-card')];
+  const firstRects = new Map(cards.map(c => [c, c.getBoundingClientRect()]));
+
+  mutate();
+
+  cards.forEach(c=>{
+    const first = firstRects.get(c);
+    const last = c.getBoundingClientRect();
+    const dy = first.top - last.top;
+    if(dy){
+      c.style.transition = 'none';
+      c.style.transform = `translateY(${dy}px)`;
+      requestAnimationFrame(()=>{
+        c.style.transition = 'transform .2s ease';
+        c.style.transform = '';
+      });
+    }
+  });
+}
+
+// 드래그 중인 카드를 targetEi 위치로 DOM만 미리 옮겨서 "자리가 비켜지는"
+// 모습을 실시간으로 보여줌. exercises 배열 자체는 아직 안 건드리고, drop이
+// 확정될 때(dragSrcEi 기준으로) 실제 배열을 바꿈 — 그래야 도중에 취소해도 안전
+function previewExCardMove(container, srcEi, targetEi){
+  if(dragCurrentOverEi === targetEi) return;
+  dragCurrentOverEi = targetEi;
+  const srcCard = document.getElementById('exCard-'+srcEi);
+  const targetCard = document.getElementById('exCard-'+targetEi);
+  if(!srcCard || !targetCard || srcCard===targetCard) return;
+  animateExCardsReorder(container, ()=>{
+    if(targetEi > srcEi) targetCard.after(srcCard);
+    else targetCard.before(srcCard);
+  });
+}
 
 function initExDrag(card, ei){
   const handle = card.querySelector('.ex-drag-handle');
   if(!handle) return;
+  const container = document.getElementById('exCards');
 
   // PC 드래그
   card.draggable = true;
   card.addEventListener('dragstart', e=>{
     dragSrcEi = ei;
+    dragCurrentOverEi = ei;
     setTimeout(()=>card.classList.add('dragging'), 0);
     e.dataTransfer.effectAllowed = 'move';
   });
   card.addEventListener('dragend', ()=>{
     card.classList.remove('dragging');
-    document.querySelectorAll('.ex-card').forEach(c=>c.classList.remove('drag-over'));
+    finalizeExDrag(container);
   });
   card.addEventListener('dragover', e=>{
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    document.querySelectorAll('.ex-card').forEach(c=>c.classList.remove('drag-over'));
-    if(dragSrcEi !== ei) card.classList.add('drag-over');
-  });
-  card.addEventListener('drop', e=>{
-    e.preventDefault();
-    if(dragSrcEi === null || dragSrcEi === ei) return;
-    // exercises 배열 순서 변경
-    const moved = exercises.splice(dragSrcEi, 1)[0];
-    exercises.splice(ei, 0, moved);
-    dragSrcEi = null;
-    renderExCards();
+    if(dragSrcEi === null) return;
+    previewExCardMove(container, dragSrcEi, ei);
   });
 
   // 모바일 롱프레스 드래그
@@ -7199,6 +7537,8 @@ function initExDrag(card, ei){
     const touch = e.touches[0];
     longPressTimer = setTimeout(()=>{
       touchDragging = true;
+      dragSrcEi = ei;
+      dragCurrentOverEi = ei;
       card.classList.add('dragging');
       // 고스트 생성
       ghostEl = card.cloneNode(false);
@@ -7215,11 +7555,13 @@ function initExDrag(card, ei){
       ghostEl.style.top = (touch.clientY - card.offsetHeight/2) + 'px';
       ghostEl.style.left = card.getBoundingClientRect().left + 'px';
     }
-    // 어느 카드 위에 있는지 찾기
-    document.querySelectorAll('.ex-card').forEach(c=>c.classList.remove('drag-over'));
+    // 어느 카드 위에 있는지 찾아서 실시간으로 자리 바꿈
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
     const targetCard = el?.closest('.ex-card');
-    if(targetCard && targetCard !== card) targetCard.classList.add('drag-over');
+    if(targetCard){
+      const targetEi = parseInt(targetCard.id.replace('exCard-',''));
+      if(!isNaN(targetEi)) previewExCardMove(container, dragSrcEi, targetEi);
+    }
 
     // 화면 가장자리 근처면 자동 스크롤
     const edgeZone = 80; // 화면 위/아래 80px 안쪽이면 스크롤 시작
@@ -7239,18 +7581,28 @@ function initExDrag(card, ei){
     touchDragging = false;
     card.classList.remove('dragging');
     if(ghostEl){ ghostEl.remove(); ghostEl = null; }
-    document.querySelectorAll('.ex-card').forEach(c=>c.classList.remove('drag-over'));
-
-    const touch = e.changedTouches[0];
-    const el = document.elementFromPoint(touch.clientX, touch.clientY);
-    const targetCard = el?.closest('.ex-card');
-    if(targetCard && targetCard !== card){
-      const targetEi = parseInt(targetCard.id.replace('exCard-',''));
-      const moved = exercises.splice(ei, 1)[0];
-      exercises.splice(targetEi, 0, moved);
-      renderExCards();
-    }
+    finalizeExDrag(container);
   },{passive:true});
+}
+
+// 드래그가 끝나면(dragend/touchend), DOM에 이미 미리보기로 반영된 순서를
+// 그대로 exercises 배열에 확정 반영함 — DOM 순서를 그 자리에서 그대로
+// 읽어오는 방식이라 여러 번 자리를 옮겨 다녀도 최종 위치만 정확히 반영됨
+function finalizeExDrag(container){
+  if(dragSrcEi === null){ dragCurrentOverEi = null; return; }
+  const cardEls = [...container.querySelectorAll('.ex-card')];
+  const newOrder = cardEls.map(c => parseInt(c.id.replace('exCard-','')));
+  const changed = newOrder.some((origIdx, i) => origIdx !== i);
+  dragSrcEi = null;
+  dragCurrentOverEi = null;
+  if(changed){
+    exercises = newOrder.map(origIdx => exercises[origIdx]);
+    renderExCards();
+  } else {
+    // 순서가 실제로 안 바뀌었으면(같은 자리에 드롭) 다시 그릴 필요 없이
+    // 애니메이션으로 옮겨졌던 transform만 정리
+    cardEls.forEach(c=>{ c.style.transition=''; c.style.transform=''; });
+  }
 }
 
 function addExercise(){
@@ -7343,8 +7695,19 @@ async function _saveJournalInner(memberId){
     prevVol:  ex.prevVol  || 0,
     comment:  (ex.comment||'').trim(),
     color:    ex.color || null,
+    timeMode: !!ex.timeMode, // 저장 데이터에 안 들어가서, 초(등척성)로 기록해도
+    // 다시 열면 timeMode가 없어져서(undefined→false) "개수" 모드로 보이던 버그였음
     sets:[...ex.sets],
   }));
+
+  // "오늘 운동 부위"를 트레이너가 직접 고르던 UI를 없애는 대신, 오늘 입력한
+  // 종목들의 색(=트레이너가 이미 확정해둔 부위 정보)에서 부위를 역산함
+  const derivedParts = [];
+  for(const ex of exData){
+    if(!ex.name || !ex.color) continue;
+    const part = await colorIdToPart(ex.color);
+    if(part && !derivedParts.includes(part)) derivedParts.push(part);
+  }
 
   const isEdit = editingEntryIdx !== null && editingEntryIdx !== undefined;
 
@@ -7354,7 +7717,7 @@ async function _saveJournalInner(memberId){
       ...old,
       date: getShortDate(entryDateIso),
       dateTime: entryDateIso,
-      parts:[...selectedParts],
+      parts: derivedParts,
       exercises: exData,
       intensity:parseInt(document.getElementById('iIntensity').value)||70,
       streak:parseInt(document.getElementById('iStreak').value)||1,
@@ -7376,7 +7739,7 @@ async function _saveJournalInner(memberId){
       date: entryDate,
       dateTime: entryDateIso,
       bw,
-      parts:[...selectedParts],
+      parts: derivedParts,
       exercises: exData,
       intensity:parseInt(document.getElementById('iIntensity').value)||70,
       streak:parseInt(document.getElementById('iStreak').value)||1,
@@ -7614,7 +7977,13 @@ async function buildText(){
   const cal=Math.round(bw*0.088*totalSets*2.5);
   const volDiff=grandVol-grandPrev;
   const volPct=grandPrev?Math.round((volDiff/grandPrev)*100):null;
-  const partStr=selectedParts.length?selectedParts.join('  '):'';
+  const todaysPartsForText = [];
+  for(const ex of exercises){
+    if(!ex.name || !ex.color) continue;
+    const part = await colorIdToPart(ex.color);
+    if(part && !todaysPartsForText.includes(part)) todaysPartsForText.push(part);
+  }
+  const partStr=todaysPartsForText.length?todaysPartsForText.join('  '):'';
   const intensityDesc=intensityLevel(intensity).desc;
   const dateStr=getToday(document.getElementById('iEntryDate').value);
 

@@ -19,6 +19,10 @@
     {
       "binding": "PT_BACKUPS",
       "bucket_name": "pt-backups"
+    },
+    {
+      "binding": "PT_MEMO_PHOTOS",
+      "bucket_name": "pt-memo-photos"
     }
   ],
   // 매일 새벽 4시~5시 55분(KST, UTC 19:00~20:55)에 5분 간격으로 실행.

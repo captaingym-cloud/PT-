@@ -393,6 +393,103 @@ async function handleOwnerAuth(request, env) {
   return jsonResponse({ ok: true, idToken: adminAuth.idToken, uid: adminAuth.uid, gymId, gymName: gymData.name || '' });
 }
 
+/* ═══════════════════════════════════════
+   회원 메모 사진 (R2: pt-memo-photos)
+   — 메모 1건당 최대 3장. 트레이너가 로그인할 때 이미 발급받은 Firebase
+   idToken을 그대로 재사용해서, 그 토큰이 실제로 유효한지만 Firebase Auth로
+   확인함(토큰이 있다=로그인된 트레이너다). 키는 trainerId/memberId/memoId
+   기준으로 구성해서, 조회할 때도 그 조합을 알아야만 접근 가능함
+═══════════════════════════════════════ */
+const MEMO_PHOTO_MAX_BYTES = 5 * 1024 * 1024; // 장당 5MB 제한
+const MEMO_PHOTO_MAX_COUNT = 3; // 메모 1건당 최대 3장
+
+async function verifyFirebaseToken(idToken) {
+  if (!idToken) return null;
+  const res = await fetch(`${AUTH_BASE}/accounts:lookup?key=${FS_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.users && data.users[0] ? data.users[0] : null;
+}
+
+function memoPhotoKey(trainerId, memberId, memoId, photoId) {
+  // R2 오브젝트 키에 그대로 못 쓰는 문자(슬래시 등)가 섞이지 않도록 인코딩
+  const safe = (s) => encodeURIComponent(s || '');
+  return `memo-photos/${safe(trainerId)}/${safe(memberId)}/${safe(memoId)}/${safe(photoId)}`;
+}
+
+async function handleUploadMemoPhoto(request, env) {
+  const idToken = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  const user = await verifyFirebaseToken(idToken);
+  if (!user) return jsonResponse({ ok: false, error: '로그인이 필요해요.' }, 401);
+
+  const url = new URL(request.url);
+  const trainerId = url.searchParams.get('trainerId');
+  const memberId = url.searchParams.get('memberId');
+  const memoId = url.searchParams.get('memoId');
+  if (!trainerId || !memberId || !memoId) {
+    return jsonResponse({ ok: false, error: '요청이 올바르지 않아요.' }, 400);
+  }
+
+  const contentType = request.headers.get('Content-Type') || '';
+  if (!contentType.startsWith('image/')) {
+    return jsonResponse({ ok: false, error: '이미지 파일만 업로드할 수 있어요.' }, 400);
+  }
+
+  const body = await request.arrayBuffer();
+  if (body.byteLength > MEMO_PHOTO_MAX_BYTES) {
+    return jsonResponse({ ok: false, error: '사진 용량이 너무 커요 (최대 5MB).' }, 400);
+  }
+
+  // 이미 몇 장 있는지 확인해서 3장 제한을 넘지 않게 함
+  const prefix = memoPhotoKey(trainerId, memberId, memoId, '');
+  const existing = await env.PT_MEMO_PHOTOS.list({ prefix });
+  if (existing.objects.length >= MEMO_PHOTO_MAX_COUNT) {
+    return jsonResponse({ ok: false, error: `사진은 메모 1건당 최대 ${MEMO_PHOTO_MAX_COUNT}장까지만 넣을 수 있어요.` }, 400);
+  }
+
+  const photoId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  const key = memoPhotoKey(trainerId, memberId, memoId, photoId);
+  await env.PT_MEMO_PHOTOS.put(key, body, { httpMetadata: { contentType } });
+
+  return jsonResponse({ ok: true, photoId, url: `/api/memo-photo?key=${encodeURIComponent(key)}` });
+}
+
+async function handleGetMemoPhoto(request, env) {
+  const url = new URL(request.url);
+  const key = url.searchParams.get('key');
+  if (!key || !key.startsWith('memo-photos/')) return jsonResponse({ ok: false, error: '요청이 올바르지 않아요.' }, 400);
+
+  const idToken = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || url.searchParams.get('token');
+  const user = await verifyFirebaseToken(idToken);
+  if (!user) return jsonResponse({ ok: false, error: '로그인이 필요해요.' }, 401);
+
+  const obj = await env.PT_MEMO_PHOTOS.get(key);
+  if (!obj) return jsonResponse({ ok: false, error: '사진을 찾을 수 없어요.' }, 404);
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'private, max-age=86400',
+    },
+  });
+}
+
+async function handleDeleteMemoPhoto(request, env) {
+  const idToken = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  const user = await verifyFirebaseToken(idToken);
+  if (!user) return jsonResponse({ ok: false, error: '로그인이 필요해요.' }, 401);
+
+  const url = new URL(request.url);
+  const key = url.searchParams.get('key');
+  if (!key || !key.startsWith('memo-photos/')) return jsonResponse({ ok: false, error: '요청이 올바르지 않아요.' }, 400);
+
+  await env.PT_MEMO_PHOTOS.delete(key);
+  return jsonResponse({ ok: true });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -435,6 +532,15 @@ export default {
     }
     if (url.pathname === '/api/owner-auth' && request.method === 'POST') {
       return handleOwnerAuth(request, env);
+    }
+    if (url.pathname === '/api/upload-memo-photo' && request.method === 'POST') {
+      return handleUploadMemoPhoto(request, env);
+    }
+    if (url.pathname === '/api/memo-photo' && request.method === 'GET') {
+      return handleGetMemoPhoto(request, env);
+    }
+    if (url.pathname === '/api/memo-photo' && request.method === 'DELETE') {
+      return handleDeleteMemoPhoto(request, env);
     }
 
     // API 경로가 아니면 기존처럼 정적 파일(index.html 등)로 그대로 넘김
