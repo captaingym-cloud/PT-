@@ -434,14 +434,31 @@ async function handleUploadMemoPhoto(request, env) {
     return jsonResponse({ ok: false, error: '요청이 올바르지 않아요.' }, 400);
   }
 
-  const contentType = request.headers.get('Content-Type') || '';
+  // File 객체를 body에 그대로 스트리밍하는 방식은 카톡 인앱브라우저 같은
+  // 일부 웹뷰에서 조용히 실패하는 경우가 있어서, 클라이언트가 FormData로
+  // 감싸서 보냄 — 그래서 여기서도 request.formData()로 받음
+  let photoFile;
+  try {
+    const form = await request.formData();
+    photoFile = form.get('photo');
+  } catch (e) {
+    return jsonResponse({ ok: false, error: '사진 업로드 형식이 올바르지 않아요.' }, 400);
+  }
+  if (!photoFile || typeof photoFile.arrayBuffer !== 'function') {
+    return jsonResponse({ ok: false, error: '사진 파일을 찾을 수 없어요.' }, 400);
+  }
+
+  const contentType = url.searchParams.get('contentType') || photoFile.type || 'image/jpeg';
   if (!contentType.startsWith('image/')) {
     return jsonResponse({ ok: false, error: '이미지 파일만 업로드할 수 있어요.' }, 400);
   }
 
-  const body = await request.arrayBuffer();
+  const body = await photoFile.arrayBuffer();
   if (body.byteLength > MEMO_PHOTO_MAX_BYTES) {
     return jsonResponse({ ok: false, error: '사진 용량이 너무 커요 (최대 5MB).' }, 400);
+  }
+  if (body.byteLength === 0) {
+    return jsonResponse({ ok: false, error: '빈 파일이에요.' }, 400);
   }
 
   // 이미 몇 장 있는지 확인해서 3장 제한을 넘지 않게 함

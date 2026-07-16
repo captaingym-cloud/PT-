@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.6.6"/>
+<meta name="app-version" content="2.6.7"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -5702,16 +5702,37 @@ function openMemoPhotoViewerByEl(imgEl){
 
 async function uploadMemoPhotos(memberId, memoId, files){
   const uploaded = [];
+  let failCount = 0;
   for(const file of files){
     try{
-      const res = await fetch(`/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}`, {
+      // File 객체를 fetch body에 직접 넣는 방식은 카톡 인앱브라우저 등
+      // 일부 웹뷰에서 제대로 처리되지 않는 경우가 있어서(조용히 실패),
+      // 가장 폭넓게 지원되는 FormData/multipart로 감싸서 보냄
+      const formData = new FormData();
+      const contentType = (file.type && file.type.startsWith('image/')) ? file.type : 'image/jpeg';
+      formData.append('photo', file, file.name || 'photo.jpg');
+      const res = await fetch(`/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}&contentType=${encodeURIComponent(contentType)}`, {
         method:'POST',
-        headers:{ 'Authorization':'Bearer '+fsToken, 'Content-Type': file.type||'image/jpeg' },
-        body: file,
+        headers:{ 'Authorization':'Bearer '+fsToken },
+        body: formData,
       });
-      const data = await res.json();
-      if(data.ok) uploaded.push({ id:data.photoId, url:data.url });
-    } catch(e){ /* 사진 하나 실패해도 나머지는 계속 시도 */ }
+      const data = await res.json().catch(()=>null);
+      if(data && data.ok){
+        uploaded.push({ id:data.photoId, url:data.url });
+      } else {
+        failCount++;
+        console.error('메모 사진 업로드 실패:', res.status, data);
+      }
+    } catch(e){
+      // 사진 하나 실패해도 나머지는 계속 시도하되, 실패했다는 사실 자체는
+      // 반드시 트레이너에게 알림 — 예전엔 여기서 조용히 삼켜서 "저장 완료"
+      // 토스트만 뜨고 사진은 하나도 안 올라간 걸 트레이너가 알 방법이 없었음
+      failCount++;
+      console.error('메모 사진 업로드 실패(네트워크/예외):', e);
+    }
+  }
+  if(failCount > 0){
+    showToast(`사진 ${failCount}장 저장에 실패했어요. 다시 시도해주세요.`, true);
   }
   return uploaded;
 }
@@ -6004,6 +6025,10 @@ const CHANGELOG = {
     '종목을 드래그할 때 다른 종목들이 자리를 비켜주는 모습이 부드럽게 보이도록 다듬었어요',
     '초 단위로 기록한 운동(플랭크 등)이 저장 후 다시 열면 개수 단위로 바뀌어 보이던 문제를 고쳤어요',
     '키워드로 부위를 못 알아채는 종목명(예: 처음 보는 종목)에 색을 직접 지정해도 다음에 다시 안 불러와지던 문제를 고쳤어요'
+  ],
+  '2.6.7': [
+    '아이폰·카톡 인앱브라우저에서 회원 특이사항에 사진을 첨부하면 "저장 완료"는 뜨는데 사진이 안 보이던 문제를 고쳤어요',
+    '사진 저장이 실패하면 이제 알림으로 알려드려요 (예전엔 조용히 실패해서 몰랐어요)'
   ]
 };
 
