@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.6.9"/>
+<meta name="app-version" content="2.7.0"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -93,10 +93,20 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .today-status-badge.not-written{background:var(--sf2);color:var(--t3);border:0.5px solid var(--bd);}
 .today-status-badge.written{background:#FFF4D6;color:#B8860B;border:0.5px solid #F0DFA0;}
 .today-status-badge.sent{background:var(--g2);color:var(--g0);border:0.5px solid var(--g3);}
-.today-pick-row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:0.5px solid var(--bd);cursor:pointer;}
-.today-pick-row:last-child{border-bottom:none;}
-.today-pick-check{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--bd2);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;}
+.today-pick-row{padding:14px 10px;margin-bottom:6px;border-radius:var(--r12);border:1px solid var(--bd);background:var(--sf);cursor:pointer;}
+.today-pick-row:last-child{margin-bottom:0;}
+.today-pick-row.checked{background:var(--g2);border-color:var(--g0);cursor:default;}
+.today-pick-main{display:flex;align-items:center;gap:14px;}
+.today-pick-check{width:26px;height:26px;border-radius:8px;border:1.5px solid var(--bd2);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900;background:var(--sf);}
 .today-pick-check.checked{background:var(--g0);border-color:var(--g0);}
+.today-pick-avatar{width:40px;height:40px;font-size:15px;}
+.today-pick-info{flex:1;min-width:0;}
+.today-pick-name{font-size:15px;font-weight:600;color:var(--t);margin-bottom:2px;}
+.today-pick-meta{font-size:12px;color:var(--t3);}
+.today-pick-time-row{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;padding-top:12px;border-top:0.5px solid var(--g3);}
+.today-pick-time-label{font-size:11px;color:var(--t3);margin-right:2px;white-space:nowrap;flex-shrink:0;}
+.today-pick-time-row .today-pick-time-dial{width:56px;height:40px;flex-shrink:0;}
+.today-pick-time-sep{font-size:17px;font-weight:600;color:var(--t);}
 .member-letter-header{font-size:13px;font-weight:700;color:var(--g0);padding:14px 4px 6px;position:sticky;top:0;background:var(--bg);z-index:1;}
 .member-card-wrap{position:relative;margin-bottom:8px;border-radius:var(--r16);overflow:hidden;}
 .member-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .2s ease;position:relative;z-index:1;}
@@ -105,6 +115,7 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .member-del-slide svg{color:#fff;}
 .member-del-slide span{font-size:11px;color:#fff;font-weight:600;margin-top:3px;}
 .member-avatar{width:42px;height:42px;border-radius:50%;background:var(--g0);border:0.5px solid var(--g0);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#fff;flex-shrink:0;}
+.member-avatar-time{width:auto;min-width:42px;padding:0 8px;border-radius:20px;font-size:12px;font-weight:700;}
 .member-info{flex:1;}
 .member-name{font-size:15px;font-weight:600;color:var(--t);margin-bottom:2px;}
 .member-meta{font-size:12px;color:var(--t3);}
@@ -2699,18 +2710,37 @@ let memberListTab = 'all'; // 'all' | 'today'
 function todaySessionKey(){
   return 'todaySession_'+TRAINER_ID+'_'+todayISO();
 }
-function getTodaySessionIds(){
-  try{ return JSON.parse(localStorage.getItem(todaySessionKey())) || []; }
-  catch{ return []; }
+// { [memberId]: { time: 'HH:MM' | null } } — 시간은 나중에 픽커에서 다이얼로
+// 채워질 수 있고, 없으면(null) 정렬 시 맨 뒤로 밀림
+function getTodaySessionMap(){
+  try{
+    const parsed = JSON.parse(localStorage.getItem(todaySessionKey()));
+    if(!parsed || typeof parsed !== 'object') return {};
+    if(Array.isArray(parsed)){
+      const map = {};
+      parsed.forEach(mid => { map[mid] = { time: null }; });
+      setTodaySessionMap(map);
+      return map;
+    }
+    return parsed;
+  }
+  catch{ return {}; }
 }
-function setTodaySessionIds(ids){
-  localStorage.setItem(todaySessionKey(), JSON.stringify(ids));
+function setTodaySessionMap(map){
+  localStorage.setItem(todaySessionKey(), JSON.stringify(map));
 }
 function toggleTodaySessionMember(mid){
-  const ids = getTodaySessionIds();
-  const i = ids.indexOf(mid);
-  if(i===-1) ids.push(mid); else ids.splice(i,1);
-  setTodaySessionIds(ids);
+  const map = getTodaySessionMap();
+  if(map[mid]) delete map[mid];
+  else map[mid] = { time: null };
+  setTodaySessionMap(map);
+  return !!map[mid];
+}
+function setTodaySessionMemberTime(mid, time){
+  const map = getTodaySessionMap();
+  if(!map[mid]) map[mid] = {};
+  map[mid].time = time;
+  setTodaySessionMap(map);
 }
 
 function switchMemberListTab(tab){
@@ -2733,23 +2763,108 @@ function getTodayWriteStatus(hist, sentMap){
 
 async function openTodaySessionPicker(){
   const members = await getMembers();
-  const ids = getTodaySessionIds();
+  const map = getTodaySessionMap();
   const list = document.getElementById('todaySessionPickerList');
   const sorted = [...members].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-  list.innerHTML = sorted.map(m => {
-    const checked = ids.includes(m.id);
-    return `<div class="today-pick-row" onclick="toggleTodaySessionPickerRow('${m.id}', this)">
-      <span class="today-pick-check${checked?' checked':''}">${checked?'✓':''}</span>
-      <span style="font-size:14px;color:var(--t);">${m.name}</span>
-    </div>`;
+
+  // 회차 정보(마지막 수업일 · N/M회차)까지 같이 보여줘서, 회원 목록 카드와
+  // 똑같은 정보량으로 고를 수 있게 함 — 이름만으로는 헷갈리는 트레이너가 많았음
+  const withHist = await Promise.all(sorted.map(async m => {
+    const hist = await getMemberHistory(m.id);
+    const last = hist.length ? hist[hist.length-1] : null;
+    const maxSession = hist.length ? Math.max(...hist.map(e => e.session||e.streak||1)) : 0;
+    const sessionDisplay = m.totalSessions ? `${maxSession}/${m.totalSessions}회차` : `${maxSession}회차`;
+    return { m, lastDate: last?.date || null, sessionDisplay };
+  }));
+
+  list.innerHTML = withHist.map(({m, lastDate, sessionDisplay}) => {
+    const checked = !!map[m.id];
+    return buildTodayPickRowHtml(m, lastDate, sessionDisplay, checked, map[m.id]?.time);
   }).join('');
+
+  // 체크된 행마다 시/분 다이얼 부착 (체크 안 된 행엔 다이얼 자체가 없음)
+  withHist.forEach(({m}) => { if(map[m.id]) attachTodayPickTimeDials(m.id); });
+
   document.getElementById('modal-todaySession').style.display = 'flex';
 }
+
+// 기본 수업 시간 — 체크하는 순간 아무 시간도 없으면 당황스러우니, 이미 시간이
+// 정해진 회원이 있으면 그 다음 정각으로 이어서 제안하고 없으면 오전 9시로 시작
+function suggestNextTime(){
+  const map = getTodaySessionMap();
+  const times = Object.values(map).map(v=>v.time).filter(Boolean);
+  if(!times.length) return '09:00';
+  const maxH = Math.max(...times.map(t=>parseInt(t.split(':')[0],10)));
+  return String(Math.min(maxH+1, 23)).padStart(2,'0')+':00';
+}
+
+function buildTodayPickRowHtml(m, lastDate, sessionDisplay, checked, time){
+  const t = time || suggestNextTime();
+  const [hh, mm] = t.split(':');
+  const timeDialHtml = checked ? `
+    <div class="today-pick-time-row" onclick="event.stopPropagation()">
+      <span class="today-pick-time-label">수업 시간</span>
+      <div class="dial-display today-pick-time-dial" id="todayPickHour-${m.id}" data-mid="${m.id}" data-unit="hour"></div>
+      <span class="today-pick-time-sep">:</span>
+      <div class="dial-display today-pick-time-dial" id="todayPickMin-${m.id}" data-mid="${m.id}" data-unit="min"></div>
+    </div>` : '';
+  return `<div class="today-pick-row${checked?' checked':''}" id="todayPickRow-${m.id}" data-hh="${hh}" data-mm="${mm}" onclick="toggleTodaySessionPickerRow('${m.id}', this)">
+      <div class="today-pick-main">
+        <span class="today-pick-check${checked?' checked':''}">${checked?'✓':''}</span>
+        <div class="member-avatar today-pick-avatar">${m.name[0]}</div>
+        <div class="today-pick-info">
+          <div class="today-pick-name">${m.name}</div>
+          <div class="today-pick-meta">마지막 수업 ${lastDate||'기록 없음'}  ·  ${sessionDisplay}</div>
+        </div>
+      </div>
+      ${timeDialHtml}
+    </div>`;
+}
+
+function attachTodayPickTimeDials(mid){
+  const rowEl = document.getElementById('todayPickRow-'+mid);
+  const hourEl = document.getElementById('todayPickHour-'+mid);
+  const minEl = document.getElementById('todayPickMin-'+mid);
+  if(!rowEl || !hourEl || !minEl) return;
+
+  function commitTime(){
+    const hh = String(rowEl.dataset.hh).padStart(2,'0');
+    const mm = String(rowEl.dataset.mm).padStart(2,'0');
+    setTodaySessionMemberTime(mid, hh+':'+mm);
+  }
+
+  attachSimpleDial(hourEl, {
+    getVal: () => parseInt(rowEl.dataset.hh,10),
+    setVal: v => { rowEl.dataset.hh = v; commitTime(); },
+    step: 1, min: 0, max: 23, sens: 10,
+    formatDisplay: v => String(v).padStart(2,'0'),
+  });
+  attachSimpleDial(minEl, {
+    getVal: () => parseInt(rowEl.dataset.mm,10),
+    setVal: v => { rowEl.dataset.mm = v; commitTime(); },
+    step: 30, min: 0, max: 30, sens: 20,
+    formatDisplay: v => String(v).padStart(2,'0'),
+  });
+  commitTime(); // 처음 체크했을 때 제안된 시간을 바로 저장해둠
+}
+
 function toggleTodaySessionPickerRow(mid, rowEl){
-  toggleTodaySessionMember(mid);
-  const check = rowEl.querySelector('.today-pick-check');
-  const nowChecked = check.classList.toggle('checked');
-  check.textContent = nowChecked ? '✓' : '';
+  const nowChecked = toggleTodaySessionMember(mid);
+  // 체크/해제에 따라 다이얼이 새로 생기거나 없어져야 하므로, 이 행 하나만 다시 그림
+  const map = getTodaySessionMap();
+  getMembers().then(async members => {
+    const m = members.find(x=>x.id===mid);
+    if(!m) return;
+    const hist = await getMemberHistory(mid);
+    const last = hist.length ? hist[hist.length-1] : null;
+    const maxSession = hist.length ? Math.max(...hist.map(e => e.session||e.streak||1)) : 0;
+    const sessionDisplay = m.totalSessions ? `${maxSession}/${m.totalSessions}회차` : `${maxSession}회차`;
+    const html = buildTodayPickRowHtml(m, last?.date||null, sessionDisplay, nowChecked, map[mid]?.time);
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    rowEl.replaceWith(temp.firstElementChild);
+    if(nowChecked) attachTodayPickTimeDials(mid);
+  });
 }
 function closeTodaySessionPicker(){
   document.getElementById('modal-todaySession').style.display = 'none';
@@ -2768,7 +2883,8 @@ async function renderMemberList(){
   document.getElementById('trainerBadge').textContent = trainer;
 
   // 오늘 수업 탭 카운트 배지
-  const todayIds = getTodaySessionIds();
+  const todayMap = getTodaySessionMap();
+  const todayIds = Object.keys(todayMap);
   const countEl = document.getElementById('todaySessionCount');
   if(countEl){
     if(todayIds.length){ countEl.style.display=''; countEl.textContent = todayIds.length; }
@@ -2788,7 +2904,7 @@ async function renderMemberList(){
   }
 
   // 오늘 수업 탭이면 체크해둔 회원만 남김
-  const visibleMembers = memberListTab==='today' ? members.filter(m=>todayIds.includes(m.id)) : members;
+  const visibleMembers = memberListTab==='today' ? members.filter(m=>todayMap[m.id]) : members;
 
   if(memberListTab==='today' && visibleMembers.length===0){
     container.innerHTML = `<div class="empty-state"><div class="e-icon">📋</div><div class="e-text">오늘 수업할 회원을 아직 안 골랐어요</div></div>`;
@@ -2814,17 +2930,20 @@ async function renderMemberList(){
     const maxSession = hist.length ? Math.max(...hist.map(e => e.session||e.streak||1)) : 0;
     const isExpired = m.totalSessions && maxSession >= m.totalSessions;
     const todayStatus = memberListTab==='today' ? getTodayWriteStatus(hist, sentEntryIds) : null;
-    return { m, hist, lastDate, lastTime, isExpired, maxSession, todayStatus };
+    const todaySessionTime = memberListTab==='today' ? (todayMap[m.id]?.time || null) : null;
+    return { m, hist, lastDate, lastTime, isExpired, maxSession, todayStatus, todaySessionTime };
   }));
 
-  // "오늘 수업" 탭에서는 만료 여부로 안 가르고, 미작성 → 작성완료 → 전송완료
-  // 순서로 정렬해서 트레이너가 아직 안 쓴 회원부터 순서대로 처리할 수 있게 함.
+  // "오늘 수업" 탭은 트레이너가 실제 수업하는 시간 순서대로 위→아래 고정
+  // 정렬함(작성 상태로는 안 바뀜 — 그러면 체크할 때마다 카드가 널뛰어서
+  // "다음 수업이 누군지"를 오히려 헷갈리게 만듦). 미작성/작성완료/전송완료는
+  // 배지 색상으로만 구분. 시간을 아직 안 정한 회원은 맨 뒤로 밀림.
   // "전체" 탭은 기존대로 활성/만료로 분리하고 이름순 정렬
   const byNameKo = (a,b) => a.m.name.localeCompare(b.m.name, 'ko');
   let active, expired;
   if(memberListTab==='today'){
-    const statusOrder = {'not-written':0, 'written':1, 'sent':2};
-    active = [...memberData].sort((a,b)=> statusOrder[a.todayStatus]-statusOrder[b.todayStatus] || byNameKo(a,b));
+    const timeVal = t => t ? parseInt(t.replace(':',''),10) : 9999;
+    active = [...memberData].sort((a,b)=> timeVal(a.todaySessionTime)-timeVal(b.todaySessionTime) || byNameKo(a,b));
     expired = [];
   } else {
     active  = memberData.filter(d => !d.isExpired).sort(byNameKo);
@@ -2851,10 +2970,13 @@ async function renderMemberList(){
     });
   }
 
-  function makeCard({m, hist, lastDate, isExpired, maxSession, todayStatus}){
+  function makeCard({m, hist, lastDate, isExpired, maxSession, todayStatus, todaySessionTime}){
     const card = document.createElement('div');
     card.className = 'member-card';
     if(isExpired) card.style.opacity = '0.6';
+    // 전송까지 끝난 회원은 "이제 신경 안 써도 되는" 회원이라 살짝 흐리게 —
+    // 아직 안 쓴/전송 안 한 회원이 시각적으로도 더 눈에 띄게 함
+    if(todayStatus==='sent') card.style.opacity = '0.55';
     const sessionDisplay = m.totalSessions
       ? `${maxSession}/${m.totalSessions}회차`
       : `${maxSession}회차`;
@@ -2877,9 +2999,14 @@ async function renderMemberList(){
       'sent':        '<span class="today-status-badge sent">전송완료</span>',
     };
     const todayBadge = todayStatus ? todayBadgeMap[todayStatus] : '';
+    // "오늘 수업" 탭이고 시간을 정해뒀으면 아바타 대신 시간을 크게 보여줘서
+    // 수업 순서를 한눈에 볼 수 있게 함 (시간 미정이면 기존 이름 이니셜 아바타 그대로)
+    const avatarHtml = todaySessionTime
+      ? `<div class="member-avatar member-avatar-time">${todaySessionTime}</div>`
+      : `<div class="member-avatar">${m.name[0]}</div>`;
 
     card.innerHTML = `
-      <div class="member-avatar">${m.name[0]}</div>
+      ${avatarHtml}
       <div class="member-info">
         <div class="member-name">${m.name}${isExpired ? ' <span style="font-size:10px;color:var(--red);background:var(--red-l);border-radius:20px;padding:2px 6px;font-weight:600;">만료</span>' : ''}${hasDraft(m.id) ? ' <span style="font-size:10px;color:#fff;background:var(--g0);border-radius:20px;padding:2px 6px;font-weight:600;">작성 중</span>' : ''}</div>
         <div class="member-meta">마지막 수업 ${lastDate||'기록 없음'}  ·  ${sessionDisplay}</div>
@@ -6193,6 +6320,10 @@ const CHANGELOG = {
   '2.6.9': [
     '회원 목록에 "오늘 수업" 탭이 생겼어요 — 오늘 수업할 회원을 미리 체크해두면 위에서 순서대로 확인할 수 있어요',
     '"오늘 수업" 탭에서는 회원마다 미작성 / 작성완료 / 전송완료 상태가 표시되고, 아직 안 쓴 회원이 맨 위로 와요'
+  ],
+  '2.7.0': [
+    '"오늘 수업" 회원을 고를 때 수업 시간도 바로 입력할 수 있어요 (드래그로 시/분 조절, 분은 30분 단위)',
+    '오늘 수업 목록이 이제 수업 시간 순서대로 보여요 (시간을 안 넣은 회원은 맨 뒤)'
   ]
 };
 
@@ -7255,6 +7386,81 @@ function buildSetRows(ei){
 
 
   });
+}
+
+/* ── 범용 드래그 다이얼 (숫자 하나를 위/아래로 끌어서 조절) ──
+   운동 종목 무게/횟수 다이얼(attachDial)과 같은 조작 패턴이지만, exercises
+   배열에 결합돼 있지 않아서 재사용이 안 됐음. 오늘 수업 시간 선택 등 다른
+   곳에서도 쓸 수 있게 값 읽기/쓰기를 콜백으로 받는 범용 버전으로 분리함.
+   opts: { getVal, setVal, step, min, max, sens, formatDisplay, onTap } */
+function attachSimpleDial(el, opts){
+  const { getVal, setVal, step, min, max, sens=6, formatDisplay, onTap } = opts;
+  let startY=0, startVal=0, dragging=false, moved=false;
+
+  function render(v){
+    el.textContent = formatDisplay ? formatDisplay(v) : String(v);
+  }
+  function apply(v){
+    v = Math.round(v / step) * step;
+    v = Math.max(min, Math.min(max, v));
+    setVal(v);
+    render(v);
+  }
+
+  let armTimer = null, cancelled = false;
+  el.addEventListener('touchstart', e=>{
+    startY = e.touches[0].clientY;
+    startVal = getVal();
+    dragging = false; moved = false; cancelled = false;
+    clearTimeout(armTimer);
+    armTimer = setTimeout(()=>{
+      if(!cancelled){ dragging = true; el.classList.add('active'); }
+    }, 150);
+  },{passive:true});
+
+  el.addEventListener('touchmove', e=>{
+    const dy = startY - e.touches[0].clientY;
+    if(Math.abs(dy)>3) moved=true;
+    if(!dragging){
+      if(Math.abs(dy)>8){ cancelled=true; clearTimeout(armTimer); }
+      return;
+    }
+    apply(startVal + Math.round(dy/sens)*step);
+    e.preventDefault();
+  },{passive:false});
+
+  el.addEventListener('touchend', e=>{
+    clearTimeout(armTimer);
+    el.classList.remove('active');
+    dragging=false;
+    if(!moved && !cancelled && onTap) onTap();
+    if(!cancelled) e.preventDefault();
+  },{passive:false});
+
+  let mouseActive = false;
+  el.addEventListener('mousedown', e=>{
+    if(mouseActive) return;
+    startY=e.clientY; startVal=getVal(); dragging=true; moved=false; mouseActive=true;
+    el.classList.add('active');
+    e.preventDefault();
+    function onMove(e){
+      if(!dragging) return;
+      const dy=startY-e.clientY;
+      if(Math.abs(dy)>3) moved=true;
+      apply(startVal + Math.round(dy/sens)*step);
+    }
+    function onUp(){
+      el.classList.remove('active');
+      dragging=false; mouseActive=false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      if(!moved && onTap) onTap();
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+
+  render(getVal());
 }
 
 /* ── DIAL LOGIC ── */
