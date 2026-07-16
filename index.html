@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.7.0"/>
+<meta name="app-version" content="2.7.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -93,6 +93,26 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .today-status-badge.not-written{background:var(--sf2);color:var(--t3);border:0.5px solid var(--bd);}
 .today-status-badge.written{background:#FFF4D6;color:#B8860B;border:0.5px solid #F0DFA0;}
 .today-status-badge.sent{background:var(--g2);color:var(--g0);border:0.5px solid var(--g3);}
+.sched-dow-tabs{display:flex;gap:4px;margin-bottom:12px;overflow-x:auto;}
+.sched-dow-tab{flex:1;min-width:38px;text-align:center;font-size:13px;font-weight:600;padding:8px 0;border-radius:var(--r8);border:0.5px solid var(--bd);background:var(--sf);color:var(--t2);cursor:pointer;font-family:inherit;}
+.sched-dow-tab.active{background:var(--g0);border-color:var(--g0);color:#fff;}
+.sched-dow-tab.is-today{color:var(--g0);}
+.sched-dow-tab.active.is-today{color:#fff;}
+.sched-pool{display:flex;flex-wrap:wrap;gap:6px;padding:10px;margin-bottom:14px;background:var(--sf2);border-radius:var(--r12);border:0.5px solid var(--bd);}
+.sched-pool-empty{font-size:12px;color:var(--t3);padding:4px;}
+.sched-chip{font-size:12px;font-weight:600;color:var(--t);background:var(--sf);border:1px solid var(--bd2);border-radius:20px;padding:6px 12px;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;}
+.sched-chip:active{cursor:grabbing;}
+.sched-chip.placed{opacity:.35;}
+.sched-grid{border:0.5px solid var(--bd);border-radius:var(--r12);overflow:hidden;}
+.sched-row{display:flex;border-top:0.5px solid var(--bd);min-height:34px;}
+.sched-row:first-child{border-top:none;}
+.sched-row-hour{border-top:0.5px solid var(--bd2);}
+.sched-time{width:52px;flex-shrink:0;font-size:11px;color:var(--t3);padding:6px 8px 0 0;text-align:right;}
+.sched-slot{flex:1;min-width:0;padding:3px 6px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;border-left:0.5px solid var(--bd);}
+.sched-slot.drag-over{background:var(--g2);}
+.sched-member-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--g0);background:var(--g2);border-radius:20px;padding:4px 8px;}
+.sched-member-chip .x{cursor:pointer;color:var(--t3);font-weight:900;padding:0 1px;}
+.sched-ghost{position:fixed;z-index:9999;pointer-events:none;font-size:12px;font-weight:600;color:var(--t);background:var(--sf);border:1px solid var(--bd2);border-radius:20px;padding:6px 12px;box-shadow:0 4px 14px rgba(0,0,0,.15);opacity:.9;}
 .today-pick-row{padding:14px 10px;margin-bottom:6px;border-radius:var(--r12);border:1px solid var(--bd);background:var(--sf);cursor:pointer;}
 .today-pick-row:last-child{margin-bottom:0;}
 .today-pick-row.checked{background:var(--g2);border-color:var(--g0);cursor:default;}
@@ -702,8 +722,10 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     <div class="member-list-tabs">
       <button class="member-list-tab active" id="mlTab-all" onclick="switchMemberListTab('all')">전체</button>
       <button class="member-list-tab" id="mlTab-today" onclick="switchMemberListTab('today')">오늘 수업<span id="todaySessionCount" style="display:none;"></span></button>
+      <button class="member-list-tab" id="mlTab-schedule" onclick="switchMemberListTab('schedule')">시간표</button>
     </div>
     <div id="memberCards"></div>
+    <div id="scheduleTabWrap" style="display:none;"></div>
   </div>
 </div>
 
@@ -2734,6 +2756,7 @@ function toggleTodaySessionMember(mid){
   if(map[mid]) delete map[mid];
   else map[mid] = { time: null };
   setTodaySessionMap(map);
+  markTodayDirty();
   return !!map[mid];
 }
 function setTodaySessionMemberTime(mid, time){
@@ -2741,13 +2764,87 @@ function setTodaySessionMemberTime(mid, time){
   if(!map[mid]) map[mid] = {};
   map[mid].time = time;
   setTodaySessionMap(map);
+  markTodayDirty();
 }
 
 function switchMemberListTab(tab){
   memberListTab = tab;
   document.getElementById('mlTab-all').classList.toggle('active', tab==='all');
   document.getElementById('mlTab-today').classList.toggle('active', tab==='today');
-  renderMemberList();
+  document.getElementById('mlTab-schedule').classList.toggle('active', tab==='schedule');
+  document.getElementById('memberCards').style.display = tab==='schedule' ? 'none' : '';
+  document.getElementById('scheduleTabWrap').style.display = tab==='schedule' ? '' : 'none';
+  if(tab==='schedule') renderScheduleTab();
+  else renderMemberList();
+}
+
+/* ═══════════════════════════════════════
+   요일 시간표(템플릿)
+   — "오늘 수업"과 별개로, 트레이너가 요일마다 반복되는 기본 수업 시간표를
+   미리 짜둘 수 있는 기능. 오늘 화면은 오늘 요일의 템플릿을 기본값으로
+   보여주되, 오늘 직접 수정(추가/삭제/시간변경)하면 "오늘만의 예외"로
+   저장되고 원본 요일 템플릿은 그대로 유지됨.
+═══════════════════════════════════════ */
+function weeklyTemplateKey(){
+  return 'weeklyTemplate_'+TRAINER_ID;
+}
+// { [dow(0=일~6=토)]: { [memberId]: { time: 'HH:MM' } } }
+function getWeeklyTemplate(){
+  try{
+    const parsed = JSON.parse(localStorage.getItem(weeklyTemplateKey()));
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  }
+  catch{ return {}; }
+}
+function setWeeklyTemplate(tpl){
+  localStorage.setItem(weeklyTemplateKey(), JSON.stringify(tpl));
+}
+function getTemplateDay(dow){
+  const tpl = getWeeklyTemplate();
+  return tpl[dow] || {};
+}
+function setTemplateSlot(dow, mid, time){
+  const tpl = getWeeklyTemplate();
+  if(!tpl[dow]) tpl[dow] = {};
+  tpl[dow][mid] = { time };
+  setWeeklyTemplate(tpl);
+}
+function removeTemplateSlot(dow, mid){
+  const tpl = getWeeklyTemplate();
+  if(tpl[dow]) delete tpl[dow][mid];
+  setWeeklyTemplate(tpl);
+}
+
+// 오늘 세션 맵이 아직 "오늘만의 예외"로 손댄 적 없으면, 그 표시로만 쓰이는
+// 내부 플래그. 오늘 처음 화면을 열었을 때 템플릿을 그대로 복사해 넣는 건
+// 예외로 치지 않기 위해, applyTemplateToToday()가 세팅하는 값과
+// toggleTodaySessionMember/setTodaySessionMemberTime이 세팅하는 값을 구분함
+function todayDirtyKey(){
+  return 'todaySessionDirty_'+TRAINER_ID+'_'+todayISO();
+}
+function isTodayDirty(){
+  return localStorage.getItem(todayDirtyKey()) === '1';
+}
+function markTodayDirty(){
+  localStorage.setItem(todayDirtyKey(), '1');
+}
+
+// 오늘 화면 진입 시 호출: 오늘 이미 예외(직접 수정)가 있으면 손대지 않고,
+// 없으면 오늘 요일의 템플릿을 오늘 세션 맵에 그대로 복사해둠
+function applyTemplateToTodayIfNeeded(){
+  if(isTodayDirty()) return;
+  const existing = getTodaySessionMap();
+  const dow = new Date().getDay();
+  const dayTpl = getTemplateDay(dow);
+  const dayMids = Object.keys(dayTpl);
+  if(!dayMids.length) return;
+  // 이미 템플릿 그대로인 경우(재실행) 불필요한 재저장 방지
+  const same = Object.keys(existing).length === dayMids.length &&
+    dayMids.every(mid => existing[mid] && existing[mid].time === dayTpl[mid].time);
+  if(same) return;
+  const map = {};
+  dayMids.forEach(mid => { map[mid] = { time: dayTpl[mid].time }; });
+  setTodaySessionMap(map);
 }
 
 // 오늘 이 회원 일지가 미작성/작성만/전송까지 됐는지 판단.
@@ -2871,7 +2968,159 @@ function closeTodaySessionPicker(){
   renderMemberList();
 }
 
+/* ═══════════════════════════════════════
+   시간표 탭 — 요일별 30분 그리드에 회원 이름을 드래그해서 배치
+═══════════════════════════════════════ */
+let scheduleActiveDow = new Date().getDay();
+let schedDragMid = null; // 현재 드래그 중인 회원 id (풀 칩 또는 슬롯 칩에서 시작 가능)
+let schedDragFromSlot = null; // 슬롯 칩에서 드래그를 시작했으면 그 슬롯 인덱스(옮기기 위함)
+
+function schedTimeSlots(){
+  // 06:00 ~ 23:30, 30분 단위
+  const slots = [];
+  for(let h=6; h<=23; h++){
+    slots.push(h+':00'); slots.push(h+':30');
+  }
+  return slots;
+}
+
+async function renderScheduleTab(){
+  const members = await getMembers();
+  const wrap = document.getElementById('scheduleTabWrap');
+  const days = ['일','월','화','수','목','금','토'];
+  const todayDow = new Date().getDay();
+
+  const dowTabs = days.map((d,i)=>
+    `<button class="sched-dow-tab${i===scheduleActiveDow?' active':''}${i===todayDow?' is-today':''}" onclick="scheduleActiveDow=${i};renderScheduleTab()">${d}</button>`
+  ).join('');
+
+  const dayTpl = getTemplateDay(scheduleActiveDow);
+  const placedIds = new Set(Object.keys(dayTpl));
+  const byNameKo = (a,b)=>a.name.localeCompare(b.name,'ko');
+  const poolMembers = [...members].filter(m=>!placedIds.has(m.id)).sort(byNameKo);
+
+  const poolHtml = poolMembers.length
+    ? poolMembers.map(m=>`<span class="sched-chip" draggable="true" data-mid="${m.id}">${m.name}</span>`).join('')
+    : `<span class="sched-pool-empty">모든 회원이 배치됐어요</span>`;
+
+  const midToName = {};
+  members.forEach(m=>{ midToName[m.id]=m.name; });
+
+  const rows = schedTimeSlots().map(time=>{
+    const isHour = time.endsWith(':00');
+    const inSlot = Object.entries(dayTpl).filter(([mid,v])=>v.time===time);
+    const chipsHtml = inSlot.map(([mid])=>
+      `<span class="sched-member-chip" draggable="true" data-mid="${mid}" data-slot-time="${time}">${midToName[mid]||'?'}<span class="x" onclick="event.stopPropagation();removeScheduleSlot('${mid}')">×</span></span>`
+    ).join('');
+    return `<div class="sched-row${isHour?' sched-row-hour':''}">
+      <div class="sched-time">${isHour?time:''}</div>
+      <div class="sched-slot" data-time="${time}">${chipsHtml}</div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="sched-dow-tabs">${dowTabs}</div>
+    <div class="section-label">회원을 아래 시간표로 드래그하세요</div>
+    <div class="sched-pool" id="schedPool">${poolHtml}</div>
+    <div class="sched-grid" id="schedGrid">${rows}</div>
+  `;
+
+  initScheduleDrag();
+}
+
+function removeScheduleSlot(mid){
+  removeTemplateSlot(scheduleActiveDow, mid);
+  renderScheduleTab();
+}
+
+function initScheduleDrag(){
+  const grid = document.getElementById('schedGrid');
+  const pool = document.getElementById('schedPool');
+  let ghostEl = null;
+
+  function startDrag(mid, fromSlot){
+    schedDragMid = mid;
+    schedDragFromSlot = fromSlot;
+  }
+  function endDrag(){
+    schedDragMid = null;
+    schedDragFromSlot = null;
+    if(ghostEl){ ghostEl.remove(); ghostEl = null; }
+    document.querySelectorAll('.sched-slot.drag-over').forEach(el=>el.classList.remove('drag-over'));
+  }
+  function dropOnSlot(time){
+    if(!schedDragMid) return;
+    setTemplateSlot(scheduleActiveDow, schedDragMid, time);
+    renderScheduleTab();
+  }
+
+  // PC 드래그: 풀 칩 + 슬롯 칩 둘 다
+  [...pool.querySelectorAll('.sched-chip'), ...grid.querySelectorAll('.sched-member-chip')].forEach(chip=>{
+    chip.addEventListener('dragstart', e=>{
+      startDrag(chip.dataset.mid, chip.dataset.slotTime || null);
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(()=>chip.classList.add('placed'), 0);
+    });
+    chip.addEventListener('dragend', ()=>{
+      chip.classList.remove('placed');
+      endDrag();
+    });
+  });
+  grid.querySelectorAll('.sched-slot').forEach(slot=>{
+    slot.addEventListener('dragover', e=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      slot.classList.add('drag-over');
+    });
+    slot.addEventListener('dragleave', ()=> slot.classList.remove('drag-over'));
+    slot.addEventListener('drop', e=>{
+      e.preventDefault();
+      slot.classList.remove('drag-over');
+      dropOnSlot(slot.dataset.time);
+    });
+  });
+
+  // 모바일 터치 드래그 (칩은 롱프레스 없이 바로 드래그 — 슬롯 안 잘못 눌러도
+  // × 버튼 탭과는 별개 제스처라 오작동 우려가 적음)
+  [...pool.querySelectorAll('.sched-chip'), ...grid.querySelectorAll('.sched-member-chip')].forEach(chip=>{
+    let touchStartY = 0, touchStartX = 0, dragging = false;
+    chip.addEventListener('touchstart', e=>{
+      const t = e.touches[0];
+      touchStartX = t.clientX; touchStartY = t.clientY;
+      dragging = false;
+    },{passive:true});
+    chip.addEventListener('touchmove', e=>{
+      const t = e.touches[0];
+      if(!dragging){
+        if(Math.abs(t.clientY-touchStartY) < 8 && Math.abs(t.clientX-touchStartX) < 8) return;
+        dragging = true;
+        startDrag(chip.dataset.mid, chip.dataset.slotTime || null);
+        ghostEl = document.createElement('div');
+        ghostEl.className = 'sched-ghost';
+        ghostEl.textContent = chip.textContent.replace('×','').trim();
+        document.body.appendChild(ghostEl);
+      }
+      e.preventDefault();
+      ghostEl.style.left = (t.clientX - ghostEl.offsetWidth/2) + 'px';
+      ghostEl.style.top = (t.clientY - 20) + 'px';
+      document.querySelectorAll('.sched-slot.drag-over').forEach(el=>el.classList.remove('drag-over'));
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      const targetSlot = el?.closest('.sched-slot');
+      if(targetSlot) targetSlot.classList.add('drag-over');
+    },{passive:false});
+    chip.addEventListener('touchend', e=>{
+      if(!dragging){ endDrag(); return; }
+      const t = e.changedTouches[0];
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      const targetSlot = el?.closest('.sched-slot');
+      if(targetSlot) dropOnSlot(targetSlot.dataset.time);
+      else endDrag();
+    },{passive:true});
+  });
+}
+
 async function renderMemberList(){
+  applyTemplateToTodayIfNeeded();
   const trainer = await getTrainer();
   const members = await getMembers();
   const now = new Date();
@@ -6324,6 +6573,11 @@ const CHANGELOG = {
   '2.7.0': [
     '"오늘 수업" 회원을 고를 때 수업 시간도 바로 입력할 수 있어요 (드래그로 시/분 조절, 분은 30분 단위)',
     '오늘 수업 목록이 이제 수업 시간 순서대로 보여요 (시간을 안 넣은 회원은 맨 뒤)'
+  ],
+  '2.7.1': [
+    '회원 목록에 "시간표" 탭이 생겼어요 — 요일별로 회원을 원하는 시간에 드래그해서 미리 배치해둘 수 있어요',
+    '시간표에 짜둔 오늘 요일 수업이 "오늘 수업" 탭에 자동으로 반영돼요',
+    '오늘만 시간표와 다르게 수업하면, "오늘 수업"에서 바로 고쳐도 원래 요일 시간표는 그대로 유지돼요'
   ]
 };
 
