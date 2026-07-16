@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.6.8"/>
+<meta name="app-version" content="2.6.9"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -84,6 +84,19 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .greeting-name{font-size:20px;font-weight:700;color:var(--g0);margin-bottom:3px;}
 .greeting-sub{font-size:13px;color:var(--g1);}
 .section-label{font-size:10px;font-weight:600;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;}
+.member-list-tabs{display:flex;gap:6px;margin:0 0 12px;}
+.member-list-tab{flex:1;font-size:13px;font-weight:600;padding:9px 12px;border-radius:var(--r12);border:0.5px solid var(--bd);background:var(--sf);color:var(--t2);cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;}
+.member-list-tab.active{background:var(--g0);border-color:var(--g0);color:#fff;}
+.member-list-tab span{font-size:11px;font-weight:700;background:rgba(255,255,255,.25);border-radius:20px;padding:1px 7px;}
+.member-list-tab:not(.active) span{background:var(--g2);color:var(--g0);}
+.today-status-badge{font-size:10px;font-weight:600;border-radius:20px;padding:2px 8px;flex-shrink:0;}
+.today-status-badge.not-written{background:var(--sf2);color:var(--t3);border:0.5px solid var(--bd);}
+.today-status-badge.written{background:#FFF4D6;color:#B8860B;border:0.5px solid #F0DFA0;}
+.today-status-badge.sent{background:var(--g2);color:var(--g0);border:0.5px solid var(--g3);}
+.today-pick-row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:0.5px solid var(--bd);cursor:pointer;}
+.today-pick-row:last-child{border-bottom:none;}
+.today-pick-check{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--bd2);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;}
+.today-pick-check.checked{background:var(--g0);border-color:var(--g0);}
 .member-letter-header{font-size:13px;font-weight:700;color:var(--g0);padding:14px 4px 6px;position:sticky;top:0;background:var(--bg);z-index:1;}
 .member-card-wrap{position:relative;margin-bottom:8px;border-radius:var(--r16);overflow:hidden;}
 .member-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .2s ease;position:relative;z-index:1;}
@@ -675,8 +688,21 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
       <div class="greeting-name" id="greetingName"></div>
       <div class="greeting-sub" id="greetingMeta"></div>
     </div>
-    <div class="section-label">내 회원</div>
+    <div class="member-list-tabs">
+      <button class="member-list-tab active" id="mlTab-all" onclick="switchMemberListTab('all')">전체</button>
+      <button class="member-list-tab" id="mlTab-today" onclick="switchMemberListTab('today')">오늘 수업<span id="todaySessionCount" style="display:none;"></span></button>
+    </div>
     <div id="memberCards"></div>
+  </div>
+</div>
+
+<!-- 오늘 수업 회원 추가 모달 -->
+<div class="modal-overlay" id="modal-todaySession" style="display:none;" onclick="if(event.target===this)closeTodaySessionPicker()">
+  <div class="modal-box">
+    <div class="modal-title">오늘 수업 회원 선택</div>
+    <div style="font-size:12px;color:var(--t3);margin:-8px 0 12px;">오늘 수업할 회원을 체크해두면 위에서 순서대로 확인할 수 있어요</div>
+    <div id="todaySessionPickerList" style="max-height:50vh;overflow-y:auto;"></div>
+    <button onclick="closeTodaySessionPicker()" style="width:100%;margin-top:14px;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;">확인</button>
   </div>
 </div>
 
@@ -2661,6 +2687,75 @@ async function enterOwnerDashboard(){
   return true;
 }
 
+/* ═══════════════════════════════════════
+   오늘 수업 명단
+   — 트레이너가 아침에 오늘 수업할 회원들을 미리 체크해두고, 회원 목록에서
+   "전체"/"오늘 수업" 탭으로 오가며 순서대로 확인·작성하기 위한 기능.
+   날짜별로 localStorage에 저장해서 자정이 지나면 자동으로 빈 명단이 됨
+   (기기 간 동기화는 안 되지만, "오늘 하루" 쓰고 버리는 체크리스트라 이걸로 충분)
+═══════════════════════════════════════ */
+let memberListTab = 'all'; // 'all' | 'today'
+
+function todaySessionKey(){
+  return 'todaySession_'+TRAINER_ID+'_'+todayISO();
+}
+function getTodaySessionIds(){
+  try{ return JSON.parse(localStorage.getItem(todaySessionKey())) || []; }
+  catch{ return []; }
+}
+function setTodaySessionIds(ids){
+  localStorage.setItem(todaySessionKey(), JSON.stringify(ids));
+}
+function toggleTodaySessionMember(mid){
+  const ids = getTodaySessionIds();
+  const i = ids.indexOf(mid);
+  if(i===-1) ids.push(mid); else ids.splice(i,1);
+  setTodaySessionIds(ids);
+}
+
+function switchMemberListTab(tab){
+  memberListTab = tab;
+  document.getElementById('mlTab-all').classList.toggle('active', tab==='all');
+  document.getElementById('mlTab-today').classList.toggle('active', tab==='today');
+  renderMemberList();
+}
+
+// 오늘 이 회원 일지가 미작성/작성만/전송까지 됐는지 판단.
+// getMemberHistory와 sent_ 기록을 이미 그 회원 카드를 그릴 때 조회하므로,
+// 그 결과(hist, sentMap)를 그대로 받아서 재조회 없이 판단만 함
+function getTodayWriteStatus(hist, sentMap){
+  const today = getShortDate();
+  const todayEntry = [...hist].reverse().find(e => getShortDate(e.dateTime||e.date) === today);
+  if(!todayEntry) return 'not-written';
+  const sentKey = todayEntry.id;
+  return sentMap.has(sentKey) ? 'sent' : 'written';
+}
+
+async function openTodaySessionPicker(){
+  const members = await getMembers();
+  const ids = getTodaySessionIds();
+  const list = document.getElementById('todaySessionPickerList');
+  const sorted = [...members].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  list.innerHTML = sorted.map(m => {
+    const checked = ids.includes(m.id);
+    return `<div class="today-pick-row" onclick="toggleTodaySessionPickerRow('${m.id}', this)">
+      <span class="today-pick-check${checked?' checked':''}">${checked?'✓':''}</span>
+      <span style="font-size:14px;color:var(--t);">${m.name}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('modal-todaySession').style.display = 'flex';
+}
+function toggleTodaySessionPickerRow(mid, rowEl){
+  toggleTodaySessionMember(mid);
+  const check = rowEl.querySelector('.today-pick-check');
+  const nowChecked = check.classList.toggle('checked');
+  check.textContent = nowChecked ? '✓' : '';
+}
+function closeTodaySessionPicker(){
+  document.getElementById('modal-todaySession').style.display = 'none';
+  renderMemberList();
+}
+
 async function renderMemberList(){
   const trainer = await getTrainer();
   const members = await getMembers();
@@ -2671,6 +2766,14 @@ async function renderMemberList(){
   document.getElementById('greetingMeta').textContent =
     `${now.getMonth()+1}월 ${now.getDate()}일 ${days[now.getDay()]}요일  ·  회원 ${members.length}명`;
   document.getElementById('trainerBadge').textContent = trainer;
+
+  // 오늘 수업 탭 카운트 배지
+  const todayIds = getTodaySessionIds();
+  const countEl = document.getElementById('todaySessionCount');
+  if(countEl){
+    if(todayIds.length){ countEl.style.display=''; countEl.textContent = todayIds.length; }
+    else { countEl.style.display = 'none'; }
+  }
 
   const container = document.getElementById('memberCards');
   container.innerHTML = '';
@@ -2684,8 +2787,25 @@ async function renderMemberList(){
     return;
   }
 
+  // 오늘 수업 탭이면 체크해둔 회원만 남김
+  const visibleMembers = memberListTab==='today' ? members.filter(m=>todayIds.includes(m.id)) : members;
+
+  if(memberListTab==='today' && visibleMembers.length===0){
+    container.innerHTML = `<div class="empty-state"><div class="e-icon">📋</div><div class="e-text">오늘 수업할 회원을 아직 안 골랐어요</div></div>`;
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-member-btn';
+    addBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 오늘 수업 회원 고르기`;
+    addBtn.onclick = openTodaySessionPicker;
+    container.appendChild(addBtn);
+    return;
+  }
+
+  // 전송 기록 한 번만 조회해서 카드마다 재사용 (오늘 작성/전송 여부 판단용)
+  const sentRecords = TRAINER_ID ? (await fsGet('data', 'sent_'+TRAINER_ID) || {}) : {};
+  const sentEntryIds = new Set(Object.values(sentRecords).map(r=>r.entryId));
+
   // 각 회원의 마지막 수업 날짜 수집
-  const memberData = await Promise.all(members.map(async m => {
+  const memberData = await Promise.all(visibleMembers.map(async m => {
     const hist = await getMemberHistory(m.id);
     const last = hist.length ? hist[hist.length-1] : null;
     const lastDate = last ? last.date : null;
@@ -2693,13 +2813,23 @@ async function renderMemberList(){
     // 일지 개수가 아닌 최대 회차 번호 기준
     const maxSession = hist.length ? Math.max(...hist.map(e => e.session||e.streak||1)) : 0;
     const isExpired = m.totalSessions && maxSession >= m.totalSessions;
-    return { m, hist, lastDate, lastTime, isExpired, maxSession };
+    const todayStatus = memberListTab==='today' ? getTodayWriteStatus(hist, sentEntryIds) : null;
+    return { m, hist, lastDate, lastTime, isExpired, maxSession, todayStatus };
   }));
 
-  // 분리: 활성 / 만료. 각 그룹 안에서는 이름 ㄱㄴㄷ순 정렬
+  // "오늘 수업" 탭에서는 만료 여부로 안 가르고, 미작성 → 작성완료 → 전송완료
+  // 순서로 정렬해서 트레이너가 아직 안 쓴 회원부터 순서대로 처리할 수 있게 함.
+  // "전체" 탭은 기존대로 활성/만료로 분리하고 이름순 정렬
   const byNameKo = (a,b) => a.m.name.localeCompare(b.m.name, 'ko');
-  const active  = memberData.filter(d => !d.isExpired).sort(byNameKo);
-  const expired = memberData.filter(d =>  d.isExpired).sort(byNameKo);
+  let active, expired;
+  if(memberListTab==='today'){
+    const statusOrder = {'not-written':0, 'written':1, 'sent':2};
+    active = [...memberData].sort((a,b)=> statusOrder[a.todayStatus]-statusOrder[b.todayStatus] || byNameKo(a,b));
+    expired = [];
+  } else {
+    active  = memberData.filter(d => !d.isExpired).sort(byNameKo);
+    expired = memberData.filter(d =>  d.isExpired).sort(byNameKo);
+  }
 
   function makeLetterHeader(letter){
     const header = document.createElement('div');
@@ -2721,7 +2851,7 @@ async function renderMemberList(){
     });
   }
 
-  function makeCard({m, hist, lastDate, isExpired, maxSession}){
+  function makeCard({m, hist, lastDate, isExpired, maxSession, todayStatus}){
     const card = document.createElement('div');
     card.className = 'member-card';
     if(isExpired) card.style.opacity = '0.6';
@@ -2739,12 +2869,22 @@ async function renderMemberList(){
       <span>삭제</span></div>`;
     delBtn.onclick = () => deleteMember(m.id, m.name);
 
+    // "오늘 수업" 탭에서만 미작성/작성완료/전송완료 배지를 보여줌 — 순서대로
+    // 수업하면서 어디까지 처리했는지 한눈에 구분하기 위함
+    const todayBadgeMap = {
+      'not-written': '<span class="today-status-badge not-written">미작성</span>',
+      'written':     '<span class="today-status-badge written">작성완료</span>',
+      'sent':        '<span class="today-status-badge sent">전송완료</span>',
+    };
+    const todayBadge = todayStatus ? todayBadgeMap[todayStatus] : '';
+
     card.innerHTML = `
       <div class="member-avatar">${m.name[0]}</div>
       <div class="member-info">
         <div class="member-name">${m.name}${isExpired ? ' <span style="font-size:10px;color:var(--red);background:var(--red-l);border-radius:20px;padding:2px 6px;font-weight:600;">만료</span>' : ''}${hasDraft(m.id) ? ' <span style="font-size:10px;color:#fff;background:var(--g0);border-radius:20px;padding:2px 6px;font-weight:600;">작성 중</span>' : ''}</div>
         <div class="member-meta">마지막 수업 ${lastDate||'기록 없음'}  ·  ${sessionDisplay}</div>
       </div>
+      ${todayBadge}
       <span class="member-arrow">›</span>`;
     card.onclick = () => openMemberJournals(m);
 
@@ -2800,13 +2940,25 @@ async function renderMemberList(){
     return wrap;
   }
 
-  appendWithLetterHeaders(active);
+  // "오늘 수업" 탭은 초성으로 묶지 않고 미작성→작성완료→전송완료 순서 그대로
+  // 보여줌 (트레이너가 위에서부터 순서대로 처리하는 용도라 이름순 그룹핑이 오히려 방해됨)
+  if(memberListTab==='today'){
+    active.forEach(d => container.appendChild(makeCard(d)));
+  } else {
+    appendWithLetterHeaders(active);
+  }
 
-  // 활성 회원 아래 추가 버튼
+  // 활성 회원 아래 추가 버튼 — "오늘 수업" 탭에서는 회원 추가가 아니라
+  // 오늘 수업 명단을 더 고르는 버튼으로 바뀜
   const addBtn = document.createElement('button');
   addBtn.className = 'add-member-btn';
-  addBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 회원 추가`;
-  addBtn.onclick = openAddMember;
+  if(memberListTab==='today'){
+    addBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 오늘 수업 회원 더 고르기`;
+    addBtn.onclick = openTodaySessionPicker;
+  } else {
+    addBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 회원 추가`;
+    addBtn.onclick = openAddMember;
+  }
   container.appendChild(addBtn);
 
   if(expired.length){
@@ -6037,6 +6189,10 @@ const CHANGELOG = {
   ],
   '2.6.8': [
     '종목을 드래그할 때 너무 빠르고 뚝뚝 끊기던 움직임을 더 부드럽게 다듬었어요'
+  ],
+  '2.6.9': [
+    '회원 목록에 "오늘 수업" 탭이 생겼어요 — 오늘 수업할 회원을 미리 체크해두면 위에서 순서대로 확인할 수 있어요',
+    '"오늘 수업" 탭에서는 회원마다 미작성 / 작성완료 / 전송완료 상태가 표시되고, 아직 안 쓴 회원이 맨 위로 와요'
   ]
 };
 
