@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.6.7"/>
+<meta name="app-version" content="2.6.8"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -406,11 +406,16 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 .part-chip.sel{background:var(--g2);color:var(--g0);border-color:var(--g3);font-weight:500;}
 
 /* EXERCISE CARD */
-.ex-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);margin-bottom:10px;overflow:hidden;transition:transform .2s ease;}
+.ex-card{background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);margin-bottom:10px;overflow:hidden;transition:transform .38s cubic-bezier(.22,.61,.36,1);}
 .ex-header{display:flex;align-items:center;gap:8px;padding:12px 14px 10px;border-bottom:0.5px solid var(--bd);}
 .ex-drag-handle{font-size:22px;color:var(--t2);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:6px 8px;line-height:1;background:var(--sf2);border-radius:8px;display:flex;align-items:center;justify-content:center;}
 .ex-drag-handle:active{cursor:grabbing;background:var(--g2);color:var(--g0);}
-.ex-card.dragging{opacity:0.4;border:1.5px dashed var(--g0);}
+.ex-card.dragging{opacity:0.4;border:1.5px dashed var(--g0);transition:none !important;}
+/* 폰 롱프레스 드래그 중엔 손가락을 따라다니는 고스트(ghostEl)가 따로 있어서,
+   원본 카드는 아예 안 보이게 함 — 반투명 상태로 남아있으면 DOM 순서가 바뀔
+   때마다 그 반투명 카드가 자리를 순간이동하는 게 눈에 띄어서 "훽훽 사라진다"
+   는 느낌을 줬음. 자리(높이)는 유지해야 하니 visibility만 숨김 */
+.ex-card.touch-dragging{visibility:hidden;transition:none !important;}
 .ex-name-inp{flex:1;min-width:0;font-size:15px;font-weight:600;border:none;background:transparent;color:var(--t);outline:none;font-family:inherit;height:auto;padding:0;width:auto;}
 .ex-name-inp::placeholder{color:var(--t3);font-weight:400;}
 .ex-del-btn{width:26px;height:26px;border-radius:50%;background:var(--sf2);border:0.5px solid var(--bd);color:var(--t3);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -6029,6 +6034,9 @@ const CHANGELOG = {
   '2.6.7': [
     '아이폰·카톡 인앱브라우저에서 회원 특이사항에 사진을 첨부하면 "저장 완료"는 뜨는데 사진이 안 보이던 문제를 고쳤어요',
     '사진 저장이 실패하면 이제 알림으로 알려드려요 (예전엔 조용히 실패해서 몰랐어요)'
+  ],
+  '2.6.8': [
+    '종목을 드래그할 때 너무 빠르고 뚝뚝 끊기던 움직임을 더 부드럽게 다듬었어요'
   ]
 };
 
@@ -7488,13 +7496,18 @@ async function setExColor(ei, colorId){
 ═══════════════════════════════════════ */
 let dragSrcEi = null;
 let dragCurrentOverEi = null; // 드래그 중 현재 카드가 가 있는 위치(자리가 실시간으로 밀리는 애니메이션 기준점)
+let dragReorderCooldown = false; // 재배치 애니메이션이 끝나기 전에 또 재배치가 들어오면 서로 끊겨 보여서, 잠깐 쉬어가게 함
+let dragPendingTarget = null; // 쿨다운 중에 들어온 마지막 목표 위치(쿨다운 끝나면 그걸로 한 번 더 반영)
 
 // FLIP 기법: 재배치 전 각 카드의 위치를 기록해뒀다가(First), DOM 순서를
 // 바꾼 뒤(Last) 그 사이의 이동거리만큼 즉시 역방향 transform을 걸고(Invert),
 // 다음 프레임에 transform을 0으로 되돌리면(Play) 브라우저가 자연스럽게
-// 그 이동을 애니메이션으로 보여줌 — 카드들이 자리를 비켜주는 것처럼 보이게 함
-function animateExCardsReorder(container, mutate){
-  const cards = [...container.querySelectorAll('.ex-card')];
+// 그 이동을 애니메이션으로 보여줌 — 카드들이 자리를 비켜주는 것처럼 보이게 함.
+// 드래그 중인 카드(excludeCard) 자신은 애니메이션 대상에서 뺌 — 걔까지 같이
+// translateY를 걸면, 손가락이 쥐고 있는 카드가 화면에서 순간이동하듯 튀어서
+// "훽훽 사라진다"는 느낌을 줬음. 밀려나는 나머지 카드들만 부드럽게 움직이면 됨
+function animateExCardsReorder(container, mutate, excludeCard){
+  const cards = [...container.querySelectorAll('.ex-card')].filter(c => c !== excludeCard);
   const firstRects = new Map(cards.map(c => [c, c.getBoundingClientRect()]));
 
   mutate();
@@ -7507,7 +7520,7 @@ function animateExCardsReorder(container, mutate){
       c.style.transition = 'none';
       c.style.transform = `translateY(${dy}px)`;
       requestAnimationFrame(()=>{
-        c.style.transition = 'transform .2s ease';
+        c.style.transition = 'transform .32s cubic-bezier(.22,.61,.36,1)';
         c.style.transform = '';
       });
     }
@@ -7519,14 +7532,30 @@ function animateExCardsReorder(container, mutate){
 // 확정될 때(dragSrcEi 기준으로) 실제 배열을 바꿈 — 그래야 도중에 취소해도 안전
 function previewExCardMove(container, srcEi, targetEi){
   if(dragCurrentOverEi === targetEi) return;
+  // 손가락이 빠르게 움직이면 touchmove가 애니메이션 재생 속도보다 훨씬 자주
+  // 발생해서, 재배치 애니메이션이 끝나기도 전에 다음 재배치가 덮어써 뚝뚝
+  // 끊기고 급해 보였음 — 애니메이션 진행 중엔 요청을 잠깐 보류했다가,
+  // 끝나는 시점에 그동안 들어온 가장 최근 목표 위치로 한 번만 반영함
+  if(dragReorderCooldown){ dragPendingTarget = targetEi; return; }
   dragCurrentOverEi = targetEi;
   const srcCard = document.getElementById('exCard-'+srcEi);
   const targetCard = document.getElementById('exCard-'+targetEi);
   if(!srcCard || !targetCard || srcCard===targetCard) return;
+  dragReorderCooldown = true;
   animateExCardsReorder(container, ()=>{
     if(targetEi > srcEi) targetCard.after(srcCard);
     else targetCard.before(srcCard);
-  });
+  }, srcCard);
+  setTimeout(()=>{
+    dragReorderCooldown = false;
+    if(dragPendingTarget !== null && dragPendingTarget !== dragCurrentOverEi){
+      const next = dragPendingTarget;
+      dragPendingTarget = null;
+      previewExCardMove(container, srcEi, next);
+    } else {
+      dragPendingTarget = null;
+    }
+  }, 320); // 애니메이션 길이와 맞춰서, 이전 재배치가 화면에서 다 자리잡은 뒤에만 다음 재배치를 반영함
 }
 
 function initExDrag(card, ei){
@@ -7564,10 +7593,14 @@ function initExDrag(card, ei){
       touchDragging = true;
       dragSrcEi = ei;
       dragCurrentOverEi = ei;
-      card.classList.add('dragging');
-      // 고스트 생성
-      ghostEl = card.cloneNode(false);
-      ghostEl.style.cssText = `position:fixed;opacity:0.7;pointer-events:none;z-index:9999;width:${card.offsetWidth}px;top:${card.getBoundingClientRect().top}px;left:${card.getBoundingClientRect().left}px;background:var(--sf);border:1.5px solid var(--g0);border-radius:var(--r16);height:${card.offsetHeight}px;`;
+      // 원본 카드는 visibility:hidden으로 완전히 숨기고(자리는 유지), 대신
+      // 내용까지 통째로 복제한 고스트가 손가락을 그대로 따라다니게 함 —
+      // 예전엔 껍데기만 복제(cloneNode(false))해서 빈 카드가 떠다녔고, 원본도
+      // 반투명하게 남아있어서 DOM이 재배치될 때마다 눈에 띄게 튀어보였음
+      card.classList.add('touch-dragging');
+      ghostEl = card.cloneNode(true);
+      ghostEl.classList.remove('touch-dragging');
+      ghostEl.style.cssText = `position:fixed;opacity:0.95;pointer-events:none;z-index:9999;width:${card.offsetWidth}px;top:${card.getBoundingClientRect().top}px;left:${card.getBoundingClientRect().left}px;background:var(--sf);border:1.5px solid var(--g0);border-radius:var(--r16);height:${card.offsetHeight}px;box-shadow:0 8px 24px rgba(0,0,0,.18);transform:scale(1.02);`;
       document.body.appendChild(ghostEl);
     }, 400);
   },{passive:true});
@@ -7604,7 +7637,7 @@ function initExDrag(card, ei){
     clearTimeout(longPressTimer);
     if(!touchDragging){ return; }
     touchDragging = false;
-    card.classList.remove('dragging');
+    card.classList.remove('dragging', 'touch-dragging');
     if(ghostEl){ ghostEl.remove(); ghostEl = null; }
     finalizeExDrag(container);
   },{passive:true});
@@ -7614,12 +7647,14 @@ function initExDrag(card, ei){
 // 그대로 exercises 배열에 확정 반영함 — DOM 순서를 그 자리에서 그대로
 // 읽어오는 방식이라 여러 번 자리를 옮겨 다녀도 최종 위치만 정확히 반영됨
 function finalizeExDrag(container){
-  if(dragSrcEi === null){ dragCurrentOverEi = null; return; }
+  if(dragSrcEi === null){ dragCurrentOverEi = null; dragPendingTarget = null; return; }
   const cardEls = [...container.querySelectorAll('.ex-card')];
   const newOrder = cardEls.map(c => parseInt(c.id.replace('exCard-','')));
   const changed = newOrder.some((origIdx, i) => origIdx !== i);
   dragSrcEi = null;
   dragCurrentOverEi = null;
+  dragPendingTarget = null; // 드래그가 끝난 뒤에 남아있던 예약 재배치가 뒤늦게(220ms 후) 실행되는 것 방지
+  dragReorderCooldown = false;
   if(changed){
     exercises = newOrder.map(origIdx => exercises[origIdx]);
     renderExCards();
