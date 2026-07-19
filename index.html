@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.7.7"/>
+<meta name="app-version" content="2.7.8"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1465,9 +1465,14 @@ async function callGeminiAPI({ system, messages, max_tokens }){
     }
   });
 
+  // gemini-2.5-flash는 답변을 쓰기 전에 내부적으로 "생각" 단계를 거치는데,
+  // 이 추론 토큰도 maxOutputTokens 한도 안에 같이 잡아먹혀서, 편지처럼
+  // 긴 글을 요청하면 실제 본문이 몇 줄 나오다가 한도를 넘겨 뚝 끊기는
+  // 문제가 있었음(편지 4줄에서 끊김 등). thinkingBudget:0으로 추론 단계를
+  // 꺼서 모든 토큰이 실제 응답 본문에만 쓰이게 함
   const body = JSON.stringify({
     contents: [{ role:'user', parts }],
-    generationConfig: { maxOutputTokens: max_tokens || 1000 }
+    generationConfig: { maxOutputTokens: max_tokens || 1000, thinkingConfig: { thinkingBudget: 0 } }
   });
 
   // 무료 티어는 분당 요청 한도가 낮아서(전체 트레이너 공유) 짧은 시간에
@@ -7007,6 +7012,9 @@ const CHANGELOG = {
   ],
   '2.7.7': [
     'AI 분석(시간표 사진, 식단, 인바디 등) 중 서버가 잠깐 불안정해서 실패하던 경우, 자동으로 몇 초 기다렸다 다시 시도하도록 고쳤어요'
+  ],
+  '2.7.8': [
+    '편지 자동 작성이 몇 줄 쓰다가 중간에 끊기던 문제를 고쳤어요 — 이제 끝까지 완성된 편지가 나와요'
   ]
 };
 
