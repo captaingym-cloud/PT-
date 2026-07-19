@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.7.1"/>
+<meta name="app-version" content="2.7.3"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -125,6 +125,10 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .sched-member-chip{display:flex;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:600;color:var(--g0);background:var(--g2);border-radius:10px;padding:3px 4px;width:100%;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sched-member-chip .x{cursor:pointer;color:var(--t3);font-weight:900;padding:0 1px;flex-shrink:0;}
 .sched-ghost{position:fixed;z-index:9999;pointer-events:none;font-size:12px;font-weight:600;color:var(--t);background:var(--sf);border:1px solid var(--bd2);border-radius:20px;padding:6px 12px;box-shadow:0 4px 14px rgba(0,0,0,.15);opacity:.9;}
+.pref-toggle{flex-shrink:0;width:44px;height:26px;border-radius:20px;background:var(--bd2);position:relative;cursor:pointer;transition:background .15s;}
+.pref-toggle.on{background:var(--g0);}
+.pref-toggle-knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s;}
+.pref-toggle.on .pref-toggle-knob{left:20px;}
 .today-pick-row{padding:14px 10px;margin-bottom:6px;border-radius:var(--r12);border:1px solid var(--bd);background:var(--sf);cursor:pointer;}
 .today-pick-row:last-child{margin-bottom:0;}
 .today-pick-row.checked{background:var(--g2);border-color:var(--g0);cursor:default;}
@@ -954,12 +958,20 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
         <button onclick="openToneTraining()" style="font-size:12px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">설정</button>
       </div>
 
-      <div style="padding:13px 14px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="padding:13px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;">
         <div>
           <div style="font-size:13px;font-weight:500;color:var(--t);">🎨 부위별 색상</div>
           <div style="font-size:11px;color:var(--t3);margin-top:2px;">종목 색상 자동 지정 기준을 바꿔요</div>
         </div>
         <button onclick="openColorPrefs()" style="font-size:12px;color:var(--g1);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 8px;">설정</button>
+      </div>
+
+      <div style="padding:13px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--t);">🔁 지난 기록 자동 채우기</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px;">같은 종목을 입력하면 저번 무게·횟수를 바로 채워요</div>
+        </div>
+        <span class="pref-toggle" id="autoFillPrevToggle" onclick="toggleAutoFillPrevSets()"><span class="pref-toggle-knob"></span></span>
       </div>
     </div>
 
@@ -1832,11 +1844,23 @@ function journalCollectionKey(mid){ return 'journal_'+TRAINER_ID+'_'+mid; }
 
 async function getMemberHistory(mid){
   if(!TRAINER_ID) return [];
-  const legacyKey = 'hist_'+TRAINER_ID+'_'+mid;
-  const cacheKey = 'journalcol_'+TRAINER_ID+'_'+mid;
+  return getMemberHistoryFor(TRAINER_ID, mid);
+}
+
+// getMemberHistory와 동일한 로직(새 컬렉션 우선, 없으면 legacy 배열 문서에서
+// 1회성 이전)이지만 트레이너ID를 인자로 받음 — 대표님 대시보드는 로그인한
+// 트레이너(TRAINER_ID)가 아니라 여러 트레이너를 순회하며 조회해야 하므로
+// 전역 TRAINER_ID에 의존하는 getMemberHistory를 그대로 쓸 수 없어서 분리함.
+// 대시보드가 예전엔 data/hist_{trainerId}_{memberId} 문서를 직접 fsGet으로
+// 읽었는데, 트레이너 앱은 이미 journal_{trainer}_{member} 컬렉션(일지 하나당
+// 문서 하나)으로 넘어간 뒤라 그 뒤로 저장된 일지가 대시보드엔 전혀 안 보이는
+// 문제가 있었음 — 여기서 그 간극을 메움
+async function getMemberHistoryFor(trainerId, mid){
+  const legacyKey = 'hist_'+trainerId+'_'+mid;
+  const cacheKey = 'journalcol_'+trainerId+'_'+mid;
   if(cacheGet(cacheKey)!==null) return cloneData(cacheGet(cacheKey));
 
-  const col = journalCollectionKey(mid);
+  const col = 'journal_'+trainerId+'_'+mid;
   const { ok, value } = await fsListSafe(col);
   if(!ok) throw new FsFetchFailedError('일지 기록을 불러오지 못했어요');
 
@@ -2195,6 +2219,7 @@ function justSavedAndUnchanged(){
   return _justSavedSnapshot !== null && _justSavedSnapshot === currentJournalFormSnapshot();
 }
 let colorPrefsCache = null; // 종목 색상 커스터마이징 캐시 (로그인/새로고침 시 초기화됨)
+let journalPrefsCache = null; // 일지 작성 관련 설정(지난 기록 자동 채우기 등) 캐시
 
 const PARTS_LIST = ['가슴','등','어깨','하체','팔','코어'];
 
@@ -2762,6 +2787,13 @@ function getTodaySessionMap(){
 }
 function setTodaySessionMap(map){
   localStorage.setItem(todaySessionKey(), JSON.stringify(map));
+  // 대표님 대시보드에서도 "오늘 이 트레이너가 누구를 수업하는지" 바로 볼 수
+  // 있도록 서버에도 같은 내용을 올려둠. 로컬 저장이 매번의 진짜 소스이고,
+  // 이건 어디까지나 다른 기기(대시보드)에서 보기 위한 미러링이라 실패해도
+  // (오프라인 등) 트레이너의 오늘 수업 사용 자체는 막지 않음 — await 안 함
+  if(TRAINER_ID){
+    fsSet('data', 'todaySession_'+TRAINER_ID, { date: todayISO(), map }).catch(()=>{});
+  }
 }
 function toggleTodaySessionMember(mid){
   const map = getTodaySessionMap();
@@ -5436,6 +5468,38 @@ async function saveColorPrefs(prefs){
   return await fsSet('data', 'color_prefs_'+TRAINER_ID, prefs);
 }
 
+/* ═══════════════════════════════════════
+   일지 작성 설정
+   (같은 종목명을 입력했을 때 지난 기록의 세트를 자동으로 채워줄지 여부 등)
+═══════════════════════════════════════ */
+async function getJournalPrefs(){
+  if(journalPrefsCache) return journalPrefsCache;
+  if(!TRAINER_ID) return { autoFillPrevSets: true };
+  const v = await fsGet('data', 'journal_prefs_'+TRAINER_ID);
+  // 기본값은 true(기존 동작 유지) — 트레이너가 명시적으로 꺼야만 꺼짐
+  journalPrefsCache = { autoFillPrevSets: (v && v.autoFillPrevSets===false) ? false : true };
+  return journalPrefsCache;
+}
+
+async function saveJournalPrefs(prefs){
+  if(!TRAINER_ID) return false;
+  journalPrefsCache = prefs;
+  return await fsSet('data', 'journal_prefs_'+TRAINER_ID, prefs);
+}
+
+async function toggleAutoFillPrevSets(){
+  const prefs = await getJournalPrefs();
+  prefs.autoFillPrevSets = !prefs.autoFillPrevSets;
+  await saveJournalPrefs(prefs);
+  renderJournalSettingsToggle();
+}
+
+function renderJournalSettingsToggle(){
+  const el = document.getElementById('autoFillPrevToggle');
+  if(!el) return;
+  el.classList.toggle('on', !!journalPrefsCache?.autoFillPrevSets);
+}
+
 // 종목명은 트레이너마다 앞뒤 공백/전각공백 등 미세한 차이로 다르게 입력할 수 있어서,
 // 학습된 색을 다시 찾을 때 놓치지 않도록 트림 정도만 통일해서 키로 씀
 function exerciseColorKey(name){
@@ -6003,7 +6067,9 @@ async function openSettings(){
 
 // 일지 작성 화면 전용 설정(말투 학습, 부위별 색상) — 계정 설정과 분리해서
 // 일지 쓰다가 바로 열어볼 수 있게 함
-function openJournalSettings(){
+async function openJournalSettings(){
+  await getJournalPrefs();
+  renderJournalSettingsToggle();
   document.getElementById('modal-journalSettings').style.display = 'flex';
 }
 
@@ -6688,6 +6754,14 @@ const CHANGELOG = {
     '오늘만 시간표와 다르게 수업하면, "오늘 수업"에서 바로 고쳐도 원래 요일 시간표는 그대로 유지돼요',
     '회원이 없는 시간대는 한 줄로 접혀서 시간표가 훨씬 짧고 보기 편해요 (눌러서 펼치기/접기 가능)',
     '태블릿처럼 화면이 넓을 때는 시간표 칸도 화면 폭에 맞게 커져요'
+  ],
+  '2.7.2': [
+    '일지 작성 설정에 "지난 기록 자동 채우기" 켬/끔 스위치가 생겼어요 — 꺼두면 같은 종목을 입력해도 저번 무게·횟수가 자동으로 채워지지 않아요'
+  ],
+  '2.7.3': [
+    '대표님 대시보드에서 최근에 작성한 일지가 안 보이던 문제를 고쳤어요 — 이제 트레이너가 저장하면 바로 확인할 수 있어요',
+    '대표님 대시보드 회원 카드에 회차 진행 현황(예: 7/10회차 · 3회 남음)이 표시돼요',
+    '트레이너가 "오늘 수업" 회원을 체크하면 대표님 대시보드에서도 오늘 수업 예정 명단을 바로 볼 수 있어요'
   ]
 };
 
@@ -6947,7 +7021,7 @@ async function loadDashTrainerList(){
     const sent = await fsGet('data', 'sent_'+t.trainerId) || {};
     let todayTotal = 0, todaySent = 0;
     await Promise.all(members.map(async m => {
-      const hist = await fsGet('data', 'hist_'+t.trainerId+'_'+m.id) || [];
+      const hist = await getMemberHistoryFor(t.trainerId, m.id).catch(()=>[]);
       hist.filter(e=>(e.date||'').startsWith(todayStr)).forEach(e=>{
         todayTotal++;
         const k = m.id+'_'+e.id;
@@ -6957,7 +7031,20 @@ async function loadDashTrainerList(){
     totalToday += todayTotal;
     totalSent += todaySent;
     totalUnsent += (todayTotal - todaySent);
-    return { t, todayTotal, todaySent };
+
+    // 오늘 예정된 수업 명단(트레이너가 픽커/시간표로 미리 체크해둔 것) —
+    // 날짜가 오늘이 아니면(트레이너 폰이 오래 안 열려서 어제 명단이 남아있는
+    // 경우 등) 무시함. 회원 이름까지 붙여서 대시보드에서 바로 보여줌
+    let todaySessionMembers = [];
+    const sessionDoc = await fsGet('data', 'todaySession_'+t.trainerId).catch(()=>null);
+    if(sessionDoc && sessionDoc.date === todayISO() && sessionDoc.map){
+      const midToName = {}; members.forEach(m=>{ midToName[m.id]=m.name; });
+      todaySessionMembers = Object.entries(sessionDoc.map)
+        .map(([mid,v])=>({ name: midToName[mid]||'?', time: v.time||null }))
+        .sort((a,b)=> (a.time||'99:99').localeCompare(b.time||'99:99'));
+    }
+
+    return { t, todayTotal, todaySent, todaySessionMembers };
   }));
 
   // 미전송 트레이너 이름 수집
@@ -7011,10 +7098,13 @@ async function loadDashTrainerList(){
     listEl.appendChild(empty);
   }
 
-  filteredStats.forEach(({t, todayTotal, todaySent}) => {
+  filteredStats.forEach(({t, todayTotal, todaySent, todaySessionMembers}) => {
     const pct = todayTotal ? Math.round(todaySent/todayTotal*100) : 0;
     const allDone = todayTotal > 0 && todaySent === todayTotal;
     const hasUnsent = todayTotal > 0 && todaySent < todayTotal;
+    const sessionChips = (todaySessionMembers||[]).map(s=>
+      `<span style="font-size:10px;background:var(--sf2);border:0.5px solid var(--bd);border-radius:20px;padding:2px 7px;color:var(--t2);">${s.time?s.time+' ':''}${s.name}</span>`
+    ).join('');
 
     const card = document.createElement('div');
     card.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r16);padding:16px;margin-bottom:10px;cursor:pointer;transition:background .12s;';
@@ -7042,6 +7132,11 @@ async function loadDashTrainerList(){
       <div style="display:flex;justify-content:space-between;">
         <div style="font-size:10px;color:var(--t3);">전송률</div>
         <div style="font-size:10px;font-weight:700;color:${allDone?'var(--g0)':hasUnsent?'var(--red)':'var(--t3)'};">${pct}%</div>
+      </div>` : ''}
+      ${sessionChips ? `
+      <div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--bd);">
+        <div style="font-size:10px;color:var(--t3);margin-bottom:6px;">오늘 수업 예정 ${todaySessionMembers.length}명</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">${sessionChips}</div>
       </div>` : ''}`;
     card.onclick = () => openDashTrainer(t);
     listEl.appendChild(card);
@@ -7064,7 +7159,7 @@ async function loadDashData(){
   const members = await fsList('members_'+dashTrainerId);
   const sent = await fsGet('data', 'sent_'+dashTrainerId) || {};
   const memberData = await Promise.all(members.map(async m => {
-    const hist = await fsGet('data', 'hist_'+dashTrainerId+'_'+m.id) || [];
+    const hist = await getMemberHistoryFor(dashTrainerId, m.id).catch(()=>[]);
     return {...m, hist};
   }));
   renderDashboard(memberData, sent);
@@ -7140,6 +7235,15 @@ function renderDashboard(members, sent){
 
     filtered.forEach(e=>{ dashEntryStore[m.id+'__'+e.id]={e, mName:m.name}; });
 
+    // 회차 진행 현황 — 필터(전체/이번주 등)와 무관하게 항상 전체 히스토리
+    // 기준으로 계산해야 "몇 회차까지 갔고 몇 회 남았는지"가 정확함
+    const maxSession = m.hist.length ? Math.max(...m.hist.map(e=>parseInt(e.session||e.streak)||0)) : 0;
+    const totalSessions = m.totalSessions ? parseInt(m.totalSessions) : 0;
+    const remainSessions = totalSessions ? Math.max(0, totalSessions - maxSession) : null;
+    const sessionBadge = totalSessions
+      ? `<span style="font-size:11px;background:${remainSessions===0?'var(--red-l)':'var(--sf2)'};border:0.5px solid ${remainSessions===0?'var(--red)':'var(--bd)'};border-radius:20px;padding:2px 8px;color:${remainSessions===0?'var(--red)':'var(--t2)'};">${maxSession}/${totalSessions}회차 <strong>${remainSessions}회 남음</strong></span>`
+      : (maxSession ? `<span style="font-size:11px;background:var(--sf2);border:0.5px solid var(--bd);border-radius:20px;padding:2px 8px;color:var(--t2);">${maxSession}회차 진행 중</span>` : '');
+
     const card = document.createElement('div');
     card.className = 'dash-member-card';
     const rows = [...filtered].reverse().map(e=>{
@@ -7162,6 +7266,7 @@ function renderDashboard(members, sent){
         <div style="flex:1;">
           <div style="font-size:14px;font-weight:600;color:var(--t);margin-bottom:6px;">${m.name}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${sessionBadge}
             <span style="font-size:11px;background:var(--sf2);border:0.5px solid var(--bd);border-radius:20px;padding:2px 8px;color:var(--t2);">수업 <strong>${filtered.length}회</strong></span>
             <span style="font-size:11px;background:${sendRate===100?'var(--g2)':'var(--sf2)'};border:0.5px solid ${sendRate===100?'var(--g3)':'var(--bd)'};border-radius:20px;padding:2px 8px;color:${sendRate===100?'var(--g0)':'var(--t2)'};">전송률 <strong>${sendRate}%</strong></span>
             ${unsentCount>0?`<span style="font-size:11px;background:var(--red-l);border:0.5px solid var(--red);border-radius:20px;padding:2px 8px;color:var(--red);">미전송 <strong>${unsentCount}건</strong></span>`:''}
@@ -7277,7 +7382,7 @@ async function markAllSent(){
   const sent = await fsGet('data', 'sent_'+dashTrainerId) || {};
 
   await Promise.all(members.map(async m => {
-    const hist = await fsGet('data', 'hist_'+dashTrainerId+'_'+m.id) || [];
+    const hist = await getMemberHistoryFor(dashTrainerId, m.id).catch(()=>[]);
     hist.forEach(e => {
       if(!e.id) return;
       const key = m.id+'_'+e.id;
@@ -8180,8 +8285,10 @@ async function autoFillPrev(ei, name, skipSetFill){
   // 불러와서 오늘 세트에 프리필함 — 트레이너가 매번 같은 값을 다시 입력할
   // 필요 없이, 지난 기록 위에 오늘 실제로 한 값으로 바로 고쳐 쓰면 되고
   // (다이얼을 만지는 즉시 "이전 기록" 표시가 사라짐), 점진적 과부하 여부도
-  // 박스 하나하나에서 바로 비교됨. 시간(등척성) 모드는 세트 구조가 달라서 제외
-  if(!skipSetFill && !exercises[ei].timeMode && !nowTime && (prev.sets||[]).length){
+  // 박스 하나하나에서 바로 비교됨. 시간(등척성) 모드는 세트 구조가 달라서 제외.
+  // 트레이너가 "일지 작성 설정"에서 이 자동채움을 꺼뒀으면 건너뜀
+  const journalPrefs = await getJournalPrefs();
+  if(!skipSetFill && !exercises[ei].timeMode && !nowTime && journalPrefs.autoFillPrevSets && (prev.sets||[]).length){
     exercises[ei].sets = prev.sets.map(s=>({
       w: s.w||0, r: s.r||0, _prevFilled:true,
       ...(s.drops && s.drops.length ? { drops: s.drops.map(d=>({w:d.w||0, r:d.r||0, _prevFilled:true})) } : {}),
