@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.7.4"/>
+<meta name="app-version" content="2.7.5"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -753,6 +753,30 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     <div style="font-size:12px;color:var(--t3);margin:-8px 0 12px;">오늘 수업할 회원을 체크해두면 위에서 순서대로 확인할 수 있어요</div>
     <div id="todaySessionPickerList" style="max-height:50vh;overflow-y:auto;"></div>
     <button onclick="closeTodaySessionPicker()" style="width:100%;margin-top:14px;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;">확인</button>
+  </div>
+</div>
+
+<!-- 시간표 사진으로 채우기 — 1단계: 사진 선택/업로드 -->
+<div class="modal-overlay" id="modal-schedPhoto" style="display:none;" onclick="if(event.target===this)closeSchedulePhotoImport()">
+  <div class="modal-box">
+    <div class="modal-title">📷 사진으로 시간표 채우기</div>
+    <p style="font-size:12px;color:var(--t3);line-height:1.6;margin:-6px 0 14px;">화이트보드, 종이 시간표, 엑셀 캡처 사진을 올리면 AI가 요일·시간·회원을 읽어서 시간표에 채워드려요. 하루치 사진도, 일주일치가 다 담긴 사진도 괜찮아요 — 사진에 적힌 요일을 AI가 함께 읽어요.</p>
+    <div id="schedPhotoPreview" style="margin-bottom:12px;"></div>
+    <input type="file" id="schedPhotoInput" accept="image/*" capture="environment" style="display:none;" onchange="onSchedulePhotoFile(event)"/>
+    <button onclick="document.getElementById('schedPhotoInput').click()" style="width:100%;padding:13px;background:var(--sf2);border:1px dashed var(--bd2);border-radius:var(--r12);font-size:14px;font-weight:600;color:var(--t2);cursor:pointer;font-family:inherit;margin-bottom:10px;">사진 선택</button>
+    <button id="schedPhotoAnalyzeBtn" onclick="analyzeSchedulePhoto()" style="width:100%;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;margin-bottom:8px;" disabled>AI로 읽기</button>
+    <button class="modal-btn cancel" style="width:100%;" onclick="closeSchedulePhotoImport()">닫기</button>
+  </div>
+</div>
+
+<!-- 시간표 사진으로 채우기 — 2단계: 인식 결과 확인/수정 -->
+<div class="modal-overlay" id="modal-schedPhotoConfirm" style="display:none;">
+  <div class="modal-box" style="max-height:82vh;overflow-y:auto;">
+    <div class="modal-title">읽은 내용을 확인해주세요</div>
+    <p style="font-size:12px;color:var(--t3);line-height:1.6;margin:-6px 0 14px;" id="schedPhotoConfirmSub"></p>
+    <div id="schedPhotoConfirmList"></div>
+    <button onclick="applySchedulePhotoResult()" style="width:100%;margin-top:14px;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;" id="schedPhotoApplyBtn">시간표에 반영하기</button>
+    <button class="modal-btn cancel" style="width:100%;margin-top:8px;" onclick="closeModal('modal-schedPhotoConfirm')">취소</button>
   </div>
 </div>
 
@@ -2860,6 +2884,14 @@ function removeTemplateSlot(dow, mid){
   if(tpl[dow]) delete tpl[dow][mid];
   setWeeklyTemplate(tpl);
 }
+// 사진으로 읽은 시간표를 반영할 때 씀 — 그 요일 하루치를 통째로 새 내용으로
+// 교체함(기존 슬롯과 병합하지 않음). 사진이 그 요일의 최신 기준이라고 보는
+// 게 가장 단순하고 트레이너가 결과를 예측하기 쉬움
+function setTemplateDay(dow, dayMap){
+  const tpl = getWeeklyTemplate();
+  tpl[dow] = dayMap;
+  setWeeklyTemplate(tpl);
+}
 
 // 오늘 세션 맵이 아직 "오늘만의 예외"로 손댄 적 없으면, 그 표시로만 쓰이는
 // 내부 플래그. 오늘 처음 화면을 열었을 때 템플릿을 그대로 복사해 넣는 건
@@ -3128,7 +3160,10 @@ async function renderScheduleTab(){
   }).join('');
 
   wrap.innerHTML = `
-    <div class="section-label">회원을 아래 시간표 칸으로 드래그하세요 (요일 컬럼은 좌우로 스크롤돼요)</div>
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span>회원을 아래 시간표 칸으로 드래그하세요</span>
+      <button onclick="openSchedulePhotoImport()" style="flex-shrink:0;font-size:11px;font-weight:700;color:var(--g0);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 10px;cursor:pointer;font-family:inherit;white-space:nowrap;">📷 사진으로 채우기</button>
+    </div>
     <div class="sched-pool" id="schedPool">${poolHtml}</div>
     <div class="sched-week-grid" id="schedGridScroll">
       <div class="sched-week-head">
@@ -3151,6 +3186,176 @@ async function renderScheduleTab(){
 
 function removeScheduleSlot(dow, mid){
   removeTemplateSlot(dow, mid);
+  renderScheduleTab();
+}
+
+/* ═══════════════════════════════════════
+   시간표 사진으로 채우기
+   — 화이트보드/종이 시간표/엑셀 캡처 사진을 올리면 AI(Gemini Vision)가
+   요일·시간·회원명을 읽어서 시간표에 자동으로 채워줌. 트레이너가 확정된
+   시간표를 앱에 손으로 옮겨 적는 과정을 없애는 게 목적. 사진 한 장에
+   하루치만 있어도, 일주일치가 다 있어도 되게 AI가 요일까지 함께 읽어서
+   항목별로 판단함(고정된 요일을 트레이너가 미리 고르게 하지 않음 —
+   일주일치 사진을 넣었을 때 전부 한 요일로 잘못 들어가는 걸 방지).
+   흐름: 사진 선택 → AI 인식(요일 포함) → 회원 매칭 확인 → 요일별 반영
+═══════════════════════════════════════ */
+let schedPhotoB64 = null;
+let schedPhotoParsed = null; // AI가 읽은 원본 결과 [{dow, time, rawName, matchedMid, candidates}]
+
+function openSchedulePhotoImport(){
+  schedPhotoB64 = null;
+  schedPhotoParsed = null;
+  document.getElementById('schedPhotoInput').value = '';
+  document.getElementById('schedPhotoPreview').innerHTML = '';
+  document.getElementById('schedPhotoAnalyzeBtn').disabled = true;
+  document.getElementById('modal-schedPhoto').style.display = 'flex';
+}
+function closeSchedulePhotoImport(){
+  document.getElementById('modal-schedPhoto').style.display = 'none';
+}
+
+function onSchedulePhotoFile(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    schedPhotoB64 = ev.target.result.split(',')[1];
+    document.getElementById('schedPhotoPreview').innerHTML =
+      `<img src="${ev.target.result}" style="width:100%;max-height:220px;object-fit:contain;border-radius:var(--r12);border:0.5px solid var(--bd);"/>`;
+    document.getElementById('schedPhotoAnalyzeBtn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+// 손글씨/줄임말 대응 — 완전 일치가 아니어도 자모 포함 관계 등으로 후보를
+// 추려서 트레이너가 고르게 함. 엄격한 편집거리 대신 "포함되는지"로 넉넉하게
+// 잡아서, 후보가 하나도 안 뜨는 것보다 여러 개 뜨는 쪽이 안전함
+function schedFindMemberCandidates(rawName, members){
+  const norm = s => (s||'').replace(/\s|님/g,'').toLowerCase();
+  const target = norm(rawName);
+  if(!target) return [];
+  return members.filter(m=>{
+    const mn = norm(m.name);
+    return mn===target || mn.includes(target) || target.includes(mn);
+  });
+}
+
+async function analyzeSchedulePhoto(){
+  if(!schedPhotoB64){ showToast('사진을 먼저 선택해주세요.', true); return; }
+  const btn = document.getElementById('schedPhotoAnalyzeBtn');
+  btn.disabled = true; btn.textContent = 'AI가 읽는 중...';
+
+  try{
+    const members = await getMembers();
+    const nameList = members.map(m=>m.name).join(', ');
+    const res = await callGeminiAPI({
+      system: '트레이너용 시간표 사진을 읽어서 반드시 JSON 배열만 반환해. 다른 텍스트 없이 JSON만. 형식: [{"dow":"월","time":"HH:MM","name":"회원이름"}]. dow는 그 항목이 어느 요일 수업인지를 "일","월","화","수","목","금","토" 중 하나로 표기해(사진에 요일이 명시돼 있으면 그대로 따르고, 표 전체가 한 요일짜리면 모든 항목에 같은 요일을 넣어). 시간은 24시간제 HH:MM으로 통일하고(예: 오후 3시 → "15:00"), 이름은 사진에 적힌 그대로 옮겨적어(정정하지 마). 요일이나 시간이 명확하지 않은 항목은 제외해.',
+      max_tokens: 2000,
+      messages: [{role:'user', content:[
+        {type:'image', source:{type:'base64', media_type:'image/jpeg', data:schedPhotoB64}},
+        {type:'text', text:`이 사진은 PT 수업 시간표야. 하루치일 수도, 일주일 전체가 담긴 표일 수도 있어. 등록된 회원 이름 목록(참고용, 사진 속 이름과 다를 수 있음): ${nameList}. 사진에서 요일·시간·회원 이름을 모두 읽어서 JSON 배열로 반환해줘.`}
+      ]}]
+    });
+    const text = (res.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const clean = text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    if(!Array.isArray(parsed) || !parsed.length){
+      throw new Error('사진에서 시간표를 읽지 못했어요. 더 선명한 사진으로 다시 시도해주세요.');
+    }
+
+    const dowIndex = { '일':0, '월':1, '화':2, '수':3, '목':4, '금':5, '토':6 };
+    schedPhotoParsed = parsed
+      .filter(item => item.dow in dowIndex && item.time)
+      .map(item=>{
+        const candidates = schedFindMemberCandidates(item.name, members);
+        return {
+          dow: dowIndex[item.dow],
+          time: item.time,
+          rawName: item.name,
+          matchedMid: candidates.length===1 ? candidates[0].id : null,
+          candidates,
+        };
+      });
+    if(!schedPhotoParsed.length){
+      throw new Error('사진에서 요일·시간을 읽지 못했어요. 더 선명한 사진으로 다시 시도해주세요.');
+    }
+
+    renderSchedulePhotoConfirm(members);
+    closeSchedulePhotoImport();
+    document.getElementById('modal-schedPhotoConfirm').style.display = 'flex';
+  } catch(e){
+    showToast('⚠️ '+(e.message||'사진 인식에 실패했어요'), true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'AI로 읽기';
+  }
+}
+
+function renderSchedulePhotoConfirm(members){
+  // 요일별로 묶어서 보여줌 — 하루치 사진이면 그룹이 하나뿐이고, 일주일치
+  // 사진이면 여러 그룹으로 나뉘어서 "어느 요일에 뭐가 들어가는지"가 한눈에
+  // 보이게 함. 트레이너가 특정 요일 전체를 통째로 안 넣고 싶으면 그 그룹의
+  // 모든 select를 비우면 됨(반영 시 자동으로 걸러짐)
+  const byDow = {};
+  schedPhotoParsed.forEach((item, idx)=>{
+    (byDow[item.dow] = byDow[item.dow] || []).push({item, idx});
+  });
+  const dowsFound = Object.keys(byDow).map(Number).sort((a,b)=>a-b);
+
+  document.getElementById('schedPhotoConfirmSub').textContent = dowsFound.length > 1
+    ? `${dowsFound.map(d=>SCHED_DOW_LABELS[d]).join(', ')}요일 시간표로 반영돼요. 각 요일에 기존에 있던 내용은 사진 내용으로 교체됩니다.`
+    : `${SCHED_DOW_LABELS[dowsFound[0]]}요일 시간표로 반영돼요. 이 요일에 기존에 있던 내용은 사진 내용으로 교체됩니다.`;
+
+  const listEl = document.getElementById('schedPhotoConfirmList');
+  listEl.innerHTML = dowsFound.map(dow=>{
+    const rowsHtml = byDow[dow].map(({item, idx})=>{
+      if(item.matchedMid){
+        const m = members.find(x=>x.id===item.matchedMid);
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--bd);">
+          <span style="font-size:13px;font-weight:700;color:var(--t);width:52px;flex-shrink:0;">${item.time}</span>
+          <span style="flex:1;font-size:13px;color:var(--t);">${m?m.name:item.rawName}</span>
+          <span style="font-size:11px;color:var(--g0);">✓ 매칭됨</span>
+        </div>`;
+      }
+      const options = item.candidates.length
+        ? item.candidates.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')
+        : '';
+      return `<div style="padding:10px 0;border-bottom:0.5px solid var(--bd);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+          <span style="font-size:13px;font-weight:700;color:var(--t);width:52px;flex-shrink:0;">${item.time}</span>
+          <span style="flex:1;font-size:13px;color:var(--t3);">사진 속 이름: "${item.rawName}"</span>
+        </div>
+        <select onchange="schedPhotoParsed[${idx}].matchedMid=this.value||null;" style="width:100%;padding:8px;border-radius:var(--r8);border:0.5px solid var(--bd2);font-size:13px;font-family:inherit;background:var(--sf);color:var(--t);">
+          <option value="">— 회원 선택 (제외하려면 비워두세요) —</option>
+          ${options}
+          ${members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}
+        </select>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--g0);margin-bottom:4px;">${SCHED_DOW_LABELS[dow]}요일</div>
+      ${rowsHtml}
+    </div>`;
+  }).join('');
+}
+
+function applySchedulePhotoResult(){
+  // 사진에서 인식된 요일은(그 요일 항목을 전부 회원 선택 안 함으로
+  // 비워뒀더라도) 전부 교체 대상 — 안 그러면 "이 요일은 다 빼고 싶어서
+  // 비웠는데 기존 내용이 그대로 남는" 헷갈리는 결과가 나옴
+  const dowsFound = [...new Set(schedPhotoParsed.map(item=>item.dow))].sort((a,b)=>a-b);
+  const byDow = {};
+  dowsFound.forEach(dow=>{ byDow[dow] = {}; });
+  schedPhotoParsed.forEach(item=>{
+    if(item.matchedMid && item.time) byDow[item.dow][item.matchedMid] = { time: item.time };
+  });
+  let totalCount = 0;
+  dowsFound.forEach(dow=>{
+    setTemplateDay(dow, byDow[dow]);
+    totalCount += Object.keys(byDow[dow]).length;
+  });
+  closeModal('modal-schedPhotoConfirm');
+  const dowLabelStr = dowsFound.map(d=>SCHED_DOW_LABELS[d]).join(', ');
+  showToast(`✅ ${dowLabelStr}요일 시간표에 ${totalCount}명 반영했어요`);
   renderScheduleTab();
 }
 
@@ -6785,6 +6990,11 @@ const CHANGELOG = {
     '시간표 칸 경계선을 더 잘 보이게 진하게 했어요',
     '시간표를 좌우로 스크롤해도 시간과 "비어있음" 표시가 화면에 계속 보여요',
     '시간표를 아래로 스크롤해도 드래그할 회원 목록이 화면 위에 계속 보여요'
+  ],
+  '2.7.5': [
+    '시간표에 "📷 사진으로 채우기" 기능이 생겼어요 — 화이트보드, 종이 시간표, 엑셀 캡처 사진을 올리면 AI가 요일·시간·회원을 읽어서 자동으로 채워줘요',
+    '하루치 사진도, 일주일 전체가 담긴 사진도 한 번에 인식해서 각 요일에 맞게 나눠 넣어요',
+    '이름이 애매하게 인식되면 직접 회원을 골라서 확인한 뒤에 반영할 수 있어요'
   ]
 };
 
