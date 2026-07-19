@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.7.3"/>
+<meta name="app-version" content="2.7.4"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -93,36 +93,37 @@ html[data-theme="dark"] .nav{background:rgba(19,19,17,.94);}
 .today-status-badge.not-written{background:var(--sf2);color:var(--t3);border:0.5px solid var(--bd);}
 .today-status-badge.written{background:#FFF4D6;color:#B8860B;border:0.5px solid #F0DFA0;}
 .today-status-badge.sent{background:var(--g2);color:var(--g0);border:0.5px solid var(--g3);}
-.sched-pool{display:flex;flex-wrap:wrap;gap:6px;padding:10px;margin-bottom:14px;background:var(--sf2);border-radius:var(--r12);border:0.5px solid var(--bd);}
+.sched-pool{display:flex;flex-wrap:wrap;gap:6px;padding:10px;margin-bottom:14px;background:var(--sf2);border-radius:var(--r12);border:0.5px solid var(--bd);position:sticky;z-index:20;box-shadow:0 4px 8px -4px rgba(0,0,0,.08);}
 .sched-pool-empty{font-size:12px;color:var(--t3);padding:4px;}
 .sched-chip{font-size:12px;font-weight:600;color:var(--t);background:var(--sf);border:1px solid var(--bd2);border-radius:20px;padding:6px 12px;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;}
 .sched-chip:active{cursor:grabbing;}
 .sched-chip.placed{opacity:.35;}
-.sched-week-grid{border:0.5px solid var(--bd);border-radius:var(--r12);overflow-x:auto;-webkit-overflow-scrolling:touch;}
-.sched-week-head{display:flex;position:sticky;top:0;background:var(--sf);z-index:1;border-bottom:0.5px solid var(--bd2);}
-.sched-time-head{width:44px;flex-shrink:0;}
+.sched-week-grid{border:1px solid var(--bd2);border-radius:var(--r12);overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.sched-week-head{display:flex;position:sticky;top:0;background:var(--sf);z-index:1;border-bottom:1px solid var(--bd2);}
+.sched-time-head{width:44px;flex-shrink:0;position:sticky;left:0;background:var(--sf);z-index:2;}
 .sched-dow-cells{display:flex;flex:1;}
-.sched-dow-col-h{flex:1 0 56px;width:56px;text-align:center;font-size:12px;font-weight:700;color:var(--t2);padding:8px 0;border-left:0.5px solid var(--bd);}
+.sched-dow-col-h{flex:1 0 56px;width:56px;text-align:center;font-size:12px;font-weight:700;color:var(--t2);padding:8px 0;border-left:1px solid var(--bd2);}
 .sched-dow-col-h:first-child{border-left:none;}
 .sched-dow-col-h.is-today{color:var(--g0);}
-.sched-week-row{display:flex;border-top:0.5px solid var(--bd);min-height:34px;}
+.sched-week-row{display:flex;border-top:1px solid var(--bd2);min-height:34px;}
 .sched-week-row:first-child{border-top:none;}
-.sched-row-hour{border-top:0.5px solid var(--bd2);}
-.sched-time{width:44px;flex-shrink:0;font-size:10px;color:var(--t3);padding:6px 4px 0 6px;display:flex;align-items:center;justify-content:space-between;}
-.sched-slot{flex:1 0 56px;width:56px;padding:3px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;border-left:0.5px solid var(--bd);}
+.sched-row-hour{border-top:1px solid var(--t3);}
+.sched-time{width:44px;flex-shrink:0;font-size:10px;color:var(--t3);padding:6px 4px 0 6px;display:flex;align-items:center;justify-content:space-between;position:sticky;left:0;background:var(--sf);z-index:2;}
+.sched-slot{flex:1 0 56px;width:56px;padding:3px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;border-left:1px solid var(--bd2);}
 .sched-slot:first-child{border-left:none;}
 .sched-slot.is-today{background:var(--g2);}
 .sched-slot.drag-over{background:var(--g2);}
-.sched-gap-row{border-top:0.5px solid var(--bd);background:var(--sf2);}
+.sched-gap-row{border-top:1px solid var(--bd2);background:var(--sf2);}
 .sched-gap-row:first-child{border-top:none;}
-.sched-gap-label{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;font-size:11px;color:var(--t3);cursor:pointer;}
+.sched-gap-label{display:flex;align-items:center;gap:14px;padding:7px 12px;font-size:11px;color:var(--t3);cursor:pointer;position:sticky;left:0;width:max-content;max-width:100%;}
 .sched-gap-expand{font-size:11px;font-weight:600;color:var(--g0);}
 .sched-gap-drop-cells{display:flex;height:14px;}
-.sched-gap-drop{flex:1 0 56px;width:56px;border-left:0.5px dashed var(--bd);}
+.sched-gap-drop{flex:1 0 56px;width:56px;border-left:1px dashed var(--bd2);}
 .sched-gap-drop:first-child{border-left:none;margin-left:44px;}
 .sched-gap-drop.drag-over{background:var(--g2);}
 .sched-gap-collapse{font-size:9px;font-weight:600;color:var(--t3);cursor:pointer;}
-.sched-member-chip{display:flex;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:600;color:var(--g0);background:var(--g2);border-radius:10px;padding:3px 4px;width:100%;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sched-member-chip{display:flex;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:600;color:var(--g0);background:var(--g2);border-radius:10px;padding:3px 4px;width:100%;}
+.sched-member-chip .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .sched-member-chip .x{cursor:pointer;color:var(--t3);font-weight:900;padding:0 1px;flex-shrink:0;}
 .sched-ghost{position:fixed;z-index:9999;pointer-events:none;font-size:12px;font-weight:600;color:var(--t);background:var(--sf);border:1px solid var(--bd2);border-radius:20px;padding:6px 12px;box-shadow:0 4px 14px rgba(0,0,0,.15);opacity:.9;}
 .pref-toggle{flex-shrink:0;width:44px;height:26px;border-radius:20px;background:var(--bd2);position:relative;cursor:pointer;transition:background .15s;}
@@ -1285,11 +1286,12 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
 <div class="screen" id="screen-dashboard-main">
   <nav class="nav">
     <div class="nav-inner">
-      <button class="nav-back" onclick="showScreen('screen-trainer-select')">
+      <button class="nav-back" onclick="showScreen('screen-trainer-select');loadDashTrainerList();">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
         목록
       </button>
       <span class="nav-title" id="dashTrainerTitle"></span>
+      <button onclick="markAllSent()" style="background:none;border:0.5px solid var(--bd);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2);cursor:pointer;font-family:inherit;">✓ 확인 완료</button>
     </div>
   </nav>
   <div style="padding:16px;padding-bottom:60px;max-width:760px;margin:0 auto;">
@@ -3017,10 +3019,7 @@ function closeTodaySessionPicker(){
    주간 그리드. 요일을 탭으로 넘나들지 않고 한 화면에서 이번 주 전체
    흐름을 보면서 회원을 원하는 요일×시간 칸으로 드래그해 배치함.
 ═══════════════════════════════════════ */
-let schedDragMid = null; // 현재 드래그 중인 회원 id (칩 자체가 어느 요일 슬롯에서
-                          // 시작했는지는 data-slot-dow/data-slot-time에 남아있지만,
-                          // mid가 요일별로 하나의 슬롯만 가지므로 드롭 시 setTemplateSlot이
-                          // 알아서 옮겨줘서 별도로 추적할 필요는 없음
+let schedDragMid = null; // 현재 드래그 중인 회원 id
 const SCHED_DOW_LABELS = ['일','월','화','수','목','금','토'];
 
 function schedTimeSlots(){
@@ -3116,7 +3115,7 @@ async function renderScheduleTab(){
     const dowCellsHtml = [0,1,2,3,4,5,6].map(dow=>{
       const inSlot = Object.entries(weekTpl[dow]).filter(([mid,v])=>v.time===time);
       const chipsHtml = inSlot.map(([mid])=>
-        `<span class="sched-member-chip" draggable="true" data-mid="${mid}" data-slot-time="${time}" data-slot-dow="${dow}">${midToName[mid]||'?'}<span class="x" onclick="event.stopPropagation();removeScheduleSlot(${dow},'${mid}')">×</span></span>`
+        `<span class="sched-member-chip" draggable="true" data-mid="${mid}" data-slot-time="${time}" data-slot-dow="${dow}"><span class="name">${midToName[mid]||'?'}</span><span class="x" onclick="event.stopPropagation();removeScheduleSlot(${dow},'${mid}')">×</span></span>`
       ).join('');
       return `<div class="sched-slot${dow===todayDow?' is-today':''}" data-time="${time}" data-dow="${dow}">${chipsHtml}</div>`;
     }).join('');
@@ -3140,6 +3139,13 @@ async function renderScheduleTab(){
     </div>
   `;
 
+  // 회원 풀을 화면 상단 네비게이션 바로 아래에 고정시켜서, 시간표를
+  // 아래로 스크롤해도 드래그할 이름 목록이 계속 보이게 함 — nav 높이가
+  // 화면/폰트 설정에 따라 달라질 수 있어 고정값 대신 실측값을 씀
+  const pool = document.getElementById('schedPool');
+  const nav = document.querySelector('.nav');
+  if(pool && nav) pool.style.top = nav.getBoundingClientRect().height + 'px';
+
   initScheduleDrag();
 }
 
@@ -3152,17 +3158,26 @@ function initScheduleDrag(){
   const grid = document.getElementById('schedGrid');
   const pool = document.getElementById('schedPool');
   let ghostEl = null;
+  let schedDragFromDow = null; // 슬롯 칩에서 드래그를 시작했으면 원래 요일(옮기기용, null이면 풀에서 시작)
 
-  function startDrag(mid){
+  function startDrag(mid, fromDow){
     schedDragMid = mid;
+    schedDragFromDow = (fromDow===undefined || fromDow===null || fromDow==='') ? null : parseInt(fromDow,10);
   }
   function endDrag(){
     schedDragMid = null;
+    schedDragFromDow = null;
     if(ghostEl){ ghostEl.remove(); ghostEl = null; }
     document.querySelectorAll('.sched-slot.drag-over').forEach(el=>el.classList.remove('drag-over'));
   }
   function dropOnSlot(dow, time, gapStart){
     if(!schedDragMid){ endDrag(); return; }
+    // 기존 슬롯 칩을 다른 요일로 드래그한 경우, 원래 있던 요일 자리는
+    // 지워야 "옮기기"가 됨 — 안 지우면 새 자리에 하나 더 생겨서 마치
+    // 복제된 것처럼 같은 회원이 두 요일에 동시에 남아있게 됨
+    if(schedDragFromDow !== null && schedDragFromDow !== dow){
+      removeTemplateSlot(schedDragFromDow, schedDragMid);
+    }
     setTemplateSlot(dow, schedDragMid, time);
     if(gapStart) scheduleExpandedGaps.add(gapStart);
     endDrag();
@@ -3172,7 +3187,7 @@ function initScheduleDrag(){
   // PC 드래그: 풀 칩 + 슬롯 칩 둘 다
   [...pool.querySelectorAll('.sched-chip'), ...grid.querySelectorAll('.sched-member-chip')].forEach(chip=>{
     chip.addEventListener('dragstart', e=>{
-      startDrag(chip.dataset.mid);
+      startDrag(chip.dataset.mid, chip.dataset.slotDow);
       e.dataTransfer.effectAllowed = 'move';
       setTimeout(()=>chip.classList.add('placed'), 0);
     });
@@ -3209,7 +3224,7 @@ function initScheduleDrag(){
       if(!dragging){
         if(Math.abs(t.clientY-touchStartY) < 8 && Math.abs(t.clientX-touchStartX) < 8) return;
         dragging = true;
-        startDrag(chip.dataset.mid);
+        startDrag(chip.dataset.mid, chip.dataset.slotDow);
         ghostEl = document.createElement('div');
         ghostEl.className = 'sched-ghost';
         ghostEl.textContent = chip.textContent.replace('×','').trim();
@@ -6762,6 +6777,14 @@ const CHANGELOG = {
     '대표님 대시보드에서 최근에 작성한 일지가 안 보이던 문제를 고쳤어요 — 이제 트레이너가 저장하면 바로 확인할 수 있어요',
     '대표님 대시보드 회원 카드에 회차 진행 현황(예: 7/10회차 · 3회 남음)이 표시돼요',
     '트레이너가 "오늘 수업" 회원을 체크하면 대표님 대시보드에서도 오늘 수업 예정 명단을 바로 볼 수 있어요'
+  ],
+  '2.7.4': [
+    '대표님 대시보드 "확인 완료" 버튼이 트레이너 화면에도 생겼어요 — 눌러도 처리가 안 되던 문제를 고쳤고, 이제 누르면 목록 화면까지 바로 반영돼요',
+    '시간표에서 회원 이름이 길어도 삭제(×) 버튼이 항상 보여요',
+    '시간표에서 회원을 다른 요일로 옮기면 이제 진짜로 옮겨져요 (예전엔 원래 자리에도 남아서 복사된 것처럼 보였어요)',
+    '시간표 칸 경계선을 더 잘 보이게 진하게 했어요',
+    '시간표를 좌우로 스크롤해도 시간과 "비어있음" 표시가 화면에 계속 보여요',
+    '시간표를 아래로 스크롤해도 드래그할 회원 목록이 화면 위에 계속 보여요'
   ]
 };
 
@@ -7375,10 +7398,13 @@ async function deleteTrainerFromDir(trainerId, name){
 }
 
 async function markAllSent(){
-  if(!dashTrainerId){ alert('트레이너를 먼저 선택해주세요.'); return; }
-  if(!confirm('이 트레이너의 모든 일지를 전송됨으로 처리할까요?')) return;
+  if(!dashTrainerId){ showToast('트레이너를 먼저 선택해주세요.', true); return; }
 
-  const members = await fsGet('data', 'members_'+dashTrainerId) || [];
+  // 예전엔 fsGet('data', 'members_'+dashTrainerId)로 조회했는데, 회원
+  // 목록은 단일 문서(data 컬렉션)가 아니라 회원별 문서가 모인 컬렉션이라
+  // 이 호출은 항상 빈 값만 반환했음 — 그래서 버튼을 눌러도 실제로는
+  // 아무 일지도 처리되지 않은 채 "완료" 알림만 떴던 게 진짜 원인이었음
+  const members = await fsList('members_'+dashTrainerId);
   const sent = await fsGet('data', 'sent_'+dashTrainerId) || {};
 
   await Promise.all(members.map(async m => {
@@ -7400,8 +7426,11 @@ async function markAllSent(){
   }));
 
   await fsSet('data', 'sent_'+dashTrainerId, sent);
-  alert('✅ 전체 전송됨으로 처리됐어요.');
-  loadDashData();
+  showToast('✅ 모두 확인 완료 처리했어요');
+  // 지금 보고 있는 개별 트레이너 화면과, 뒤로 돌아갔을 때 볼 목록 요약을
+  // 둘 다 즉시 최신 상태로 갱신함 — 예전엔 이 화면만 갱신되고 목록
+  // 화면은 다시 들어가거나 새로고침해야만 반영됐음
+  await Promise.all([loadDashData(), loadDashTrainerList()]);
 }
 
 function openDashPinChange(){
