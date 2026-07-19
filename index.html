@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.7.5"/>
+<meta name="app-version" content="2.7.6"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -762,7 +762,7 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     <div class="modal-title">📷 사진으로 시간표 채우기</div>
     <p style="font-size:12px;color:var(--t3);line-height:1.6;margin:-6px 0 14px;">화이트보드, 종이 시간표, 엑셀 캡처 사진을 올리면 AI가 요일·시간·회원을 읽어서 시간표에 채워드려요. 하루치 사진도, 일주일치가 다 담긴 사진도 괜찮아요 — 사진에 적힌 요일을 AI가 함께 읽어요.</p>
     <div id="schedPhotoPreview" style="margin-bottom:12px;"></div>
-    <input type="file" id="schedPhotoInput" accept="image/*" capture="environment" style="display:none;" onchange="onSchedulePhotoFile(event)"/>
+    <input type="file" id="schedPhotoInput" accept="image/*" style="display:none;" onchange="onSchedulePhotoFile(event)"/>
     <button onclick="document.getElementById('schedPhotoInput').click()" style="width:100%;padding:13px;background:var(--sf2);border:1px dashed var(--bd2);border-radius:var(--r12);font-size:14px;font-weight:600;color:var(--t2);cursor:pointer;font-family:inherit;margin-bottom:10px;">사진 선택</button>
     <button id="schedPhotoAnalyzeBtn" onclick="analyzeSchedulePhoto()" style="width:100%;padding:13px;background:var(--g0);border:none;border-radius:var(--r12);font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;margin-bottom:8px;" disabled>AI로 읽기</button>
     <button class="modal-btn cancel" style="width:100%;" onclick="closeSchedulePhotoImport()">닫기</button>
@@ -6995,6 +6995,9 @@ const CHANGELOG = {
     '시간표에 "📷 사진으로 채우기" 기능이 생겼어요 — 화이트보드, 종이 시간표, 엑셀 캡처 사진을 올리면 AI가 요일·시간·회원을 읽어서 자동으로 채워줘요',
     '하루치 사진도, 일주일 전체가 담긴 사진도 한 번에 인식해서 각 요일에 맞게 나눠 넣어요',
     '이름이 애매하게 인식되면 직접 회원을 골라서 확인한 뒤에 반영할 수 있어요'
+  ],
+  '2.7.6': [
+    '시간표 사진 올릴 때 카메라 촬영만 되고 갤러리에서 못 고르던 문제를 고쳤어요 — 이제 이미 찍어둔 사진도 바로 올릴 수 있어요'
   ]
 };
 
