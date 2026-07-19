@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.7.6"/>
+<meta name="app-version" content="2.7.7"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1471,16 +1471,22 @@ async function callGeminiAPI({ system, messages, max_tokens }){
   });
 
   // 무료 티어는 분당 요청 한도가 낮아서(전체 트레이너 공유) 짧은 시간에
-  // 몰리면 429가 잦음 — 바로 실패 처리하지 않고 한 번은 잠깐 기다렸다 재시도
+  // 몰리면 429가 잦고, 구글 쪽 순간 과부하로 503도 종종 남 — 둘 다 트레이너
+  // 잘못이 아니라 잠깐 기다리면 풀리는 경우가 대부분이라, 바로 실패 처리하지
+  // 않고 짧게 대기 후 최대 두 번 더 재시도함(이미지 분석처럼 무거운 요청이
+  // 몰리는 시간표 사진 인식에서 503이 자주 관찰됨)
   let res = await fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body });
-  if(res.status === 429){
+  let attempt = 0;
+  while((res.status === 429 || res.status === 503) && attempt < 2){
     await new Promise(r=>setTimeout(r, 3000));
     res = await fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body });
+    attempt++;
   }
 
   if(!res.ok){
     const errText = await res.text();
     if(res.status === 429) throw new Error('AI 사용량이 잠시 많아요. 30초 후 다시 시도해주세요.');
+    if(res.status === 503) throw new Error('AI 서버가 잠시 불안정해요. 잠시 후 다시 시도해주세요.');
     throw new Error('Gemini API '+res.status+': '+errText.slice(0,200));
   }
 
@@ -6998,6 +7004,9 @@ const CHANGELOG = {
   ],
   '2.7.6': [
     '시간표 사진 올릴 때 카메라 촬영만 되고 갤러리에서 못 고르던 문제를 고쳤어요 — 이제 이미 찍어둔 사진도 바로 올릴 수 있어요'
+  ],
+  '2.7.7': [
+    'AI 분석(시간표 사진, 식단, 인바디 등) 중 서버가 잠깐 불안정해서 실패하던 경우, 자동으로 몇 초 기다렸다 다시 시도하도록 고쳤어요'
   ]
 };
 
