@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.2"/>
+<meta name="app-version" content="2.8.3"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -3817,6 +3817,14 @@ async function openMemberJournals(member){
   if(inlineMemo){ inlineMemo.value = ''; inlineMemo.style.height = 'auto'; }
   inlineMemoPhotoFiles = [];
   renderMemoPhotoPreview('inline');
+  // 회원 특이사항 편집칸(memberNoteInput)도 마찬가지 — 이전 회원 화면에서
+  // 편집 중이던(저장 안 한) 내용이 열린 채로 남아있으면 다른 회원 화면에서도
+  // 그대로 보였음. 편집 패널 자체도 닫아서 서버에 있는 값 그대로 다시
+  // 불러오게 함(renderMemberNote가 아래에서 호출됨)
+  closeMemberNote();
+  const memberNoteInput = document.getElementById('memberNoteInput');
+  if(memberNoteInput) memberNoteInput.value = '';
+  renderMemoPhotoPreview('note');
   await buildCalHistDates();
   renderCalendar();
   renderJournalList();
@@ -7179,6 +7187,9 @@ const CHANGELOG = {
   ],
   '2.8.2': [
     '회원 특이사항에 글자 없이 사진만 첨부하고 저장하면, 저장이 아니라 메모 전체가 삭제되면서 사진도 같이 사라지던 문제를 고쳤어요'
+  ],
+  '2.8.3': [
+    '회원 특이사항을 저장 안 하고 다른 회원 화면으로 넘어가면, 쓰던 내용이 그 회원 화면에도 그대로 남아있던 문제를 고쳤어요'
   ]
 };
 
