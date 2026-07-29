@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.3"/>
+<meta name="app-version" content="2.8.4"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -3825,6 +3825,13 @@ async function openMemberJournals(member){
   const memberNoteInput = document.getElementById('memberNoteInput');
   if(memberNoteInput) memberNoteInput.value = '';
   renderMemoPhotoPreview('note');
+  // 식단 탭 인바디 온보딩에서 고른 성별/목표(obGender/obGoal)도 화면엔
+  // 안 보이지만 전역 변수로 남아있어서, A회원 화면에서 성별만 고르고 저장 전에
+  // B회원으로 넘어가면 B회원 화면의 버튼은 안 눌린 것처럼 보이는데 실제로
+  // "다음"을 누르면 A에서 고른 성별/목표가 B의 기록으로 그대로 저장돼버리는
+  // 문제가 있었음(화면에 티가 안 나서 트레이너가 알아챌 방법이 없었음)
+  obGender = null;
+  obGoal = null;
   await buildCalHistDates();
   renderCalendar();
   renderJournalList();
@@ -7190,6 +7197,10 @@ const CHANGELOG = {
   ],
   '2.8.3': [
     '회원 특이사항을 저장 안 하고 다른 회원 화면으로 넘어가면, 쓰던 내용이 그 회원 화면에도 그대로 남아있던 문제를 고쳤어요'
+  ],
+  '2.8.4': [
+    '식단 탭 인바디 등록에서 한 회원의 성별/목표를 고르고 저장 전에 다른 회원으로 넘어가면, 화면엔 안 보이지만 그 값이 다른 회원의 기록으로 잘못 저장될 수 있던 문제를 고쳤어요',
+    '업데이트 안내가 최신 배포 내용 하나만 보여줘서, 며칠 만에 여러 번 배포되면 중간 내용들이 묻히던 문제를 고쳤어요 — 이제 마지막으로 확인한 뒤 놓친 업데이트를 전부 옆으로 넘겨가며 볼 수 있어요'
   ]
 };
 
@@ -7208,7 +7219,7 @@ async function checkAppVersion(){
     window._appVersionCheckedThisSession = true;
     const lastSeenVersion = localStorage.getItem('last_seen_app_version');
     if(lastSeenVersion && lastSeenVersion !== currentVersion && isNewerVersion(currentVersion, lastSeenVersion)){
-      showJustUpdatedBanner(currentVersion);
+      showJustUpdatedBanner(currentVersion, lastSeenVersion);
     }
     localStorage.setItem('last_seen_app_version', currentVersion);
   }
@@ -7247,12 +7258,64 @@ function changelogNotesHtml(version){
     : '';
 }
 
+// lastSeenVersion(트레이너가 마지막으로 본 버전) 이후, currentVersion까지 사이에
+// 배포된 모든 버전을 오래된 순으로 모음 — 예전엔 최신 버전 하나만 보여줘서,
+// 며칠 안 켜본 사이 여러 번 배포되면 중간 버전들의 업데이트 내역이 통째로
+// 묻혔음(마지막 배포 내용 하나만 보이고 나머지는 영영 확인할 방법이 없었음)
+function collectMissedVersions(fromVersionExclusive, toVersionInclusive){
+  return Object.keys(CHANGELOG)
+    .filter(v => CHANGELOG[v] && CHANGELOG[v].length)
+    .filter(v => !fromVersionExclusive || isNewerVersion(v, fromVersionExclusive))
+    .filter(v => v===toVersionInclusive || !isNewerVersion(v, toVersionInclusive))
+    .sort((a,b)=>{
+      const pa=a.split('.').map(Number), pb=b.split('.').map(Number);
+      for(let i=0;i<3;i++){ if(pa[i]!==pb[i]) return pa[i]-pb[i]; }
+      return 0;
+    });
+}
+
+// 여러 버전의 업데이트 내역을 옆으로 스와이프해서 넘겨보는 카드 묶음을 만듦.
+// 페이지가 1개뿐이면(놓친 버전이 하나뿐) 점 표시줄 없이 카드 하나만 보임.
+// scroll-snap을 써서 손가락 하나로 자연스럽게 넘기고, 중간에서 놓아도
+// 가장 가까운 카드로 딱 붙게 함
+function buildChangelogPagerHtml(versions){
+  const pagesHtml = versions.map(v =>
+    `<div class="changelog-page" style="flex:0 0 100%;scroll-snap-align:center;padding:0 2px;">
+      <div style="font-size:13px;font-weight:700;color:var(--g1);margin-bottom:8px;">v${v}</div>
+      ${changelogNotesHtml(v)}
+    </div>`
+  ).join('');
+  const dotsHtml = versions.length > 1
+    ? `<div class="changelog-dots" style="display:flex;justify-content:center;gap:6px;margin-bottom:14px;">`
+      + versions.map((_,i)=>`<span class="changelog-dot" data-idx="${i}" style="width:6px;height:6px;border-radius:50%;background:${i===0?'var(--g0)':'var(--bd2)'};transition:background .2s;"></span>`).join('')
+      + `</div>`
+    : '';
+  return `
+    <div class="changelog-pager" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;margin-bottom:4px;">
+      ${pagesHtml}
+    </div>
+    ${dotsHtml}`;
+}
+
+// 스크롤 위치를 보고 지금 몇 번째 카드가 보이는지 계산해서 점 표시줄을 갱신함
+function wireChangelogPager(container){
+  const pager = container.querySelector('.changelog-pager');
+  const dots = container.querySelectorAll('.changelog-dot');
+  if(!pager || !dots.length) return;
+  pager.addEventListener('scroll', () => {
+    const idx = Math.round(pager.scrollLeft / pager.clientWidth);
+    dots.forEach((d,i)=> d.style.background = i===idx ? 'var(--g0)' : 'var(--bd2)');
+  }, {passive:true});
+}
+
 // 아직 구버전을 보고 있는 트레이너에게 "새로고침하면 업데이트돼요"라고 안내함.
 // checkAppVersion()이 화면 복귀/주기적 타이머로 여러 번 돌 수 있어서, 이미
 // 배너가 떠 있으면 또 띄우지 않게 막음(안 막으면 겹쳐서 계속 쌓일 수 있음)
 function showUpdateBanner(newVersion){
   if(document.getElementById('updateBannerOverlay')) return;
-  const notesHtml = changelogNotesHtml(newVersion);
+  const currentVersion = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
+  const versions = collectMissedVersions(currentVersion, newVersion);
+  const pagerHtml = versions.length ? buildChangelogPagerHtml(versions) : '';
   const overlay = document.createElement('div');
   overlay.id = 'updateBannerOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
@@ -7260,29 +7323,35 @@ function showUpdateBanner(newVersion){
     <div style="background:var(--sf);border-radius:var(--r16);padding:28px 24px;max-width:300px;width:90%;text-align:center;">
       <div style="font-size:24px;margin-bottom:12px;">🆕</div>
       <div style="font-size:16px;font-weight:700;color:var(--t);margin-bottom:6px;">새 버전이 있어요</div>
-      <div style="font-size:13px;color:var(--t3);margin-bottom:${notesHtml?'12px':'20px'};">v${newVersion} 업데이트가 있어요.</div>
-      ${notesHtml}
+      <div style="font-size:13px;color:var(--t3);margin-bottom:${pagerHtml?'12px':'20px'};">v${newVersion} 업데이트가 있어요.</div>
+      ${pagerHtml}
       <button onclick="location.reload(true)" style="width:100%;padding:13px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
     </div>`;
   document.body.appendChild(overlay);
+  wireChangelogPager(overlay);
 }
 
 // 방금 새로고침해서 이미 최신 버전을 받은 트레이너에게 "이번에 뭐가 바뀌었는지"
-// 보여줌 — showUpdateBanner와 달리 새로고침을 유도할 필요가 없어서 버튼이 그냥 닫기
-function showJustUpdatedBanner(newVersion){
-  const notesHtml = changelogNotesHtml(newVersion);
-  if(!notesHtml) return; // 보여줄 변경 내용이 없으면 굳이 팝업 안 띄움
+// 보여줌 — showUpdateBanner와 달리 새로고침을 유도할 필요가 없어서 버튼이 그냥 닫기.
+// lastSeenVersion부터 currentVersion까지 사이에 놓친 버전이 여러 개면 전부 모아서
+// 옆으로 넘겨볼 수 있는 카드로 보여줌(예전엔 최신 버전 하나만 보이고 중간에
+// 배포된 내용은 영영 확인할 방법이 없었음)
+function showJustUpdatedBanner(newVersion, fromVersion){
+  const versions = collectMissedVersions(fromVersion, newVersion);
+  if(!versions.length) return; // 보여줄 변경 내용이 없으면 굳이 팝업 안 띄움
+  const pagerHtml = buildChangelogPagerHtml(versions);
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
   overlay.innerHTML = `
     <div style="background:var(--sf);border-radius:var(--r16);padding:28px 24px;max-width:300px;width:90%;text-align:center;">
       <div style="font-size:24px;margin-bottom:12px;">✨</div>
       <div style="font-size:16px;font-weight:700;color:var(--t);margin-bottom:6px;">v${newVersion}(으)로 업데이트됐어요</div>
-      <div style="font-size:13px;color:var(--t3);margin-bottom:12px;">이번에 이런 점이 달라졌어요</div>
-      ${notesHtml}
+      <div style="font-size:13px;color:var(--t3);margin-bottom:12px;">${versions.length>1?'그동안 이런 점들이 달라졌어요':'이번에 이런 점이 달라졌어요'}</div>
+      ${pagerHtml}
       <button onclick="this.closest('div').parentElement.remove()" style="width:100%;padding:13px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
     </div>`;
   document.body.appendChild(overlay);
+  wireChangelogPager(overlay);
 }
 
 /* ═══════════════════════════════════════
