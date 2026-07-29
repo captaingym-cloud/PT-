@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.0"/>
+<meta name="app-version" content="2.8.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -5830,7 +5830,7 @@ function renderJournalSettingsToggle(){
 // 종목명은 트레이너마다 앞뒤 공백/전각공백 등 미세한 차이로 다르게 입력할 수 있어서,
 // 학습된 색을 다시 찾을 때 놓치지 않도록 트림 정도만 통일해서 키로 씀
 function exerciseColorKey(name){
-  return (name||'').trim();
+  return normalizeExName(name);
 }
 
 // 사용자가 직접 색을 고른 경우에만 호출됨 (자동 추측 결과는 학습 안 함 — 그건
@@ -6725,6 +6725,12 @@ function removeMemoPhotoFile(mode, idx, fi){
 // 바로 못 불러옴 — fetch로 받아서 blob:// URL로 바꿔서 씀
 async function loadAuthedImage(apiUrl){
   try{
+    // 로그인 토큰은 1시간 정도면 만료되는데, 여긴 fsGet/fsSet과 달리
+    // ensureFreshToken()을 안 거치고 fsToken을 바로 썼음 — 그래서 트레이너가
+    // 앱을 오래 켜놓고 쓰다가(수업 여러 개 하다 보면 흔함) 메모 사진을 열면
+    // 만료된 토큰으로 요청이 401 나서 조용히 실패하고, 사진 칸이 그냥
+    // 빈 채로("저장했는데 안 보임") 남는 문제가 있었음
+    await ensureFreshToken();
     const res = await fetch(apiUrl, { headers:{ 'Authorization':'Bearer '+fsToken } });
     if(!res.ok) return null;
     const blob = await res.blob();
@@ -6743,6 +6749,7 @@ function openMemoPhotoViewerByEl(imgEl){
 }
 
 async function uploadMemoPhotos(memberId, memoId, files){
+  await ensureFreshToken(); // 만료된 토큰으로 업로드하면 401로 조용히 실패함
   const uploaded = [];
   let failCount = 0;
   for(const file of files){
@@ -6783,6 +6790,7 @@ async function deleteMemoPhotoByUrl(url){
   const key = new URL(url, location.origin).searchParams.get('key');
   if(!key) return;
   try{
+    await ensureFreshToken();
     await fetch(`/api/memo-photo?key=${encodeURIComponent(key)}`, {
       method:'DELETE',
       headers:{ 'Authorization':'Bearer '+fsToken },
@@ -7149,6 +7157,10 @@ const CHANGELOG = {
     '종목명을 예전 것과 똑같이 입력해서 지난 기록을 불러올 때, 그 종목에 달아뒀던 코멘트도 같이 불러와요',
     '지난 일지를 수정해서 기록이 더 좋아져도 신기록 표시가 안 뜨던 문제를 고쳤어요 (일지 상세보기에도 신기록 표시가 뜨도록 추가했어요)',
     '기존 일지를 수정하는 중에 화면이 꺼지는 등으로 저장을 못 했을 때, 다시 열면 수정하던 내용을 이어서 쓸지 물어봐요 (예전엔 마지막 저장 이후 수정한 내용이 그대로 사라졌어요)'
+  ],
+  '2.8.1': [
+    '앱을 오래 켜두고 쓰다가 메모 사진을 열면 로그인이 만료돼서 사진이 저장은 됐는데 안 보이던 문제를 고쳤어요',
+    '종목명에 띄어쓰기만 다르게 입력해도(예: "바벨 컬"과 "바벨컬") 같은 종목으로 인식해서 지난 기록과 코멘트를 불러와요'
   ]
 };
 
@@ -8499,11 +8511,19 @@ function removeSet(ei,si){
 /* ═══════════════════════════════════════
    EXERCISE CARDS
 ═══════════════════════════════════════ */
+// 종목명 비교용 정규화 — "바벨 컬"과 "바벨컬"처럼 띄어쓰기만 다르면 트레이너
+// 입장에선 같은 종목인데, 정확히 문자열이 같아야만 지난 기록을 찾던 예전
+// 방식은 이걸 다른 종목으로 취급해서 지난 기록/코멘트가 안 딸려왔음
+function normalizeExName(name){
+  return (name||'').replace(/\s+/g,'').toLowerCase();
+}
 async function getLastExData(name){
   if(!currentMember) return null;
+  const target = normalizeExName(name);
+  if(!target) return null;
   const hist=await getMemberHistory(currentMember.id);
   for(let i=hist.length-1;i>=0;i--){
-    const ex=(hist[i].exercises||[]).find(e=>e.name===name);
+    const ex=(hist[i].exercises||[]).find(e=>normalizeExName(e.name)===target);
     if(ex) return ex;
   }
   return null;
