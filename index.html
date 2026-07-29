@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.7.8"/>
+<meta name="app-version" content="2.8.0"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -2205,6 +2205,23 @@ function clearDraft(mid){
 function hasDraft(mid){
   return !!localStorage.getItem(getDraftKey(mid));
 }
+
+// 기존 일지 "수정" 중 임시저장 — 새 일지 draft와 별개 키를 씀(entryId까지
+// 포함해야, 같은 회원의 다른 회차를 수정할 때 엉뚱한 회차에 이 초안이
+// 잘못 복원되지 않음). 수업 중 저장 버튼을 눌러가며 쓰다가 화면이 꺼지는
+// 순간 마지막 탭이 씹혀서 최근 몇 번의 수정분이 통째로 날아가 보이던
+// 문제 때문에 도입함 — 새 일지 draft와 동일하게 visibilitychange/beforeunload
+// 시점에 localStorage로 내려가서 화면이 꺼져도 살아남음
+function getEditDraftKey(mid, entryId){ return 'editdraft_'+TRAINER_ID+'_'+mid+'_'+entryId; }
+function getEditDraft(mid, entryId){
+  try{ return JSON.parse(localStorage.getItem(getEditDraftKey(mid, entryId))); } catch{ return null; }
+}
+function saveEditDraft(mid, entryId, data){
+  localStorage.setItem(getEditDraftKey(mid, entryId), JSON.stringify(data));
+}
+function clearEditDraft(mid, entryId){
+  localStorage.removeItem(getEditDraftKey(mid, entryId));
+}
 async function delMemberData(mid){
   if(!TRAINER_ID) return;
   const legacyHk = 'hist_'+TRAINER_ID+'_'+mid;
@@ -2232,7 +2249,15 @@ let currentMember = null; // {id, name}
 let exercises = [];
 let selectedParts = [];
 let editingEntryIdx = null; // null이면 새 일지, 숫자면 수정 모드 (해당 인덱스)
+let _editingEntryId = null; // 수정 모드에서 지금 고치고 있는 일지의 id (editdraft 키에 씀)
 let _editDirty = false; // 수정 모드에서 저장 안 한 변경사항이 있는지
+// 수정 폼을 막 열었을 때(저장된 원본을 불러왔을 때)의 스냅샷 — autoSaveDraft가
+// 이 값과 지금 폼 내용을 비교해서, 트레이너가 아직 아무것도 안 고쳤으면
+// editdraft를 새로 만들지 않게 함. 이게 없으면 openEditJournal이 끝날 때
+// recalcAll()이 autoSaveDraft()를 부르면서 "방금 불러온 원본 그대로"인
+// 상태를 곧장 editdraft로 다시 저장해버려서, 트레이너가 아무것도 안 고치고
+// 나가도(또는 "취소"로 초안을 버려도) editdraft가 계속 되살아나는 문제가 있었음
+let _editLoadedSnapshot = null;
 // "저장" 버튼(saveOnly/saveAndCopy)으로 방금 저장한 폼 내용의 스냅샷(JSON
 // 문자열). null이면 "저장 직후 상태 아님". true/false 플래그가 아니라
 // 스냅샷을 통째로 들고 있는 이유: 저장 이후 폼이 실제로 달라졌는지를
@@ -3785,6 +3810,13 @@ async function openMemberJournals(member){
   if(selList) selList.innerHTML = '';
   const selMemo = document.getElementById('calSelectedMemo');
   if(selMemo) selMemo.innerHTML = '';
+  // 메모 탭(inlineMemoInput)에 저장 안 한 채로 남겨둔 이전 회원의 초안이
+  // 그대로 남아있으면 새 회원 화면에서도 그 초안이 그대로 보이는 문제가
+  // 있었음 — 회원을 열 때마다 확실히 비움
+  const inlineMemo = document.getElementById('inlineMemoInput');
+  if(inlineMemo){ inlineMemo.value = ''; inlineMemo.style.height = 'auto'; }
+  inlineMemoPhotoFiles = [];
+  renderMemoPhotoPreview('inline');
   await buildCalHistDates();
   renderCalendar();
   renderJournalList();
@@ -3949,10 +3981,25 @@ function calSelectDate(key, d){
       const wrap = document.createElement('div');
       wrap.style.cssText = 'margin-top:8px;';
       wrap.innerHTML = `<div style="font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.05em;margin-bottom:6px;">📝 이날 메모</div>`;
-      dayMemos.forEach(m => {
+      dayMemos.forEach((m, mi) => {
         const box = document.createElement('div');
         box.style.cssText = 'background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r12);padding:10px 14px;margin-bottom:6px;font-size:13px;color:var(--t);line-height:1.7;white-space:pre-wrap;';
         box.textContent = m.content;
+        if((m.photos||[]).length){
+          const photosWrap = document.createElement('div');
+          photosWrap.style.cssText = 'display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;';
+          m.photos.forEach((p,pi)=>{
+            const img = document.createElement('img');
+            img.id = `calMemoPhoto-${mi}-${pi}`;
+            img.style.cssText = 'width:64px;height:64px;object-fit:cover;border-radius:8px;border:0.5px solid var(--bd);cursor:pointer;background:var(--sf2);';
+            img.onclick = function(){ openMemoPhotoViewerByEl(this); };
+            photosWrap.appendChild(img);
+            loadAuthedImage(p.url).then(blobUrl=>{
+              if(blobUrl){ img.src = blobUrl; img.dataset.fullUrl = blobUrl; }
+            });
+          });
+          box.appendChild(photosWrap);
+        }
         wrap.appendChild(box);
       });
       memoContainer.appendChild(wrap);
@@ -4259,7 +4306,10 @@ async function goToMembers(){
     }
   }
   if(declinedSave){
-    if(currentMember) clearDraft(currentMember.id);
+    if(currentMember){
+      clearDraft(currentMember.id);
+      if(_editingEntryId) clearEditDraft(currentMember.id, _editingEntryId);
+    }
   } else {
     // 일지 작성 화면에서 바로 나가는 경우를 위한 안전망
     autoSaveDraft();
@@ -4267,6 +4317,7 @@ async function goToMembers(){
   _editDirty = false;
   _justSavedSnapshot = null;
   editingEntryIdx = null;
+  _editingEntryId = null; _editLoadedSnapshot = null;
   showScreen('screen-members');
   renderMemberList();
 }
@@ -5186,6 +5237,13 @@ async function openDetailModal(e, idx){
     html += '<div class="detail-section">';
     html += '<div class="detail-eyebrow">세트 기록</div>';
     e.exercises.forEach((ex, i) => {
+      const bwEx = isBodyweight(ex);
+      const timeEx = !!ex.timeMode;
+      const mw = exMaxW(ex);
+      const maxR = (ex.sets||[]).length ? Math.max(...ex.sets.map(st=>st.r||0)) : 0;
+      const isPR = (bwEx||timeEx)
+        ? (ex.prevMaxR>0 && maxR>ex.prevMaxR)
+        : (!isAssist(ex) && ex.prevMaxW>0 && mw>ex.prevMaxW);
       const diff = ex.vol - (ex.prevVol||0);
       const pct  = ex.prevVol ? Math.round((diff/ex.prevVol)*100) : null;
       const c = (typeof EX_COLORS !== 'undefined') ? EX_COLORS.find(c=>c.id===ex.color) : null;
@@ -5196,7 +5254,7 @@ async function openDetailModal(e, idx){
       if(linkedToPrev) html += '<div style="font-size:10px;font-weight:700;color:var(--g0);letter-spacing:.05em;padding:2px 0 4px;">🔗 슈퍼세트</div>';
       html += '<div class="detail-card" style="margin-bottom:4px;">';
       html += '<div class="detail-ex-header">'
-        +'<span class="detail-ex-name" style="'+nameBg+'color:'+nameColor+';">'+ex.name+'</span>'
+        +'<span class="detail-ex-name" style="'+nameBg+'color:'+nameColor+';">'+ex.name+(isPR?' <span style="color:var(--red);font-weight:700;">✦ 신기록</span>':'')+'</span>'
         +'<span class="detail-ex-chip">볼륨 '+volDisplay(ex,ex.vol)+'kg'+(pct!==null?' ('+(diff>=0?'+':'')+pct+'%)':'')+'</span>'
         +'</div>';
       if(isAssist(ex)) html += '<div style="font-size:11px;color:var(--t3);padding:0 2px 6px;">☝️ 총 볼륨에 적용되지 않아요</div>';
@@ -5593,11 +5651,48 @@ async function openEditJournal(idx){
 
   closeDetailModal();
   editingEntryIdx = idx;
+  _editingEntryId = e.id;
   _justSavedSnapshot = null; // 새로 여는 수정 폼이니 이전 "저장 완료" 상태를 안 물려받게 함
 
   // 수정 모드에서 메모 바 숨기기
   const bar = document.getElementById('recentMemoBar');
   if(bar) bar.style.display = 'none';
+
+  // 화면이 꺼지는 등으로 저장 못 하고 남겨진 수정 중 초안이 있으면 이어서
+  // 쓸지 확인 — 없으면(또는 "취소" 선택 시) 서버에 저장된 내용 그대로 불러옴
+  const editDraft = getEditDraft(forMember.id, e.id);
+  if(editDraft && confirm('저장하지 않은 수정 내용이 있어요.\n이어서 작성할까요?\n(취소하면 저장된 내용 그대로 불러와요)')){
+    selectedParts = editDraft.parts || [];
+    exercises = (editDraft.exercises||[]).map(ex=>({...ex, sets:(ex.sets||[]).map(s=>({...s}))}));
+    if(!exercises.length) exercises = [{name:'',prevMaxW:0,prevVol:0,comment:'',color:null,sets:[{w:0,r:10}]}];
+
+    document.getElementById('journalMemberName').textContent = currentMember.name + '님';
+    document.getElementById('journalFormTitle') && (document.getElementById('journalFormTitle').textContent = '일지 수정');
+
+    document.getElementById('iStreak').value = editDraft.session || e.streak || 1;
+    document.getElementById('iSession').value = editDraft.session || e.session || e.streak || 1;
+    updateSessionLabel();
+
+    setEntryDate(editDraft.entryDate || e.dateTime || todayISO());
+
+    renderExCards();
+    recalcAll();
+    const draftIv = parseInt(editDraft.intensity) || e.intensity || 70;
+    document.getElementById('iIntensity').value = draftIv;
+    updateIntensity(draftIv);
+    document.getElementById('iLetter').value = editDraft.letter || '';
+    const draftSessionMemoEl = document.getElementById('sessionMemoInput');
+    if(draftSessionMemoEl) draftSessionMemoEl.value = editDraft.sessionMemo || '';
+    const draftInputTabMemoEl = document.getElementById('inputTabMemoInput');
+    if(draftInputTabMemoEl) draftInputTabMemoEl.value = editDraft.sessionMemo || '';
+
+    _editDirty = true; // 초안을 불러왔으니 저장 안 한 변경사항이 있는 상태로 침
+    _editLoadedSnapshot = null; // 초안 자체가 "저장 안 한 변경"이므로 항상 dirty 취급
+    switchTab('input');
+    showScreen('screen-journal');
+    return;
+  }
+  clearEditDraft(forMember.id, e.id);
 
   // 데이터 복원
   selectedParts = [...(e.parts||[])];
@@ -5655,6 +5750,7 @@ async function openEditJournal(idx){
   if(inputTabMemoEl) inputTabMemoEl.value = restoredMemo;
 
   _editDirty = false; // 방금 불러온 초기 상태는 "변경사항 없음"으로 침
+  _editLoadedSnapshot = currentJournalFormSnapshot(); // autoSaveDraft가 "아직 안 바뀜"을 판단하는 기준
   switchTab('input');
   showScreen('screen-journal');
 }
@@ -6311,7 +6407,10 @@ async function openJournalSettings(){
 async function resetJournalForm(){
   if(!confirm('작성 중인 내용을 모두 지울까요?\n되돌릴 수 없어요.')) return;
   closeModal('modal-journalSettings');
-  if(currentMember) clearDraft(currentMember.id);
+  if(currentMember){
+    clearDraft(currentMember.id);
+    if(_editingEntryId) clearEditDraft(currentMember.id, _editingEntryId);
+  }
   _justSavedSnapshot = null;
   if(editingEntryIdx !== null && editingEntryIdx !== undefined){
     const idx = editingEntryIdx;
@@ -6319,6 +6418,7 @@ async function resetJournalForm(){
     await openEditJournal(idx);
   } else {
     editingEntryIdx = null;
+    _editingEntryId = null; _editLoadedSnapshot = null;
     await openNewJournal();
   }
   _editDirty = false;
@@ -6517,7 +6617,10 @@ async function goBack(){
   if(declinedSave){
     // "저장 안 함"을 골랐는데 바로 아래 autoSaveDraft()가 다시 임시저장해버리면
     // 다음에 이 회원 목록에서 계속 "작성 중" 배지가 남는 문제가 있었음
-    if(currentMember) clearDraft(currentMember.id);
+    if(currentMember){
+      clearDraft(currentMember.id);
+      if(_editingEntryId) clearEditDraft(currentMember.id, _editingEntryId);
+    }
   } else {
     // 화면 나가기 직전에 마지막 입력 상태를 한 번 더 임시저장함 (oninput 이벤트가
     // 이미 대부분 저장하지만, 화면 전환 자체는 그 이벤트들에 안 걸려있어서
@@ -6528,6 +6631,7 @@ async function goBack(){
   _editDirty = false;
   _justSavedSnapshot = null;
   editingEntryIdx = null;
+  _editingEntryId = null; _editLoadedSnapshot = null;
   showScreen('screen-journals');
   renderJournalList();
 }
@@ -6803,10 +6907,30 @@ async function loadDraftToForm(){
 function autoSaveDraft(){
   if(!currentMember) return;
   if(editingEntryIdx !== null){
-    // 기존 일지 수정 중엔 임시저장은 안 하지만, 뭔가 바뀌었다는 것만 기록해뒀다가
-    // 저장 없이 나가려고 할 때 확인창을 띄우는 데 씀
+    // 기존 일지 수정 중엔 "바뀐 게 있다"는 표시만 하는 게 아니라, 실제 내용도
+    // localStorage에 내려둠 — 안 그러면 수업 중 저장 버튼을 눌러가며 쓰다가
+    // 화면이 꺼지는 순간(탭이 씹히는 등) 마지막 저장 이후의 수정분이 메모리에만
+    // 있다가 통째로 날아가는 문제가 있었음. 새 일지 draft와 같은 방식으로
+    // visibilitychange/beforeunload 때 여기로 들어와 저장됨
     const journalScreen = document.getElementById('screen-journal');
-    if(journalScreen && journalScreen.classList.contains('active')) _editDirty = true;
+    if(!journalScreen || !journalScreen.classList.contains('active') || !_editingEntryId) return;
+    // 방금 불러온 원본(또는 방금 저장한 내용)에서 하나도 안 바뀌었으면 editdraft를
+    // 새로 만들지 않음 — 안 그러면 openEditJournal 끝의 recalcAll()이 곧바로
+    // autoSaveDraft()를 불러서, "취소"로 초안을 버리고 원본을 불러온 직후에도
+    // 그 원본 그대로가 다시 editdraft로 저장되어 초안이 계속 되살아나 버림
+    if(_editLoadedSnapshot !== null && _editLoadedSnapshot === currentJournalFormSnapshot()) return;
+    _editDirty = true;
+    const editData = {
+      parts: [...selectedParts],
+      exercises: exercises.map(ex=>({...ex, sets:[...ex.sets]})),
+      intensity: document.getElementById('iIntensity')?.value || 70,
+      session: document.getElementById('iSession')?.value || 1,
+      letter: document.getElementById('iLetter')?.value || '',
+      sessionMemo: document.getElementById('sessionMemoInput')?.value || '',
+      entryDate: document.getElementById('iEntryDate')?.value || '',
+      savedAt: new Date().toISOString(),
+    };
+    saveEditDraft(currentMember.id, _editingEntryId, editData);
     return;
   }
   // "저장" 버튼으로 지금 폼 내용을 이미 저장했고 그 뒤로 폼이 하나도 안
@@ -7015,6 +7139,16 @@ const CHANGELOG = {
   ],
   '2.7.8': [
     '편지 자동 작성이 몇 줄 쓰다가 중간에 끊기던 문제를 고쳤어요 — 이제 끝까지 완성된 편지가 나와요'
+  ],
+  '2.7.9': [
+    '대표님 대시보드 "오늘 수업" 집계 기준을 수업 예정일이 아니라 실제로 일지를 저장한 시각으로 바꿨어요 — 트레이너가 미래 날짜로 미리 써둔 일지가 오늘 것으로 잘못 잡히지 않아요'
+  ],
+  '2.8.0': [
+    '달력 메모에 첨부한 사진이 안 보이던 문제를 고쳤어요',
+    '메모를 쓰다 저장 안 하고 다른 회원을 열면 이전 회원의 메모 초안이 그대로 남아있던 문제를 고쳤어요',
+    '종목명을 예전 것과 똑같이 입력해서 지난 기록을 불러올 때, 그 종목에 달아뒀던 코멘트도 같이 불러와요',
+    '지난 일지를 수정해서 기록이 더 좋아져도 신기록 표시가 안 뜨던 문제를 고쳤어요 (일지 상세보기에도 신기록 표시가 뜨도록 추가했어요)',
+    '기존 일지를 수정하는 중에 화면이 꺼지는 등으로 저장을 못 했을 때, 다시 열면 수정하던 내용을 이어서 쓸지 물어봐요 (예전엔 마지막 저장 이후 수정한 내용이 그대로 사라졌어요)'
   ]
 };
 
@@ -7275,7 +7409,10 @@ async function loadDashTrainerList(){
     let todayTotal = 0, todaySent = 0;
     await Promise.all(members.map(async m => {
       const hist = await getMemberHistoryFor(t.trainerId, m.id).catch(()=>[]);
-      hist.filter(e=>(e.date||'').startsWith(todayStr)).forEach(e=>{
+      // 수업 날짜(e.date)가 아니라 "실제 저장 시각"(writtenAt) 기준 — 트레이너가
+      // 며칠 전 미래 일자로 계획 일지를 미리 써두는 경우, 그 일지가 실제로는
+      // 오늘 작성된 게 아닌데도 "오늘 일지"로 잡히는 걸 방지하기 위함
+      hist.filter(e=>e.writtenAt && new Date(e.writtenAt).toDateString() === today.toDateString()).forEach(e=>{
         todayTotal++;
         const k = m.id+'_'+e.id;
         if(sent[k]&&sent[k].count>0) todaySent++;
@@ -8553,6 +8690,14 @@ async function autoFillPrev(ei, name, skipSetFill){
       ...(s.drops && s.drops.length ? { drops: s.drops.map(d=>({w:d.w||0, r:d.r||0, _prevFilled:true})) } : {}),
     }));
     buildSetRows(ei); updateExFooter(ei);
+    // 세트와 마찬가지로 지난 회차에 적어둔 종목별 코멘트도 같이 불러옴 —
+    // 트레이너가 기억해뒀다가 다시 옮겨 적을 필요 없이 그대로 보고 고쳐 쓰면 됨.
+    // 트레이너가 이미 오늘 코멘트를 직접 썼으면 덮어쓰지 않음
+    if(!(exercises[ei].comment||'').trim() && (prev.comment||'').trim()){
+      exercises[ei].comment = prev.comment;
+      const commentEl = document.querySelector('#exCard-'+ei+' .ex-comment-inp');
+      if(commentEl){ commentEl.value = prev.comment; autoGrow(commentEl); }
+    }
     // 처음 겪는 트레이너는 "왜 숫자가 이미 채워져있지?" 헷갈릴 수 있어서,
     // 이 동작을 처음 볼 때만 안내를 한 번 붙여줌 (드래그/색상 힌트와 같은 방식)
     if(infoEl && !localStorage.getItem('hint_prevfill_seen')){
@@ -8875,6 +9020,9 @@ async function _saveJournalInner(memberId){
       streak:parseInt(document.getElementById('iStreak').value)||1,
       session:parseInt(document.getElementById('iSession').value)||1,
       letter:document.getElementById('iLetter').value.trim(),
+      writtenAt: new Date().toISOString(), // 대표 대시보드에서 "실제 작성 시각" 기준으로
+      // 오늘 일지를 판별하기 위함. 수업일(date)과 달리 트레이너가 미리 써둔
+      // 미래 일자 일지가 "오늘 작성"으로 잘못 잡히는 걸 방지
     };
   } else {
     const entryDate = getShortDate(entryDateIso);
@@ -8897,6 +9045,7 @@ async function _saveJournalInner(memberId){
       streak:parseInt(document.getElementById('iStreak').value)||1,
       session: sessionNum,
       letter:document.getElementById('iLetter').value.trim(),
+      writtenAt: new Date().toISOString(),
     };
 
     if(existIdx >= 0){
@@ -8940,6 +9089,7 @@ async function _saveJournalInner(memberId){
   // 않게 하고, 폼을 다시 안 건드리는 한 autoSaveDraft()가 draft를 재생성하지도
   // 않게 함 (justSavedAndUnchanged() 참고)
   clearDraft(memberId);
+  if(_editingEntryId) clearEditDraft(memberId, _editingEntryId);
   _justSavedSnapshot = currentJournalFormSnapshot();
 
   // 달력 갱신
@@ -8949,6 +9099,7 @@ async function _saveJournalInner(memberId){
   await renderMemberList(); // 회원 목록 갱신 (만료 체크 등)
 
   editingEntryIdx = null;
+  _editingEntryId = null; _editLoadedSnapshot = null;
   return true;
 }
 
