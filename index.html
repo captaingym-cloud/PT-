@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.1"/>
+<meta name="app-version" content="2.8.2"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -5411,6 +5411,12 @@ async function renderMemberNote(){
       preview.style.color = 'var(--t)';
       card.style.borderColor = 'var(--g3)';
       card.style.background = 'var(--g2)';
+    } else if((note?.photos||[]).length){
+      // 글자 없이 사진만 있는 경우 — "메모 없음"으로 잘못 보이지 않게 함
+      preview.textContent = '사진만 첨부됨';
+      preview.style.color = 'var(--t3)';
+      card.style.borderColor = 'var(--g3)';
+      card.style.background = 'var(--g2)';
     } else {
       preview.textContent = '메모 없음 — 탭해서 추가';
       preview.style.color = 'var(--t3)';
@@ -5507,7 +5513,10 @@ async function saveMemberNote(){
   const keptPhotos = (existingNote?.photos||[]).filter(p => !memberNoteRemovedPhotos.some(r=>r.id===p.id));
   const room = MEMO_PHOTO_LIMIT - keptPhotos.length;
   let finalPhotos = keptPhotos;
-  if(text){
+  // 글자 없이 사진만 추가한 경우도 "저장"으로 취급해야 함 — 예전엔 text가
+  // 비어있으면 무조건 메모를 통째로 삭제하는 분기로 빠져서, 사진만 첨부하고
+  // 저장을 누르면 방금 올린 사진까지 전부 같이 지워져버리는 문제가 있었음
+  if(text || noteMemoPhotoFiles.length || keptPhotos.length){
     const entry = {id:'note', content:text, updatedAt:new Date().toISOString(), photos:keptPhotos};
     if(noteMemoPhotoFiles.length && room>0){
       const uploaded = await uploadMemoPhotos(currentMember.id, 'note', noteMemoPhotoFiles.slice(0,room));
@@ -5529,6 +5538,12 @@ async function saveMemberNote(){
     if(text){
       preview.textContent = text;
       preview.style.color = 'var(--t)';
+      card.style.borderColor = 'var(--g3)';
+      card.style.background = 'var(--g2)';
+    } else if(finalPhotos.length){
+      // 글자 없이 사진만 있는 경우 — "메모 없음"으로 잘못 보이지 않게 함
+      preview.textContent = '사진만 첨부됨';
+      preview.style.color = 'var(--t3)';
       card.style.borderColor = 'var(--g3)';
       card.style.background = 'var(--g2)';
     } else {
@@ -7161,6 +7176,9 @@ const CHANGELOG = {
   '2.8.1': [
     '앱을 오래 켜두고 쓰다가 메모 사진을 열면 로그인이 만료돼서 사진이 저장은 됐는데 안 보이던 문제를 고쳤어요',
     '종목명에 띄어쓰기만 다르게 입력해도(예: "바벨 컬"과 "바벨컬") 같은 종목으로 인식해서 지난 기록과 코멘트를 불러와요'
+  ],
+  '2.8.2': [
+    '회원 특이사항에 글자 없이 사진만 첨부하고 저장하면, 저장이 아니라 메모 전체가 삭제되면서 사진도 같이 사라지던 문제를 고쳤어요'
   ]
 };
 
