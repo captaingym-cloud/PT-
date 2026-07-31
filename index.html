@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.9"/>
+<meta name="app-version" content="2.9.0"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -4357,7 +4357,7 @@ async function saveInlineEdit(idx){
 
   const keptPhotos = (target.photos||[]).filter(p => !removedPhotos.some(r=>r.id===p.id));
   const room = MEMO_PHOTO_LIMIT - keptPhotos.length;
-  const uploaded = newFiles.length && room>0 ? await uploadMemoPhotos(currentMember.id, target.id, newFiles.slice(0,room)) : [];
+  const uploaded = newFiles.length && room>0 ? await uploadMemoPhotos(currentMember.id, target.id, newFiles.slice(0,room), keptPhotos.map(p=>p.id)) : [];
   target.photos = [...keptPhotos, ...uploaded];
 
   const noteEntry = allMemos.find(m=>m.id==='note');
@@ -5663,7 +5663,7 @@ async function saveMemberNote(){
   if(text || noteMemoPhotoFiles.length || keptPhotos.length){
     const entry = {id:'note', content:text, updatedAt:new Date().toISOString(), photos:keptPhotos};
     if(noteMemoPhotoFiles.length && room>0){
-      const uploaded = await uploadMemoPhotos(currentMember.id, 'note', noteMemoPhotoFiles.slice(0,room));
+      const uploaded = await uploadMemoPhotos(currentMember.id, 'note', noteMemoPhotoFiles.slice(0,room), keptPhotos.map(p=>p.id));
       entry.photos = finalPhotos = [...keptPhotos, ...uploaded];
     }
     await saveMemos(currentMember.id, [entry]);
@@ -6907,7 +6907,13 @@ function openMemoPhotoViewerByEl(imgEl){
   document.body.appendChild(overlay);
 }
 
-async function uploadMemoPhotos(memberId, memoId, files){
+// keepIds: 이 메모에 지금 실제로 남아있어야 할 사진 id 목록(저장 직전 기준
+// photos 배열). 사진 삭제 요청이 실패하면 R2에는 그대로 남는데 Firestore
+// photos 배열엔 이미 빠져서 화면엔 안 보이는 "고아 사진"이 쌓일 수 있는데,
+// 매 업로드 때마다 이 목록을 서버에 같이 보내서 목록에 없는 R2 객체는
+// 자동으로 정리하게 함 — 안 그러면 실제로는 사진이 거의 없는데도 "메모당
+// 최대 3장" 제한에 조용히 걸려 새 사진을 하나도 못 올리는 문제가 생김
+async function uploadMemoPhotos(memberId, memoId, files, keepIds){
   await ensureFreshToken(); // 만료된 토큰으로 업로드하면 401로 조용히 실패함
   const uploaded = [];
   let failCount = 0;
@@ -6919,7 +6925,10 @@ async function uploadMemoPhotos(memberId, memoId, files){
       const formData = new FormData();
       const contentType = (file.type && file.type.startsWith('image/')) ? file.type : 'image/jpeg';
       formData.append('photo', file, file.name || 'photo.jpg');
-      const res = await fetch(`/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}&contentType=${encodeURIComponent(contentType)}`, {
+      // 업로드가 여러 장 이어질 때, 방금 올라간 사진도 다음 요청의 keepIds에
+      // 포함시켜야 스스로를 고아로 오판해 지우지 않음
+      const nowKeepIds = [...(keepIds||[]), ...uploaded.map(u=>u.id)].join(',');
+      const res = await fetch(`/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}&contentType=${encodeURIComponent(contentType)}&keepIds=${encodeURIComponent(nowKeepIds)}`, {
         method:'POST',
         headers:{ 'Authorization':'Bearer '+fsToken },
         body: formData,
@@ -6988,7 +6997,7 @@ async function saveInlineMemo(){
     const existingPhotos = todayEntry.photos || [];
     const room = MEMO_PHOTO_LIMIT - existingPhotos.length;
     if(room > 0){
-      const uploaded = await uploadMemoPhotos(memberId, todayEntry.id, photoFiles.slice(0, room));
+      const uploaded = await uploadMemoPhotos(memberId, todayEntry.id, photoFiles.slice(0, room), existingPhotos.map(p=>p.id));
       todayEntry.photos = [...existingPhotos, ...uploaded];
     }
   }
@@ -7354,6 +7363,9 @@ const CHANGELOG = {
   ],
   '2.8.9': [
     '지난 코멘트 참고 표시를 카드 형태로 다듬었어요'
+  ],
+  '2.9.0': [
+    '메모 사진을 삭제했는데 서버 응답이 실패하면, 실제로는 안 지워진 채로 남아있다가(고아 사진) "메모당 최대 3장" 제한에 걸려서 화면엔 사진이 하나도 안 보이는데도 새 사진을 못 올리는 문제가 있었어요 — 이제 사진을 올릴 때마다 실제로 남아있어야 할 사진만 남기고 자동으로 정리해서, 이런 상황이 생겨도 스스로 회복돼요'
   ]
 };
 

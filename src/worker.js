@@ -461,10 +461,30 @@ async function handleUploadMemoPhoto(request, env) {
     return jsonResponse({ ok: false, error: '빈 파일이에요.' }, 400);
   }
 
-  // 이미 몇 장 있는지 확인해서 3장 제한을 넘지 않게 함
+  // 이미 몇 장 있는지 확인해서 3장 제한을 넘지 않게 함.
+  // 클라이언트가 "지금 실제로 이 메모에 남아있어야 할 사진 id 목록"을
+  // keepIds로 같이 보내줌 — 사진을 삭제할 때 DELETE 요청이 네트워크 문제
+  // 등으로 실패하면 R2에는 그대로 남는데(고아 객체) Firestore의 photos
+  // 배열에는 이미 없어서 트레이너 화면엔 안 보이는 상태가 됨. 이런 고아가
+  // 쌓이면 실제 사진은 1장뿐인데도 "메모당 최대 3장" 제한에 걸려 새 사진을
+  // 하나도 못 올리는 문제가 있었음. 업로드 시점마다 keepIds에 없는 R2
+  // 객체는 이미 못 쓰는 고아로 보고 자동으로 정리한 뒤 개수를 셈
   const prefix = memoPhotoKey(trainerId, memberId, memoId, '');
   const existing = await env.PT_MEMO_PHOTOS.list({ prefix });
-  if (existing.objects.length >= MEMO_PHOTO_MAX_COUNT) {
+  // keepIds 파라미터 자체가 없는 요청(옛 버전 클라이언트 등)에서는 고아
+  // 정리를 건너뜀 — 안 그러면 "아무것도 안 남겨야 한다"는 뜻으로 잘못
+  // 해석해서 실제로 멀쩡히 쓰이고 있는 사진까지 전부 지워버릴 위험이 있음
+  const hasKeepIdsParam = url.searchParams.has('keepIds');
+  let survivorCount = existing.objects.length;
+  if (hasKeepIdsParam) {
+    const keepIds = new Set(url.searchParams.get('keepIds').split(',').map(s => s.trim()).filter(Boolean));
+    const orphans = existing.objects.filter(o => !keepIds.has(o.key.slice(prefix.length)));
+    if (orphans.length) {
+      await Promise.all(orphans.map(o => env.PT_MEMO_PHOTOS.delete(o.key)));
+    }
+    survivorCount = existing.objects.length - orphans.length;
+  }
+  if (survivorCount >= MEMO_PHOTO_MAX_COUNT) {
     return jsonResponse({ ok: false, error: `사진은 메모 1건당 최대 ${MEMO_PHOTO_MAX_COUNT}장까지만 넣을 수 있어요.` }, 400);
   }
 
