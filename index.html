@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.5"/>
+<meta name="app-version" content="2.8.6"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -823,7 +823,10 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
           <div style="font-size:13px;font-weight:600;color:var(--t);" id="memberInfoName"></div>
           <div style="font-size:12px;color:var(--t3);margin-top:3px;" id="memberInfoSessions"></div>
         </div>
-        <button onclick="openEditTotalSessions()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">세션 수정</button>
+        <div style="display:flex;gap:6px;">
+          <button onclick="openEditMemberName()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">이름 수정</button>
+          <button onclick="openEditTotalSessions()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">세션 수정</button>
+        </div>
       </div>
 
       <!-- 회원 특이사항 메모 -->
@@ -3767,6 +3770,24 @@ async function openEditTotalSessions(){
   await saveMember(currentMember);
   updateMemberInfoCard();
   updateSessionLabel();
+}
+
+async function openEditMemberName(){
+  if(!currentMember) return;
+  const val = prompt('회원 이름 수정', currentMember.name);
+  if(val === null) return;
+  const trimmed = val.trim();
+  if(!trimmed){ showToast('이름을 입력해주세요', true); return; }
+  if(trimmed === currentMember.name) return;
+  currentMember = { ...currentMember, name: trimmed };
+  const ok = await saveMember(currentMember);
+  if(!ok){ showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
+  // 이 화면(달력/일지 목록) 안에서 이름이 쓰이는 곳들을 전부 다시 그림 —
+  // currentMember만 바꾸고 안 건드리면 상단 타이틀 등은 예전 이름이 남아있음
+  document.getElementById('journalsTitle').textContent = trimmed + '님';
+  const nameEl = document.getElementById('memberInfoName');
+  if(nameEl) nameEl.textContent = trimmed + '님';
+  showToast('이름을 수정했어요 ✓');
 }
 
 async function deleteMember(mid, name){
@@ -7212,6 +7233,9 @@ const CHANGELOG = {
   ],
   '2.8.5': [
     '메모 사진 삭제가 서버에서 실패해도 화면엔 티가 안 나서, 나중에 그 자리에 사진을 다시 추가하면 "메모당 최대 3장" 제한에 조용히 걸리던 문제의 재발 방지 — 삭제 실패 시 콘솔에 남도록 고쳤어요'
+  ],
+  '2.8.6': [
+    '회원 이름을 수정할 수 있는 기능을 추가했어요 (회원 화면 상단 "이름 수정" 버튼)'
   ]
 };
 
