@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.8"/>
+<meta name="app-version" content="2.8.9"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -488,6 +488,9 @@ textarea{height:auto;resize:none;padding:8px 10px;line-height:1.6;}
 .ss-label{font-size:10px;font-weight:700;color:var(--g0);letter-spacing:.06em;padding:6px 14px 0;text-transform:uppercase;}
 .prev-auto-row{padding:6px 14px 8px;font-size:11px;color:var(--t3);border-bottom:0.5px solid var(--bd);min-height:0;}
 .prev-auto-row strong{color:var(--t2);font-weight:600;}
+.prev-comment-box{margin:0 14px 10px;padding:9px 11px;background:var(--sf2);border-left:2.5px solid var(--bd2);border-radius:0 var(--r8) var(--r8) 0;}
+.prev-comment-box .pcb-label{font-size:9.5px;font-weight:700;color:var(--t3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:3px;display:block;}
+.prev-comment-box .pcb-text{font-size:12px;color:var(--t2);line-height:1.55;white-space:pre-wrap;}
 .sets-area{padding:0 14px;border-top:0.5px solid var(--bd);}
 .sets-header{display:grid;grid-template-columns:26px 1fr 1fr auto auto 26px;gap:5px;align-items:center;padding:7px 0 4px;border-bottom:0.5px solid var(--bd);}
 .sets-header span{font-size:10px;color:var(--t3);letter-spacing:.03em;text-align:center;}
@@ -7348,6 +7351,9 @@ const CHANGELOG = {
   ],
   '2.8.8': [
     '같은 종목명을 입력해서 지난 기록을 불러올 때, 지난 코멘트가 오늘 코멘트 칸에 그대로 들어가 수정되던 걸 바꿨어요 — 이제 지난 코멘트는 참고용으로만 보여주고, 오늘 코멘트는 항상 새로 쓰게 돼요'
+  ],
+  '2.8.9': [
+    '지난 코멘트 참고 표시를 카드 형태로 다듬었어요'
   ]
 };
 
@@ -8811,7 +8817,7 @@ function buildExCard(ei){
         ${ei===0 && !localStorage.getItem('hint_drag_seen') ? '<span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">🔴가슴 🔵등 🟡어깨 🟢하체 🟣팔 🟠코어</span>' : ''}
       </div>
       <div class="prev-auto-row" id="prevInfo-${ei}"></div>
-      <div id="prevComment-${ei}" style="display:none;font-size:11.5px;color:var(--t3);padding:0 2px 6px;line-height:1.5;white-space:pre-wrap;"></div>
+      <div id="prevComment-${ei}" class="prev-comment-box" style="display:none;"></div>
       <div class="sets-area" id="sets-${ei}"></div>
       ${ei===0 && !localStorage.getItem('hint_drag_seen') ? '<div id="dragHint" style="font-size:11px;color:var(--g0);text-align:center;padding:4px 0 6px;font-weight:600;">⠿ 아이콘을 누른 채로 위아래로 끌면 순서가 바뀌어요</div>' : ''}
       <div class="ex-sets-summary" id="setsum-${ei}"></div>
@@ -8972,10 +8978,11 @@ async function autoFillPrev(ei, name, skipSetFill){
   if(prevCommentEl){
     if((prev.comment||'').trim()){
       prevCommentEl.style.display = 'block';
-      prevCommentEl.textContent = '💬 지난 코멘트: ' + prev.comment.trim();
+      prevCommentEl.innerHTML = '<span class="pcb-label">💬 지난 코멘트</span><span class="pcb-text"></span>';
+      prevCommentEl.querySelector('.pcb-text').textContent = prev.comment.trim();
     } else {
       prevCommentEl.style.display = 'none';
-      prevCommentEl.textContent = '';
+      prevCommentEl.innerHTML = '';
     }
   }
   recalcAll();
