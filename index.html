@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.3"/>
+<meta name="app-version" content="2.9.4"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -851,7 +851,7 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
           <button onclick="event.stopPropagation();document.getElementById('memberNotePhotoInput').click()" style="font-size:12px;color:var(--t2);background:var(--sf2);border:0.5px solid var(--bd);border-radius:var(--r8);padding:6px 12px;cursor:pointer;font-family:inherit;">📷 사진 추가</button>
           <div style="display:flex;gap:8px;">
             <button onclick="closeMemberNote()" style="padding:6px 14px;background:none;border:0.5px solid var(--bd);border-radius:20px;font-size:12px;color:var(--t2);cursor:pointer;font-family:inherit;">닫기</button>
-            <button onclick="saveMemberNote()" style="padding:6px 14px;background:var(--g0);border:none;border-radius:20px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;">저장</button>
+            <button id="memberNoteSaveBtn" onclick="saveMemberNote()" style="padding:6px 14px;background:var(--g0);border:none;border-radius:20px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;">저장</button>
           </div>
         </div>
       </div>
@@ -5654,7 +5654,28 @@ function closeMemberNote(){
   memberNoteRemovedPhotos = [];
 }
 
+let _savingMemberNote = false;
 async function saveMemberNote(){
+  if(!currentMember) return;
+  // 사진 업로드가 있으면 저장이 몇 초 걸릴 수 있는데, 그동안 버튼이 계속
+  // 눌러지는 상태로 남아있으면 트레이너가 "안 눌렸나?" 하고 다시 눌러서
+  // 저장이 중복 실행되는 문제가 있었음(실제로 재현됨 — 첫 클릭은 반응이
+  // 없어 보이다가 두 번째 클릭에서야 처리된 사례). 저장 중엔 버튼을
+  // 비활성화하고 "저장 중..."으로 바꿔서 트레이너가 기다릴 수 있게 함
+  if(_savingMemberNote) return;
+  _savingMemberNote = true;
+  const saveBtn = document.getElementById('memberNoteSaveBtn');
+  const saveBtnOrigText = saveBtn ? saveBtn.textContent : null;
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; saveBtn.style.opacity = '0.6'; }
+  try{
+    await saveMemberNoteInner();
+  } finally {
+    _savingMemberNote = false;
+    if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = saveBtnOrigText; saveBtn.style.opacity = ''; }
+  }
+}
+
+async function saveMemberNoteInner(){
   if(!currentMember) return;
   const text = document.getElementById('memberNoteInput').value.trim();
   const allMemos = await getMemos(currentMember.id);
@@ -7417,6 +7438,9 @@ const CHANGELOG = {
   ],
   '2.9.3': [
     '메모 사진이 저장에 실패해도(용량 초과, 이미 3장 꽉 참 등) "저장 완료"만 뜨고 사진은 조용히 안 붙던 문제를 고쳤어요 — 이제 사진이 안 붙었으면 정확한 이유와 함께 알려드려요'
+  ],
+  '2.9.4': [
+    '회원 특이사항 저장 버튼을 사진 업로드 중에 다시 누르면 저장이 중복 실행돼서 결과가 꼬일 수 있던 문제를 고쳤어요 — 저장 중엔 버튼이 "저장 중..."으로 바뀌고 다시 눌러도 무시돼요'
   ]
 };
 
