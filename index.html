@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.7"/>
+<meta name="app-version" content="2.8.8"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -7345,6 +7345,9 @@ const CHANGELOG = {
   '2.8.7': [
     '"세션 수정" 버튼이 "재등록"으로 바뀌었어요 — 이제 세션 수를 덮어쓰는 대신, 재등록할 때마다 날짜와 회차가 기록으로 남고 기존 회차에 누적돼요 (재등록 몇 번째인지, 총 몇 회차인지 한눈에 확인 가능)',
     '재등록 기록은 각각 수정·삭제할 수 있어서, 잘못 입력했을 때도 바로잡을 수 있어요'
+  ],
+  '2.8.8': [
+    '같은 종목명을 입력해서 지난 기록을 불러올 때, 지난 코멘트가 오늘 코멘트 칸에 그대로 들어가 수정되던 걸 바꿨어요 — 이제 지난 코멘트는 참고용으로만 보여주고, 오늘 코멘트는 항상 새로 쓰게 돼요'
   ]
 };
 
@@ -8808,6 +8811,7 @@ function buildExCard(ei){
         ${ei===0 && !localStorage.getItem('hint_drag_seen') ? '<span id="colorHint" style="font-size:10px;color:var(--t3);margin-left:4px;align-self:center;">🔴가슴 🔵등 🟡어깨 🟢하체 🟣팔 🟠코어</span>' : ''}
       </div>
       <div class="prev-auto-row" id="prevInfo-${ei}"></div>
+      <div id="prevComment-${ei}" style="display:none;font-size:11.5px;color:var(--t3);padding:0 2px 6px;line-height:1.5;white-space:pre-wrap;"></div>
       <div class="sets-area" id="sets-${ei}"></div>
       ${ei===0 && !localStorage.getItem('hint_drag_seen') ? '<div id="dragHint" style="font-size:11px;color:var(--g0);text-align:center;padding:4px 0 6px;font-weight:600;">⠿ 아이콘을 누른 채로 위아래로 끌면 순서가 바뀌어요</div>' : ''}
       <div class="ex-sets-summary" id="setsum-${ei}"></div>
@@ -8897,12 +8901,14 @@ async function autoFillPrev(ei, name, skipSetFill){
     }
   }
   const infoEl = document.getElementById('prevInfo-'+ei);
+  const prevCommentElEmpty = document.getElementById('prevComment-'+ei);
   if(!name.trim()){
     exercises[ei].prevMaxW = 0;
     exercises[ei].prevVol  = 0;
     exercises[ei].prevMaxR = 0;
     exercises[ei].prevMaxWReps = 0;
     if(infoEl) infoEl.innerHTML = '';
+    if(prevCommentElEmpty){ prevCommentElEmpty.style.display='none'; prevCommentElEmpty.textContent=''; }
     // 종목명을 지우면, 아직 트레이너가 손대지 않고 "지난번 그대로" 자동
     // 프리필된 세트값도 같이 원래 빈 상태로 되돌림 — 안 그러면 이름만 지워지고
     // 세트 박스엔 이전 종목의 숫자가 그대로 남아서 트레이너가 하나하나 다시
@@ -8918,6 +8924,7 @@ async function autoFillPrev(ei, name, skipSetFill){
     exercises[ei].prevMaxW = 0;
     exercises[ei].prevVol  = 0;
     if(infoEl) infoEl.innerHTML = '<span style="color:var(--t3);">지난 기록 없음</span>';
+    if(prevCommentElEmpty){ prevCommentElEmpty.style.display='none'; prevCommentElEmpty.textContent=''; }
     recalcAll(); return;
   }
   exercises[ei].prevMaxW = prev.maxW || 0;
@@ -8952,18 +8959,23 @@ async function autoFillPrev(ei, name, skipSetFill){
       ...(s.drops && s.drops.length ? { drops: s.drops.map(d=>({w:d.w||0, r:d.r||0, _prevFilled:true})) } : {}),
     }));
     buildSetRows(ei); updateExFooter(ei);
-    // 세트와 마찬가지로 지난 회차에 적어둔 종목별 코멘트도 같이 불러옴 —
-    // 트레이너가 기억해뒀다가 다시 옮겨 적을 필요 없이 그대로 보고 고쳐 쓰면 됨.
-    // 트레이너가 이미 오늘 코멘트를 직접 썼으면 덮어쓰지 않음
-    if(!(exercises[ei].comment||'').trim() && (prev.comment||'').trim()){
-      exercises[ei].comment = prev.comment;
-      const commentEl = document.querySelector('#exCard-'+ei+' .ex-comment-inp');
-      if(commentEl){ commentEl.value = prev.comment; autoGrow(commentEl); }
-    }
     // 처음 겪는 트레이너는 "왜 숫자가 이미 채워져있지?" 헷갈릴 수 있어서,
     // 이 동작을 처음 볼 때만 안내를 한 번 붙여줌 (드래그/색상 힌트와 같은 방식)
     if(infoEl && !localStorage.getItem('hint_prevfill_seen')){
       infoEl.innerHTML += '<div style="color:var(--g0);font-weight:600;margin-top:2px;">☝️ 지난번 세트를 그대로 불러왔어요. 오늘 값으로 고쳐 쓰면 돼요</div>';
+    }
+  }
+  // 지난 회차에 적어둔 종목별 코멘트는 오늘 입력칸에 채워 넣지 않고(그대로
+  // 두면 트레이너가 고친 건지 지난 내용 그대로인지 헷갈림), 참고할 수 있게
+  // 읽기 전용으로만 보여줌 — 오늘 코멘트는 항상 새로 씀
+  const prevCommentEl = document.getElementById('prevComment-'+ei);
+  if(prevCommentEl){
+    if((prev.comment||'').trim()){
+      prevCommentEl.style.display = 'block';
+      prevCommentEl.textContent = '💬 지난 코멘트: ' + prev.comment.trim();
+    } else {
+      prevCommentEl.style.display = 'none';
+      prevCommentEl.textContent = '';
     }
   }
   recalcAll();
