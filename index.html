@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.6"/>
+<meta name="app-version" content="2.8.7"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -825,7 +825,7 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
         </div>
         <div style="display:flex;gap:6px;">
           <button onclick="openEditMemberName()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">이름 수정</button>
-          <button onclick="openEditTotalSessions()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">세션 수정</button>
+          <button onclick="openEditTotalSessions()" style="font-size:12px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;">재등록</button>
         </div>
       </div>
 
@@ -898,6 +898,19 @@ html[data-theme="dark"] .bottom-btns{background:rgba(19,19,17,.94);}
     <div class="modal-btns">
       <button class="modal-btn cancel" onclick="closeModal('modal-addMember')">취소</button>
       <button class="modal-btn confirm" onclick="doAddMember()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 재등록 모달 -->
+<div class="modal-overlay" id="modal-registration" style="display:none;" onclick="if(event.target===this)closeRegistrationModal()">
+  <div class="modal-box">
+    <div class="modal-title">재등록 관리</div>
+    <div style="font-size:13px;color:var(--t2);margin-bottom:12px;" id="registrationTotalLabel"></div>
+    <div id="registrationList" style="max-height:320px;overflow-y:auto;margin-bottom:14px;"></div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeRegistrationModal()">닫기</button>
+      <button class="modal-btn confirm" onclick="addRegistration()">+ 재등록 추가</button>
     </div>
   </div>
 </div>
@@ -3760,14 +3773,106 @@ async function updateMemberInfoCard(){
   }
 }
 
+// 재등록 이력 — member.registrations: [{id, date, sessions}, ...]. totalSessions는
+// 항상 이 배열의 sessions 합계로 재계산해서 저장함(다른 화면들은 여전히
+// totalSessions 하나만 보고 있어서, 그 필드를 파생값으로 최신 유지하는 게
+// 기존 코드를 안 건드리고 재등록 이력을 얹는 가장 안전한 방법이었음)
+function recalcTotalSessionsFromRegistrations(member){
+  const regs = member.registrations || [];
+  const sum = regs.reduce((s,r)=>s+(parseInt(r.sessions)||0), 0);
+  return sum > 0 ? sum : null;
+}
+
+// 예전부터 총 세션 수(totalSessions)만 직접 입력해온 회원은 registrations가
+// 없음 — 처음 재등록 화면을 열 때 그 값을 "1번째 등록" 기록으로 1회성 변환함
+function ensureRegistrationsMigrated(member){
+  if(member.registrations) return member;
+  const regs = member.totalSessions
+    ? [{ id:'r_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), date:getShortDate(), sessions:member.totalSessions }]
+    : [];
+  return { ...member, registrations: regs };
+}
+
 async function openEditTotalSessions(){
   if(!currentMember) return;
-  const current = currentMember.totalSessions || '';
-  const val = prompt(`${currentMember.name}님 총 PT 세션 수\n현재: ${current || '미설정'}`, current);
+  currentMember = ensureRegistrationsMigrated(currentMember);
+  renderRegistrationList();
+  document.getElementById('modal-registration').style.display = 'flex';
+}
+
+function closeRegistrationModal(){
+  document.getElementById('modal-registration').style.display = 'none';
+}
+
+function renderRegistrationList(){
+  const el = document.getElementById('registrationList');
+  if(!el || !currentMember) return;
+  const regs = currentMember.registrations || [];
+  const total = recalcTotalSessionsFromRegistrations(currentMember);
+  document.getElementById('registrationTotalLabel').textContent = total ? `총 ${total}회` : '세션 수 미설정';
+  if(!regs.length){
+    el.innerHTML = '<div class="empty-state"><div class="e-icon">📋</div><div class="e-text">아직 등록 기록이 없어요</div></div>';
+    return;
+  }
+  el.innerHTML = [...regs].reverse().map(r => {
+    const idx = regs.findIndex(x=>x.id===r.id);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;background:var(--sf);border:0.5px solid var(--bd);border-radius:var(--r12);padding:12px 14px;margin-bottom:8px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--t);">${r.sessions}회</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:2px;">${dateWithWeekday(r.date)}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="editRegistration(${idx})" style="font-size:11px;color:var(--g1);background:var(--g2);border:0.5px solid var(--g3);border-radius:20px;padding:5px 10px;cursor:pointer;font-family:inherit;font-weight:600;">수정</button>
+        <button onclick="deleteRegistration(${idx})" style="font-size:11px;color:var(--red);background:none;border:0.5px solid var(--bd);border-radius:20px;padding:5px 10px;cursor:pointer;font-family:inherit;">삭제</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addRegistration(){
+  if(!currentMember) return;
+  const val = prompt('이번에 등록한 세션 수를 입력해주세요\n(재등록이면 기존 회차에 이어서 더해져요)');
   if(val === null) return;
-  const n = parseInt(val) || null;
-  currentMember = { ...currentMember, totalSessions: n };
-  await saveMember(currentMember);
+  const n = parseInt(val);
+  if(!n || n<=0){ showToast('세션 수를 정확히 입력해주세요', true); return; }
+  currentMember = ensureRegistrationsMigrated(currentMember);
+  const regs = [...(currentMember.registrations||[]), { id:'r_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), date:getShortDate(), sessions:n }];
+  currentMember = { ...currentMember, registrations: regs, totalSessions: recalcTotalSessionsFromRegistrations({registrations:regs}) };
+  const ok = await saveMember(currentMember);
+  if(!ok){ showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
+  renderRegistrationList();
+  updateMemberInfoCard();
+  updateSessionLabel();
+  showToast('등록했어요 ✓');
+}
+
+async function editRegistration(idx){
+  if(!currentMember) return;
+  const regs = currentMember.registrations||[];
+  const target = regs[idx];
+  if(!target) return;
+  const val = prompt('세션 수 수정', target.sessions);
+  if(val === null) return;
+  const n = parseInt(val);
+  if(!n || n<=0){ showToast('세션 수를 정확히 입력해주세요', true); return; }
+  const newRegs = regs.map((r,i)=> i===idx ? {...r, sessions:n} : r);
+  currentMember = { ...currentMember, registrations: newRegs, totalSessions: recalcTotalSessionsFromRegistrations({registrations:newRegs}) };
+  const ok = await saveMember(currentMember);
+  if(!ok){ showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
+  renderRegistrationList();
+  updateMemberInfoCard();
+  updateSessionLabel();
+}
+
+async function deleteRegistration(idx){
+  if(!currentMember) return;
+  if(!confirm('이 등록 기록을 삭제할까요?\n총 세션 수에서도 함께 빠져요.')) return;
+  const regs = currentMember.registrations||[];
+  const newRegs = regs.filter((_,i)=>i!==idx);
+  currentMember = { ...currentMember, registrations: newRegs, totalSessions: recalcTotalSessionsFromRegistrations({registrations:newRegs}) };
+  const ok = await saveMember(currentMember);
+  if(!ok){ showToast('⚠️ 저장에 실패했어요. 인터넷 연결을 확인하고 다시 시도해주세요.', true); return; }
+  renderRegistrationList();
   updateMemberInfoCard();
   updateSessionLabel();
 }
@@ -7236,6 +7341,10 @@ const CHANGELOG = {
   ],
   '2.8.6': [
     '회원 이름을 수정할 수 있는 기능을 추가했어요 (회원 화면 상단 "이름 수정" 버튼)'
+  ],
+  '2.8.7': [
+    '"세션 수정" 버튼이 "재등록"으로 바뀌었어요 — 이제 세션 수를 덮어쓰는 대신, 재등록할 때마다 날짜와 회차가 기록으로 남고 기존 회차에 누적돼요 (재등록 몇 번째인지, 총 몇 회차인지 한눈에 확인 가능)',
+    '재등록 기록은 각각 수정·삭제할 수 있어서, 잘못 입력했을 때도 바로잡을 수 있어요'
   ]
 };
 
