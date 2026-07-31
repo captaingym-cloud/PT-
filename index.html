@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.2"/>
+<meta name="app-version" content="2.9.3"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -4357,6 +4357,11 @@ async function saveInlineEdit(idx){
 
   const keptPhotos = (target.photos||[]).filter(p => !removedPhotos.some(r=>r.id===p.id));
   const room = MEMO_PHOTO_LIMIT - keptPhotos.length;
+  if(newFiles.length && room<=0){
+    // 이미 3장 꽉 찬 상태에서 새 사진을 첨부하면, 업로드 시도 자체를 안 하고
+    // 조용히 무시됐음 — 트레이너에게 티가 안 나서 사진이 안 붙은 이유를 알 방법이 없었음
+    showToast(`사진은 메모 1건당 최대 ${MEMO_PHOTO_LIMIT}장까지예요. 기존 사진을 먼저 지워주세요`, true);
+  }
   const uploaded = newFiles.length && room>0 ? await uploadMemoPhotos(currentMember.id, target.id, newFiles.slice(0,room), keptPhotos.map(p=>p.id)) : [];
   target.photos = [...keptPhotos, ...uploaded];
 
@@ -5657,6 +5662,8 @@ async function saveMemberNote(){
   const keptPhotos = (existingNote?.photos||[]).filter(p => !memberNoteRemovedPhotos.some(r=>r.id===p.id));
   const room = MEMO_PHOTO_LIMIT - keptPhotos.length;
   let finalPhotos = keptPhotos;
+  let photoUploadFailCount = 0;
+  let photoRoomExceeded = false;
   // 글자 없이 사진만 추가한 경우도 "저장"으로 취급해야 함 — 예전엔 text가
   // 비어있으면 무조건 메모를 통째로 삭제하는 분기로 빠져서, 사진만 첨부하고
   // 저장을 누르면 방금 올린 사진까지 전부 같이 지워져버리는 문제가 있었음
@@ -5664,7 +5671,14 @@ async function saveMemberNote(){
     const entry = {id:'note', content:text, updatedAt:new Date().toISOString(), photos:keptPhotos};
     if(noteMemoPhotoFiles.length && room>0){
       const uploaded = await uploadMemoPhotos(currentMember.id, 'note', noteMemoPhotoFiles.slice(0,room), keptPhotos.map(p=>p.id));
+      photoUploadFailCount = uploaded.failCount || 0;
       entry.photos = finalPhotos = [...keptPhotos, ...uploaded];
+    } else if(noteMemoPhotoFiles.length && room<=0){
+      // 이미 사진이 3장 꽉 차서 업로드 시도 자체를 안 한 경우 — 이것도
+      // "실패"로 취급해야 함. 안 그러면 트레이너가 4번째 사진을 첨부하고
+      // 저장을 눌렀는데 아무 안내도 없이 "저장 완료"만 뜨고 사진은 조용히
+      // 무시되는(=안 보이는) 상황이 됨
+      photoRoomExceeded = true;
     }
     await saveMemos(currentMember.id, [entry]);
   } else {
@@ -5698,7 +5712,18 @@ async function saveMemberNote(){
     }
   }
   renderMemberNotePhotoThumbs(finalPhotos);
-  showToast('저장 완료 ✓');
+  // 사진 업로드가 실패했으면 uploadMemoPhotos가 이미 실패 토스트를 띄운
+  // 상태라, 그 위에 "저장 완료"를 또 띄우면(같은 자리에 겹쳐 보여서) 트레이너
+  // 눈엔 성공한 것처럼만 보이고 실패 사실을 놓치게 됨 — 텍스트/기존 사진은
+  // 정상 저장됐으니 완전한 실패는 아니지만, 사진 결과가 안 좋았다는 걸
+  // 명확히 알림
+  if(photoRoomExceeded){
+    showToast(`사진은 메모 1건당 최대 ${MEMO_PHOTO_LIMIT}장까지예요. 기존 사진을 먼저 지워주세요`, true);
+  } else if(photoUploadFailCount > 0){
+    showToast(`나머지 내용은 저장됐지만, 사진 ${photoUploadFailCount}장은 저장하지 못했어요`, true);
+  } else {
+    showToast('저장 완료 ✓');
+  }
 }
 
 // 최근 세션 메모 최대 몇 개까지 안내 카드로 띄울지 — 너무 많으면 화면이 길어져서 3개로 제한.
@@ -6957,6 +6982,11 @@ async function uploadMemoPhotos(memberId, memoId, files, keepIds){
   if(failCount > 0){
     showToast(`사진 ${failCount}장 저장에 실패했어요. 다시 시도해주세요.`, true);
   }
+  // 호출한 쪽이 배열(uploaded)을 그대로 쓰면서도 실패 여부를 알 수 있게
+  // 속성으로 얹어둠 — 이게 없으면 사진 업로드가 실패해도 텍스트/기존 사진
+  // 저장까지는 계속 진행돼서 "저장 완료" 토스트가 실패 토스트 위에 겹쳐
+  // 뜨는 바람에, 트레이너 눈엔 성공한 것처럼만 보이는 문제가 있었음
+  uploaded.failCount = failCount;
   return uploaded;
 }
 
@@ -7002,6 +7032,11 @@ async function saveInlineMemo(){
   if(photoFiles.length){
     const existingPhotos = todayEntry.photos || [];
     const room = MEMO_PHOTO_LIMIT - existingPhotos.length;
+    if(room <= 0){
+      // 이미 3장 꽉 찬 상태에서 첨부하면 업로드 시도 자체를 안 하고 조용히
+      // 무시됐음 — 트레이너에게 티가 안 나서 사진이 안 붙은 이유를 알 방법이 없었음
+      showToast(`사진은 메모 1건당 최대 ${MEMO_PHOTO_LIMIT}장까지예요. 기존 사진을 먼저 지워주세요`, true);
+    }
     if(room > 0){
       const uploaded = await uploadMemoPhotos(memberId, todayEntry.id, photoFiles.slice(0, room), existingPhotos.map(p=>p.id));
       todayEntry.photos = [...existingPhotos, ...uploaded];
@@ -7379,6 +7414,9 @@ const CHANGELOG = {
   '2.9.2': [
     '새로고침을 눌러 업데이트하는 배너가 뜬 순간 일지를 작성 중이었다면, 저장 안 한 내용이 그대로 날아가던 문제를 고쳤어요 — 이제 새로고침 직전에 작성 중이던 내용을 임시저장해서, 다시 열면 이어서 쓸 수 있어요',
     '업데이트 배너(새로고침 유도)가 수업 시간(정시~50분)에는 안 뜨고, 매시 55분대에만 뜨도록 바꿨어요'
+  ],
+  '2.9.3': [
+    '메모 사진이 저장에 실패해도(용량 초과, 이미 3장 꽉 참 등) "저장 완료"만 뜨고 사진은 조용히 안 붙던 문제를 고쳤어요 — 이제 사진이 안 붙었으면 정확한 이유와 함께 알려드려요'
   ]
 };
 
