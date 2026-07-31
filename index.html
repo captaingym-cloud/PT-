@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.8.4"/>
+<meta name="app-version" content="2.8.5"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -6821,11 +6821,19 @@ async function deleteMemoPhotoByUrl(url){
   if(!key) return;
   try{
     await ensureFreshToken();
-    await fetch(`/api/memo-photo?key=${encodeURIComponent(key)}`, {
+    const res = await fetch(`/api/memo-photo?key=${encodeURIComponent(key)}`, {
       method:'DELETE',
       headers:{ 'Authorization':'Bearer '+fsToken },
     });
-  } catch(e){}
+    // 실패해도 화면엔 이미 사진이 빠진 것처럼 보여서 트레이너가 알 방법이
+    // 없었음 — R2에는 그대로 남아있다가(고아 객체) 나중에 "메모당 최대 3장"
+    // 제한에 조용히 걸려서 새 사진 첨부가 실패하는 원인이 됨. 삭제는 부수적인
+    // 뒷정리라 트레이너에게 토스트까지 띄우진 않지만, 콘솔에는 남겨서 재발
+    // 시 추적할 수 있게 함
+    if(!res.ok) console.error('메모 사진 삭제 실패:', res.status, key);
+  } catch(e){
+    console.error('메모 사진 삭제 실패(네트워크/예외):', e, key);
+  }
 }
 
 async function saveInlineMemo(){
@@ -7201,6 +7209,9 @@ const CHANGELOG = {
   '2.8.4': [
     '식단 탭 인바디 등록에서 한 회원의 성별/목표를 고르고 저장 전에 다른 회원으로 넘어가면, 화면엔 안 보이지만 그 값이 다른 회원의 기록으로 잘못 저장될 수 있던 문제를 고쳤어요',
     '업데이트 안내가 최신 배포 내용 하나만 보여줘서, 며칠 만에 여러 번 배포되면 중간 내용들이 묻히던 문제를 고쳤어요 — 이제 마지막으로 확인한 뒤 놓친 업데이트를 전부 옆으로 넘겨가며 볼 수 있어요'
+  ],
+  '2.8.5': [
+    '메모 사진 삭제가 서버에서 실패해도 화면엔 티가 안 나서, 나중에 그 자리에 사진을 다시 추가하면 "메모당 최대 3장" 제한에 조용히 걸리던 문제의 재발 방지 — 삭제 실패 시 콘솔에 남도록 고쳤어요'
   ]
 };
 
