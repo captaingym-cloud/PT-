@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.1"/>
+<meta name="app-version" content="2.9.2"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -6610,6 +6610,12 @@ async function refreshData(){
   // "방금 업데이트됨" 배너가 뜨도록 함 (이미 최신이었다면 배너가 다시 뜰 뿐
   // 데이터에는 영향 없음)
   localStorage.removeItem('last_seen_app_version');
+  // beforeunload가 뜨면 autoSaveDraft()가 알아서 처리하지만, 모바일 브라우저
+  // (특히 iOS Safari/인앱 브라우저)에서는 beforeunload 자체가 신뢰성 있게
+  // 발동하지 않는 경우가 흔해서, 여기서 리로드 직전에 한 번 더 명시적으로
+  // 저장함 — 이게 없으면 일지 작성 중 새로고침을 누를 때 저장 안 한 내용이
+  // 그대로 날아가는 문제가 있었음
+  autoSaveDraft();
   // HTML 파일 자체를 다시 받아와서 최신 버전 + 최신 데이터 로드
   location.reload(true);
 }
@@ -7369,6 +7375,10 @@ const CHANGELOG = {
   ],
   '2.9.1': [
     '매일 밤 자동 백업이 끝나면 이어서, 전체 트레이너·회원의 메모 사진 중 고아로 남은 게 있는지 자동으로 검사하고 정리하도록 했어요 (트레이너 화면에는 안 보이는 변화예요)'
+  ],
+  '2.9.2': [
+    '새로고침을 눌러 업데이트하는 배너가 뜬 순간 일지를 작성 중이었다면, 저장 안 한 내용이 그대로 날아가던 문제를 고쳤어요 — 이제 새로고침 직전에 작성 중이던 내용을 임시저장해서, 다시 열면 이어서 쓸 수 있어요',
+    '업데이트 배너(새로고침 유도)가 수업 시간(정시~50분)에는 안 뜨고, 매시 55분대에만 뜨도록 바꿨어요'
   ]
 };
 
@@ -7401,7 +7411,13 @@ async function checkAppVersion(){
     const html = await res.text();
     const m = html.match(/<meta name="app-version" content="([^"]+)"/);
     const liveVersion = m && m[1];
-    if(liveVersion && liveVersion !== currentVersion && isNewerVersion(liveVersion, currentVersion)){
+    // 새로고침을 유도하는 배너라 수업 중(정시~50분)에 뜨면 방해가 됨 — 55분대
+    // (트레이너들 사이 쉬는 시간)에만 띄우고, 그 외 시간엔 15분 주기 타이머가
+    // 알아서 다시 체크하다가 55분대에 걸리는 순간 뜨게 함. 새로고침이 필요
+    // 없는 "방금 업데이트됨" 안내(showJustUpdatedBanner)는 이 제한과 무관함
+    const minute = new Date().getMinutes();
+    const inQuietWindow = minute >= 55;
+    if(liveVersion && liveVersion !== currentVersion && isNewerVersion(liveVersion, currentVersion) && inQuietWindow){
       showUpdateBanner(liveVersion);
     }
   } catch(e){}
@@ -7476,6 +7492,15 @@ function wireChangelogPager(container){
   }, {passive:true});
 }
 
+// 업데이트 배너의 "확인" 버튼에서 씀 — beforeunload에 걸린 autoSaveDraft()에만
+// 기대면 안 되는 이유는 refreshData() 주석 참고(모바일 브라우저에서
+// beforeunload가 신뢰성 있게 발동하지 않는 경우가 흔함). 일지 작성 중에
+// 하필 이 배너가 뜨는 경우가 있어서, 리로드 전에 반드시 명시적으로 저장함
+function reloadForUpdate(){
+  autoSaveDraft();
+  location.reload(true);
+}
+
 // 아직 구버전을 보고 있는 트레이너에게 "새로고침하면 업데이트돼요"라고 안내함.
 // checkAppVersion()이 화면 복귀/주기적 타이머로 여러 번 돌 수 있어서, 이미
 // 배너가 떠 있으면 또 띄우지 않게 막음(안 막으면 겹쳐서 계속 쌓일 수 있음)
@@ -7493,7 +7518,7 @@ function showUpdateBanner(newVersion){
       <div style="font-size:16px;font-weight:700;color:var(--t);margin-bottom:6px;">새 버전이 있어요</div>
       <div style="font-size:13px;color:var(--t3);margin-bottom:${pagerHtml?'12px':'20px'};">v${newVersion} 업데이트가 있어요.</div>
       ${pagerHtml}
-      <button onclick="location.reload(true)" style="width:100%;padding:13px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
+      <button onclick="reloadForUpdate()" style="width:100%;padding:13px;background:var(--g0);color:#fff;border:none;border-radius:var(--r12);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
     </div>`;
   document.body.appendChild(overlay);
   wireChangelogPager(overlay);
