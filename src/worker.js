@@ -326,6 +326,115 @@ async function runFullBackup(env) {
 }
 
 /* ═══════════════════════════════════════
+   메모 사진 고아 객체 자동 정리 (매일 백업 직후)
+   — v2.9.0에서 업로드 시점마다 자동으로 정리하게 고쳤지만, 트레이너가
+   한동안 그 메모에 새 사진을 안 올리면 고아가 계속 쌓여있을 수 있음.
+   매일 밤 방금 끝낸 백업 스냅샷(각 회원의 memos, 즉 photos 배열까지 이미
+   다 갖고 있음)을 그대로 재사용해서, R2(PT_MEMO_PHOTOS)에서 그 어떤
+   memos[].photos[].id로도 참조되지 않는 객체를 찾아 지움. 백업과 동일한
+   배치/이어가기 구조 — Worker 1회 실행당 subrequest 한도를 넘지 않게
+   트레이너 TRAINERS_PER_BATCH명씩만 처리하고 진행 상태를 R2에 저장함
+═══════════════════════════════════════ */
+const ORPHAN_SWEEP_PROGRESS_KEY = 'backups/_orphan_sweep_progress.json';
+const ORPHAN_SWEEP_LOG_PREFIX = 'orphan-sweep-logs/';
+
+async function runOrphanSweep(env, dateKey, snapshot) {
+  const existingLog = await env.PT_BACKUPS.head(`${ORPHAN_SWEEP_LOG_PREFIX}${dateKey}.json`);
+  if (existingLog) {
+    return { ok: true, done: true, skipped: true };
+  }
+
+  const progressObj = await env.PT_BACKUPS.get(ORPHAN_SWEEP_PROGRESS_KEY);
+  let progress = progressObj ? await progressObj.json().catch(() => null) : null;
+
+  if (!progress || progress.dateKey !== dateKey) {
+    progress = { dateKey, trainerIndex: 0, deletedCount: 0, affected: [] };
+  }
+
+  const trainers = snapshot.trainers || [];
+  const endIndex = Math.min(progress.trainerIndex + TRAINERS_PER_BATCH, trainers.length);
+  for (let i = progress.trainerIndex; i < endIndex; i++) {
+    const trainer = trainers[i];
+    const tid = trainer.trainerId;
+    if (!tid) continue;
+    for (const memberEntry of trainer.members || []) {
+      const member = memberEntry.member;
+      if (!member || !member.id) continue;
+      const memos = memberEntry.memos || [];
+      const keepIds = new Set();
+      memos.forEach((m) => (m.photos || []).forEach((p) => p.id && keepIds.add(p.id)));
+      const memoIds = new Set(memos.map((m) => m.id).filter(Boolean));
+      memoIds.add('note'); // 회원 특이사항은 memoId가 항상 'note'
+
+      let memberDeleted = 0;
+      for (const memoId of memoIds) {
+        const prefix = memoPhotoKey(tid, member.id, memoId, '');
+        const list = await env.PT_MEMO_PHOTOS.list({ prefix });
+        const orphans = list.objects.filter((o) => !keepIds.has(o.key.slice(prefix.length)));
+        if (orphans.length) {
+          await Promise.all(orphans.map((o) => env.PT_MEMO_PHOTOS.delete(o.key)));
+          memberDeleted += orphans.length;
+        }
+      }
+      if (memberDeleted > 0) {
+        progress.deletedCount += memberDeleted;
+        progress.affected.push({
+          trainerId: tid,
+          trainerName: trainer.name || tid,
+          memberId: member.id,
+          memberName: member.name || member.id,
+          deletedCount: memberDeleted,
+        });
+      }
+    }
+  }
+  progress.trainerIndex = endIndex;
+
+  const done = progress.trainerIndex >= trainers.length;
+  if (!done) {
+    await env.PT_BACKUPS.put(ORPHAN_SWEEP_PROGRESS_KEY, JSON.stringify(progress), {
+      httpMetadata: { contentType: 'application/json' },
+    });
+    return { ok: true, done: false, processed: progress.trainerIndex, total: trainers.length };
+  }
+
+  const log = {
+    dateKey,
+    ranAt: new Date().toISOString(),
+    deletedCount: progress.deletedCount,
+    affectedMembers: progress.affected,
+  };
+  await env.PT_BACKUPS.put(`${ORPHAN_SWEEP_LOG_PREFIX}${dateKey}.json`, JSON.stringify(log), {
+    httpMetadata: { contentType: 'application/json' },
+  });
+  await env.PT_BACKUPS.delete(ORPHAN_SWEEP_PROGRESS_KEY);
+
+  // 오래된 로그 정리 (백업과 같은 보관 기간 정책 재사용)
+  const cutoff = Date.now() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const logList = await env.PT_BACKUPS.list({ prefix: ORPHAN_SWEEP_LOG_PREFIX });
+  for (const obj of logList.objects) {
+    if (obj.uploaded && new Date(obj.uploaded).getTime() < cutoff) {
+      await env.PT_BACKUPS.delete(obj.key);
+    }
+  }
+
+  return { ok: true, done: true, deletedCount: progress.deletedCount, affectedMembers: progress.affected.length };
+}
+
+// 백업이 끝난 뒤 이어서 고아 사진 정리를 시도함 — 아직 백업 자체가 안
+// 끝났으면(done:false) 스킵하고 다음 cron 틱에서 백업 이어가기가 먼저
+// 진행되게 함. 백업 스냅샷 파일을 다시 읽어와서 그 안의 memos 데이터를 그대로 씀
+async function continueOrphanSweepIfBackupDone(env, backupResult) {
+  if (!backupResult.ok || !backupResult.done || !backupResult.key) return;
+  const dateKey = backupResult.key.replace('backups/', '').replace('.json', '');
+  const snapshotObj = await env.PT_BACKUPS.get(backupResult.key);
+  if (!snapshotObj) return;
+  const snapshot = await snapshotObj.json().catch(() => null);
+  if (!snapshot) return;
+  await runOrphanSweep(env, dateKey, snapshot);
+}
+
+/* ═══════════════════════════════════════
    대표(헬스장 관리자) 대시보드 인증
    (2026-07-10 헬스장/대표/트레이너 3단계 구조 도입 — 대표가 자기 헬스장
    트레이너들의 데이터를 봐야 하는데, firestore.rules상 그러려면 __admin__
@@ -565,6 +674,30 @@ export default {
         return jsonResponse({ ok: false, error: '권한이 없어요.' }, 403);
       }
       const result = await runFullBackup(env);
+      if (result.ok && result.done && result.key) {
+        await continueOrphanSweepIfBackupDone(env, result);
+      }
+      return jsonResponse(result, result.ok ? 200 : 500);
+    }
+    if (url.pathname === '/api/orphan-sweep-continue' && request.method === 'POST') {
+      // 고아 사진 정리는 항상 그날 백업이 끝난 뒤에만 진행되므로, 배치가
+      // 한 번에 안 끝났을 때(done:false) 수동으로 이어서 돌리는 용도.
+      // 매일 자동으로는 scheduled()가 백업 뒤에 이어서 알아서 처리함
+      const pin = url.searchParams.get('pin');
+      if (!pin || pin !== env.DASH_ADMIN_PIN) {
+        return jsonResponse({ ok: false, error: '권한이 없어요.' }, 403);
+      }
+      const dateKey = new Date().toISOString().slice(0, 10);
+      const backupKey = `backups/${dateKey}.json`;
+      const snapshotObj = await env.PT_BACKUPS.get(backupKey);
+      if (!snapshotObj) {
+        return jsonResponse({ ok: false, error: '오늘치 백업이 아직 없어요. 먼저 백업을 완료해주세요.' }, 400);
+      }
+      const snapshot = await snapshotObj.json().catch(() => null);
+      if (!snapshot) {
+        return jsonResponse({ ok: false, error: '백업 스냅샷을 읽지 못했어요.' }, 500);
+      }
+      const result = await runOrphanSweep(env, dateKey, snapshot);
       return jsonResponse(result, result.ok ? 200 : 500);
     }
     if (url.pathname === '/api/owner-auth' && request.method === 'POST') {
@@ -588,7 +721,12 @@ export default {
   // triggers.crons 설정 참고). 한 번에 한 배치만 처리하고, 오늘치 백업이
   // 이미 끝나 있으면 runFullBackup이 곧바로 skip 처리해서 조용히 리턴함 —
   // 그래서 하루 종일 돌아도 실제로는 새벽에 몇 번만 의미 있게 실행됨.
+  // 백업이 done:true를 반환한 틱에 이어서 고아 사진 정리도 시도함(그 전
+  // 틱들은 아직 백업 중이라 스냅샷이 없으므로 자동으로 스킵됨) — 정리도
+  // 배치 구조라 한 번에 안 끝나면 다음 틱들에서 이어서 마저 처리됨
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runFullBackup(env));
+    ctx.waitUntil(
+      runFullBackup(env).then((backupResult) => continueOrphanSweepIfBackupDone(env, backupResult))
+    );
   },
 };

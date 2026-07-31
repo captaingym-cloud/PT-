@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.0"/>
+<meta name="app-version" content="2.9.1"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -7366,6 +7366,9 @@ const CHANGELOG = {
   ],
   '2.9.0': [
     '메모 사진을 삭제했는데 서버 응답이 실패하면, 실제로는 안 지워진 채로 남아있다가(고아 사진) "메모당 최대 3장" 제한에 걸려서 화면엔 사진이 하나도 안 보이는데도 새 사진을 못 올리는 문제가 있었어요 — 이제 사진을 올릴 때마다 실제로 남아있어야 할 사진만 남기고 자동으로 정리해서, 이런 상황이 생겨도 스스로 회복돼요'
+  ],
+  '2.9.1': [
+    '매일 밤 자동 백업이 끝나면 이어서, 전체 트레이너·회원의 메모 사진 중 고아로 남은 게 있는지 자동으로 검사하고 정리하도록 했어요 (트레이너 화면에는 안 보이는 변화예요)'
   ]
 };
 
