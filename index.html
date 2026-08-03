@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.5"/>
+<meta name="app-version" content="2.9.6"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -5684,6 +5684,7 @@ async function saveMemberNoteInner(){
   const room = MEMO_PHOTO_LIMIT - keptPhotos.length;
   let finalPhotos = keptPhotos;
   let photoUploadFailCount = 0;
+  let photoUploadFailReasons = [];
   let photoRoomExceeded = false;
   // 글자 없이 사진만 추가한 경우도 "저장"으로 취급해야 함 — 예전엔 text가
   // 비어있으면 무조건 메모를 통째로 삭제하는 분기로 빠져서, 사진만 첨부하고
@@ -5693,6 +5694,7 @@ async function saveMemberNoteInner(){
     if(noteMemoPhotoFiles.length && room>0){
       const uploaded = await uploadMemoPhotos(currentMember.id, 'note', noteMemoPhotoFiles.slice(0,room), keptPhotos.map(p=>p.id));
       photoUploadFailCount = uploaded.failCount || 0;
+      photoUploadFailReasons = uploaded.failReasons || [];
       entry.photos = finalPhotos = [...keptPhotos, ...uploaded];
     } else if(noteMemoPhotoFiles.length && room<=0){
       // 이미 사진이 3장 꽉 차서 업로드 시도 자체를 안 한 경우 — 이것도
@@ -5741,7 +5743,12 @@ async function saveMemberNoteInner(){
   if(photoRoomExceeded){
     showToast(`사진은 메모 1건당 최대 ${MEMO_PHOTO_LIMIT}장까지예요. 기존 사진을 먼저 지워주세요`, true);
   } else if(photoUploadFailCount > 0){
-    showToast(`나머지 내용은 저장됐지만, 사진 ${photoUploadFailCount}장은 저장하지 못했어요`, true);
+    // uploadMemoPhotos가 이미 구체적인 이유(용량 초과, 시간 초과 등)와 함께
+    // 실패 토스트를 띄운 상태라, 여기서 또 띄우면 두 토스트가 겹쳐 보임 —
+    // 그 토스트가 이미 못 봤을 수 있으니 여기서는 "나머지는 저장됨"이라는
+    // 맥락만 이유와 함께 다시 한번 명확히 보여줌
+    const reasonText = photoUploadFailReasons.length ? ` (${[...new Set(photoUploadFailReasons)].join(', ')})` : '';
+    showToast(`나머지 내용은 저장됐지만, 사진 ${photoUploadFailCount}장은 저장하지 못했어요${reasonText}`, true);
   } else {
     showToast('저장 완료 ✓');
   }
@@ -7010,10 +7017,23 @@ async function compressImageIfNeeded(file){
 // 매 업로드 때마다 이 목록을 서버에 같이 보내서 목록에 없는 R2 객체는
 // 자동으로 정리하게 함 — 안 그러면 실제로는 사진이 거의 없는데도 "메모당
 // 최대 3장" 제한에 조용히 걸려 새 사진을 하나도 못 올리는 문제가 생김
+// 사진 업로드는 시간이 걸리다 보니(느린 네트워크, 태블릿 등), fetch에 아무
+// 시간 제한이 없으면 서버가 응답을 영영 안 주는 상황(네트워크가 응답 없이
+// 끊기는 경우 등)에서 saveMemberNote()가 "저장 중..." 상태로 무한정 멈춰
+// 있는 것처럼 보이는 문제가 있었음. 15초 안에 응답이 없으면 확실히 실패로
+// 처리해서, 적어도 "무한 대기"는 없게 함
+const MEMO_PHOTO_UPLOAD_TIMEOUT_MS = 15000;
+function fetchWithTimeout(url, options, timeoutMs){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(()=>clearTimeout(timer));
+}
+
 async function uploadMemoPhotos(memberId, memoId, files, keepIds){
   await ensureFreshToken(); // 만료된 토큰으로 업로드하면 401로 조용히 실패함
   const uploaded = [];
   let failCount = 0;
+  const failReasons = []; // 트레이너에게 구체적인 실패 이유를 보여주기 위해 모아둠
   for(const rawFile of files){
     try{
       const file = await compressImageIfNeeded(rawFile);
@@ -7026,34 +7046,46 @@ async function uploadMemoPhotos(memberId, memoId, files, keepIds){
       // 업로드가 여러 장 이어질 때, 방금 올라간 사진도 다음 요청의 keepIds에
       // 포함시켜야 스스로를 고아로 오판해 지우지 않음
       const nowKeepIds = [...(keepIds||[]), ...uploaded.map(u=>u.id)].join(',');
-      const res = await fetch(`/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}&contentType=${encodeURIComponent(contentType)}&keepIds=${encodeURIComponent(nowKeepIds)}`, {
+      const res = await fetchWithTimeout(`/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}&contentType=${encodeURIComponent(contentType)}&keepIds=${encodeURIComponent(nowKeepIds)}`, {
         method:'POST',
         headers:{ 'Authorization':'Bearer '+fsToken },
         body: formData,
-      });
+      }, MEMO_PHOTO_UPLOAD_TIMEOUT_MS);
       const data = await res.json().catch(()=>null);
       if(data && data.ok){
         uploaded.push({ id:data.photoId, url:data.url });
       } else {
         failCount++;
+        // 서버가 보낸 구체적인 이유(용량 초과, 3장 제한 등)를 그대로 보여줌 —
+        // 예전엔 "다시 시도해주세요"로 뭉뚱그려서 트레이너가 왜 실패했는지
+        // 전혀 알 수 없었음
+        const reason = data?.error || `서버 오류 (${res.status})`;
+        failReasons.push(reason);
         console.error('메모 사진 업로드 실패:', res.status, data);
       }
     } catch(e){
+      failCount++;
+      // AbortController가 타임아웃으로 끊으면 DOMException(name='AbortError')이 던져짐
+      const reason = e?.name === 'AbortError' ? '서버 응답이 너무 늦어요 (시간 초과)' : '네트워크 오류';
+      failReasons.push(reason);
       // 사진 하나 실패해도 나머지는 계속 시도하되, 실패했다는 사실 자체는
       // 반드시 트레이너에게 알림 — 예전엔 여기서 조용히 삼켜서 "저장 완료"
       // 토스트만 뜨고 사진은 하나도 안 올라간 걸 트레이너가 알 방법이 없었음
-      failCount++;
       console.error('메모 사진 업로드 실패(네트워크/예외):', e);
     }
   }
   if(failCount > 0){
-    showToast(`사진 ${failCount}장 저장에 실패했어요. 다시 시도해주세요.`, true);
+    // 이유가 다 같으면 한 번만, 다르면 각각 보여줌
+    const uniqueReasons = [...new Set(failReasons)];
+    const reasonText = uniqueReasons.length ? ` (${uniqueReasons.join(', ')})` : '';
+    showToast(`사진 ${failCount}장 저장에 실패했어요${reasonText}`, true);
   }
   // 호출한 쪽이 배열(uploaded)을 그대로 쓰면서도 실패 여부를 알 수 있게
   // 속성으로 얹어둠 — 이게 없으면 사진 업로드가 실패해도 텍스트/기존 사진
   // 저장까지는 계속 진행돼서 "저장 완료" 토스트가 실패 토스트 위에 겹쳐
   // 뜨는 바람에, 트레이너 눈엔 성공한 것처럼만 보이는 문제가 있었음
   uploaded.failCount = failCount;
+  uploaded.failReasons = failReasons;
   return uploaded;
 }
 
@@ -7490,6 +7522,10 @@ const CHANGELOG = {
   ],
   '2.9.5': [
     '폰 카메라로 찍은 사진처럼 용량이 큰(5MB 초과) 사진을 첨부하면 서버가 거부해서 저장이 실패했는데, 이제 용량이 클 때만 자동으로 적당히 줄여서 올려요 — 대부분 화질 차이 없이 바로 저장돼요'
+  ],
+  '2.9.6': [
+    '사진 저장이 실패하면 이제 정확한 이유(용량 초과, 시간 초과 등)를 함께 알려드려요',
+    '사진 업로드가 응답 없이 15초 넘게 걸리면 "저장 중..."에서 멈춰있지 않고 자동으로 실패 처리해서 다시 시도할 수 있게 했어요'
   ]
 };
 
