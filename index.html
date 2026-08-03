@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.4"/>
+<meta name="app-version" content="2.9.5"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -6959,6 +6959,51 @@ function openMemoPhotoViewerByEl(imgEl){
   document.body.appendChild(overlay);
 }
 
+// 서버 쪽 사진 용량 제한(worker.js MEMO_PHOTO_MAX_BYTES)과 반드시 맞춰야 함
+const MEMO_PHOTO_MAX_BYTES_CLIENT = 5 * 1024 * 1024;
+
+// 요즘 폰 카메라는 기본 설정으로도 사진 한 장이 5~15MB를 쉽게 넘는데, 트레이너는
+// 이 용량 제한을 미리 알 방법이 없어서 앨범에서 고른 사진이 그냥 조용히
+// 실패하는 것처럼 느껴짐(정확히는 "저장 실패" 토스트가 뜨지만 왜 실패했는지
+// 모름). 모든 사진에 무조건 압축을 걸면 화질이 아쉬워지니, 제한을 넘는
+// 사진만 캔버스로 리사이즈해서 용량을 줄인 뒤 업로드함
+async function compressImageIfNeeded(file){
+  if(file.size <= MEMO_PHOTO_MAX_BYTES_CLIENT) return file;
+  try{
+    const bitmap = await createImageBitmap(file);
+    let { width, height } = bitmap;
+    // 용량 초과분에 비례해서 가로세로를 줄임(면적은 용량에 거의 비례하므로
+    // sqrt로 축소 비율을 잡음) — 최소 1200px은 유지해서 너무 흐려지지 않게 함
+    const scale = Math.sqrt(MEMO_PHOTO_MAX_BYTES_CLIENT / file.size) * 0.9; // 여유를 위해 90%
+    const targetLongSide = Math.max(1200, Math.round(Math.max(width, height) * scale));
+    if(width >= height){
+      height = Math.round(height * targetLongSide / width);
+      width = targetLongSide;
+    } else {
+      width = Math.round(width * targetLongSide / height);
+      height = targetLongSide;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    // 화질을 단계적으로 낮춰가며 용량 제한 안에 들어올 때까지 재압축 시도
+    for(const quality of [0.85, 0.7, 0.55, 0.4]){
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+      if(blob && blob.size <= MEMO_PHOTO_MAX_BYTES_CLIENT){
+        return new File([blob], (file.name||'photo').replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg'});
+      }
+    }
+    // 그래도 안 되면 마지막 시도 결과라도 반환(서버가 다시 거부하면 그대로
+    // 실패 처리되지만, 최소한 원본보다는 훨씬 작아진 상태)
+    const finalBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.4));
+    return finalBlob ? new File([finalBlob], (file.name||'photo').replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg'}) : file;
+  } catch(e){
+    console.error('사진 압축 실패, 원본으로 시도:', e);
+    return file;
+  }
+}
+
 // keepIds: 이 메모에 지금 실제로 남아있어야 할 사진 id 목록(저장 직전 기준
 // photos 배열). 사진 삭제 요청이 실패하면 R2에는 그대로 남는데 Firestore
 // photos 배열엔 이미 빠져서 화면엔 안 보이는 "고아 사진"이 쌓일 수 있는데,
@@ -6969,8 +7014,9 @@ async function uploadMemoPhotos(memberId, memoId, files, keepIds){
   await ensureFreshToken(); // 만료된 토큰으로 업로드하면 401로 조용히 실패함
   const uploaded = [];
   let failCount = 0;
-  for(const file of files){
+  for(const rawFile of files){
     try{
+      const file = await compressImageIfNeeded(rawFile);
       // File 객체를 fetch body에 직접 넣는 방식은 카톡 인앱브라우저 등
       // 일부 웹뷰에서 제대로 처리되지 않는 경우가 있어서(조용히 실패),
       // 가장 폭넓게 지원되는 FormData/multipart로 감싸서 보냄
@@ -7441,6 +7487,9 @@ const CHANGELOG = {
   ],
   '2.9.4': [
     '회원 특이사항 저장 버튼을 사진 업로드 중에 다시 누르면 저장이 중복 실행돼서 결과가 꼬일 수 있던 문제를 고쳤어요 — 저장 중엔 버튼이 "저장 중..."으로 바뀌고 다시 눌러도 무시돼요'
+  ],
+  '2.9.5': [
+    '폰 카메라로 찍은 사진처럼 용량이 큰(5MB 초과) 사진을 첨부하면 서버가 거부해서 저장이 실패했는데, 이제 용량이 클 때만 자동으로 적당히 줄여서 올려요 — 대부분 화질 차이 없이 바로 저장돼요'
   ]
 };
 
