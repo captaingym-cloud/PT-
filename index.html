@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.6"/>
+<meta name="app-version" content="2.9.7"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -7526,6 +7526,10 @@ const CHANGELOG = {
   '2.9.6': [
     '사진 저장이 실패하면 이제 정확한 이유(용량 초과, 시간 초과 등)를 함께 알려드려요',
     '사진 업로드가 응답 없이 15초 넘게 걸리면 "저장 중..."에서 멈춰있지 않고 자동으로 실패 처리해서 다시 시도할 수 있게 했어요'
+  ],
+  '2.9.7': [
+    '초 단위(시간)로 기록해둔 운동을 다시 입력하면 개수 모드로 잘못 바뀌던 문제를 고쳤어요',
+    '종목명을 고치려고 백스페이스를 한 글자만 눌러도, 완전히 다 지우지 않아도 이전 세트 값이 바로 초기화되게 했어요'
   ]
 };
 
@@ -9079,9 +9083,43 @@ function renderExCards(){
 }
 
 async function autoFillPrev(ei, name, skipSetFill){
-  // 등척성 자동 감지 (수동 토글 아닌 경우만) — 다른 일지를 복제해온 경우엔
-  // 이미 그 종목의 실제 세트값이 들어있으니 건드리면 안 됨(skipSetFill)
-  const nowTime = ISOMETRIC_KEYWORDS.some(k=>(name||'').toLowerCase().includes(k));
+  const infoEl = document.getElementById('prevInfo-'+ei);
+  const prevCommentElEmpty = document.getElementById('prevComment-'+ei);
+  // 종목명이 지난번 자동채움 당시의 이름과 달라지면(한 글자만 지워도) 그
+  // 프리필된 세트값을 원래 빈 상태로 되돌림 — 예전엔 이름을 완전히 지워야만
+  // (name.trim()==='') 초기화돼서, 오타를 고치려고 백스페이스 한 번만 눌러도
+  // 세트 박스엔 이전 종목의 숫자가 그대로 남아있었음. 트레이너가 직접 고친
+  // 세트(_prevFilled 아닌 것)는 이름이 바뀌어도 건드리지 않음
+  if(!skipSetFill && exercises[ei]._prevFillName && exercises[ei]._prevFillName !== name.trim()
+     && exercises[ei].sets.every(s=>s._prevFilled)){
+    exercises[ei].sets = [{w:0, r:exercises[ei].timeMode?30:10}];
+    exercises[ei]._prevFillName = '';
+    buildSetRows(ei); updateExFooter(ei);
+  }
+  if(!name.trim()){
+    // 등척성 자동 감지 (수동 토글 아닌 경우만) — 이름이 없으면 지난 기록도
+    // 없으니 키워드만으로 판단
+    const nowTimeEmpty = ISOMETRIC_KEYWORDS.some(k=>(name||'').toLowerCase().includes(k));
+    if(!exercises[ei]._manualTimeMode && !skipSetFill && exercises[ei].timeMode && !nowTimeEmpty){
+      exercises[ei].timeMode = false;
+      exercises[ei].sets.forEach(s=>{ s.r=10; });
+      buildSetRows(ei); updateExFooter(ei);
+    }
+    exercises[ei].prevMaxW = 0;
+    exercises[ei].prevVol  = 0;
+    exercises[ei].prevMaxR = 0;
+    exercises[ei].prevMaxWReps = 0;
+    if(infoEl) infoEl.innerHTML = '';
+    if(prevCommentElEmpty){ prevCommentElEmpty.style.display='none'; prevCommentElEmpty.textContent=''; }
+    recalcAll(); return;
+  }
+  const prev = await getLastExData(name.trim());
+  // 등척성(시간 기록) 자동 감지 — 종목명에 "플랭크" 같은 키워드가 있는지뿐
+  // 아니라, 지난번에 그 종목을 실제로 초 단위(timeMode)로 기록했었는지도
+  // 함께 봄. 예전엔 키워드만 보고 판단해서, 키워드가 안 들어간 이름(예:
+  // "사이드 플랑크"가 아니라 그냥 트레이너가 지은 이름)으로 초 단위 기록을
+  // 저장해두면, 다음에 같은 이름을 입력해도 개수 모드로 잘못 바뀌어버렸음
+  const nowTime = ISOMETRIC_KEYWORDS.some(k=>(name||'').toLowerCase().includes(k)) || !!(prev && prev.timeMode);
   if(!exercises[ei]._manualTimeMode && !skipSetFill){
     if(nowTime && !exercises[ei].timeMode){
       exercises[ei].timeMode = true;
@@ -9093,26 +9131,6 @@ async function autoFillPrev(ei, name, skipSetFill){
       buildSetRows(ei); updateExFooter(ei); recalcAll();
     }
   }
-  const infoEl = document.getElementById('prevInfo-'+ei);
-  const prevCommentElEmpty = document.getElementById('prevComment-'+ei);
-  if(!name.trim()){
-    exercises[ei].prevMaxW = 0;
-    exercises[ei].prevVol  = 0;
-    exercises[ei].prevMaxR = 0;
-    exercises[ei].prevMaxWReps = 0;
-    if(infoEl) infoEl.innerHTML = '';
-    if(prevCommentElEmpty){ prevCommentElEmpty.style.display='none'; prevCommentElEmpty.textContent=''; }
-    // 종목명을 지우면, 아직 트레이너가 손대지 않고 "지난번 그대로" 자동
-    // 프리필된 세트값도 같이 원래 빈 상태로 되돌림 — 안 그러면 이름만 지워지고
-    // 세트 박스엔 이전 종목의 숫자가 그대로 남아서 트레이너가 하나하나 다시
-    // 지워야 했음. 트레이너가 직접 고친 세트(_prevFilled 아닌 것)는 안 건드림
-    if(!skipSetFill && exercises[ei].sets.every(s=>s._prevFilled)){
-      exercises[ei].sets = [{w:0, r:exercises[ei].timeMode?30:10}];
-      buildSetRows(ei); updateExFooter(ei);
-    }
-    recalcAll(); return;
-  }
-  const prev = await getLastExData(name.trim());
   if(!prev){
     exercises[ei].prevMaxW = 0;
     exercises[ei].prevVol  = 0;
@@ -9151,6 +9169,7 @@ async function autoFillPrev(ei, name, skipSetFill){
       w: s.w||0, r: s.r||0, _prevFilled:true,
       ...(s.drops && s.drops.length ? { drops: s.drops.map(d=>({w:d.w||0, r:d.r||0, _prevFilled:true})) } : {}),
     }));
+    exercises[ei]._prevFillName = name.trim();
     buildSetRows(ei); updateExFooter(ei);
     // 처음 겪는 트레이너는 "왜 숫자가 이미 채워져있지?" 헷갈릴 수 있어서,
     // 이 동작을 처음 볼 때만 안내를 한 번 붙여줌 (드래그/색상 힌트와 같은 방식)
