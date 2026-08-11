@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.7"/>
+<meta name="app-version" content="2.9.8"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -7530,6 +7530,9 @@ const CHANGELOG = {
   '2.9.7': [
     '초 단위(시간)로 기록해둔 운동을 다시 입력하면 개수 모드로 잘못 바뀌던 문제를 고쳤어요',
     '종목명을 고치려고 백스페이스를 한 글자만 눌러도, 완전히 다 지우지 않아도 이전 세트 값이 바로 초기화되게 했어요'
+  ],
+  '2.9.8': [
+    '일부 기기에서 새 버전이 나와도 캐시 때문에 계속 예전 버전으로 보이던 문제를 고쳤어요 — 업데이트 확인/새로고침이 항상 최신 내용을 확실히 받아오게 했어요'
   ]
 };
 
@@ -7557,7 +7560,10 @@ async function checkAppVersion(){
     // Firestore에 수동으로 기록해두는 버전이 아니라, 지금 실제 배포된 index.html을 직접
     // 받아와서 그 안의 버전 태그와 비교함 (깃허브 push → Cloudflare 자동배포라서
     // 대표님이 따로 "배포" 버튼을 누를 필요가 없어짐)
-    const res = await fetch('./index.html', {cache:'no-store'});
+    // cache:'no-store'만으로는 일부 모바일 웹뷰/PWA가 여전히 디스크 캐시를
+    // 반환하는 경우가 있어서, URL 자체에 캐시버스팅 쿼리를 붙여 확실히 새
+    // 요청으로 취급되게 함
+    const res = await fetch('./index.html?_v=' + Date.now(), {cache:'no-store'});
     if(!res.ok) return;
     const html = await res.text();
     const m = html.match(/<meta name="app-version" content="([^"]+)"/);
@@ -7567,7 +7573,7 @@ async function checkAppVersion(){
     // 알아서 다시 체크하다가 55분대에 걸리는 순간 뜨게 함. 새로고침이 필요
     // 없는 "방금 업데이트됨" 안내(showJustUpdatedBanner)는 이 제한과 무관함
     const minute = new Date().getMinutes();
-    const inQuietWindow = minute >= 55;
+    const inQuietWindow = true; // TEMP: 2.9.6에 갇힌 트레이너 구제용 — 확산 확인되면 원복 (minute >= 55)
     if(liveVersion && liveVersion !== currentVersion && isNewerVersion(liveVersion, currentVersion) && inQuietWindow){
       showUpdateBanner(liveVersion);
     }
@@ -7649,7 +7655,13 @@ function wireChangelogPager(container){
 // 하필 이 배너가 뜨는 경우가 있어서, 리로드 전에 반드시 명시적으로 저장함
 function reloadForUpdate(){
   autoSaveDraft();
-  location.reload(true);
+  // location.reload(true)의 강제 새로고침 인자는 최신 브라우저(특히 모바일
+  // Safari/Chrome)에서 무시돼서, 캐시된 예전 index.html/JS를 그대로 다시
+  // 받아버리는 경우가 있었음 — 캐시버스팅 쿼리스트링을 붙여 확실히 네트워크로
+  // 새로 받아오게 함
+  const url = new URL(location.href);
+  url.searchParams.set('_v', Date.now());
+  location.href = url.toString();
 }
 
 // 아직 구버전을 보고 있는 트레이너에게 "새로고침하면 업데이트돼요"라고 안내함.
