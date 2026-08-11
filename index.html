@@ -7589,7 +7589,7 @@ async function checkAppVersion(){
     // 알아서 다시 체크하다가 55분대에 걸리는 순간 뜨게 함. 새로고침이 필요
     // 없는 "방금 업데이트됨" 안내(showJustUpdatedBanner)는 이 제한과 무관함
     const minute = new Date().getMinutes();
-    const inQuietWindow = true; // TEMP: 2.9.6에 갇힌 트레이너 구제용 — 확산 확인되면 원복 (minute >= 55)
+    const inQuietWindow = minute >= 55;
     if(liveVersion && liveVersion !== currentVersion && isNewerVersion(liveVersion, currentVersion) && inQuietWindow){
       showUpdateBanner(liveVersion);
     }
