@@ -20,7 +20,7 @@
 </script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="app-version" content="2.9.8"/>
+<meta name="app-version" content="2.9.9"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
 <title>PT 일지</title>
@@ -1454,6 +1454,11 @@ const FS_PROJECT = 'captaingym-1ccd2';
 const FS_API_KEY = 'AIzaSyCXtPpKkFZuDnkZViRheHMq9mePKDUbUt8';
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
 const AUTH_BASE  = `https://identitytoolkit.googleapis.com/v1`;
+// /api/*는 이 Worker(Cloudflare)에서만 서빙됨. index.html 자체는 GitHub
+// Pages 등 다른 도메인에도 그대로 복사돼 열릴 수 있는데, 그런 곳에서
+// 상대경로로 /api/*를 부르면 그 도메인엔 API가 없어 404가 남 — 항상 이
+// Worker 도메인을 명시해서 어느 주소로 접속해도 API가 붙게 함
+const API_BASE = 'https://pt.gympt.workers.dev';
 
 // 대표님 대시보드에 노출할 홈 체육관 (여러 체육관이 같은 Firebase 프로젝트를 테스트로 같이 쓰고 있어서 구분용)
 const HOME_GYM = '캡틴짐';
@@ -2803,7 +2808,7 @@ async function enterOwnerDashboard(){
 
   let res;
   try{
-    res = await fetch('/api/owner-auth', {
+    res = await fetch(API_BASE + '/api/owner-auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trainerId: TRAINER_ID, trainerPin }),
@@ -6939,6 +6944,14 @@ function removeMemoPhotoFile(mode, idx, fi){
   renderMemoPhotoPreview(mode, idx);
 }
 
+// 예전에 저장된 사진 url은 "/api/memo-photo?key=..." 같은 상대경로임 — 이
+// index.html이 이 Worker가 아닌 다른 도메인(GitHub Pages 등)에서 열리면
+// 상대경로가 그 도메인으로 나가서 API가 없어 404가 남. 항상 이 Worker
+// 도메인으로 절대화해서 어느 주소로 열었든 API가 붙게 함
+function absApiUrl(url){
+  return /^https?:\/\//.test(url) ? url : API_BASE + url;
+}
+
 // /api/memo-photo는 로그인 확인용 Authorization 헤더가 필요해서 <img src>로
 // 바로 못 불러옴 — fetch로 받아서 blob:// URL로 바꿔서 씀
 async function loadAuthedImage(apiUrl){
@@ -6949,7 +6962,7 @@ async function loadAuthedImage(apiUrl){
     // 만료된 토큰으로 요청이 401 나서 조용히 실패하고, 사진 칸이 그냥
     // 빈 채로("저장했는데 안 보임") 남는 문제가 있었음
     await ensureFreshToken();
-    const res = await fetch(apiUrl, { headers:{ 'Authorization':'Bearer '+fsToken } });
+    const res = await fetch(absApiUrl(apiUrl), { headers:{ 'Authorization':'Bearer '+fsToken } });
     if(!res.ok) return null;
     const blob = await res.blob();
     return URL.createObjectURL(blob);
@@ -7046,7 +7059,7 @@ async function uploadMemoPhotos(memberId, memoId, files, keepIds){
       // 업로드가 여러 장 이어질 때, 방금 올라간 사진도 다음 요청의 keepIds에
       // 포함시켜야 스스로를 고아로 오판해 지우지 않음
       const nowKeepIds = [...(keepIds||[]), ...uploaded.map(u=>u.id)].join(',');
-      const res = await fetchWithTimeout(`/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}&contentType=${encodeURIComponent(contentType)}&keepIds=${encodeURIComponent(nowKeepIds)}`, {
+      const res = await fetchWithTimeout(`${API_BASE}/api/upload-memo-photo?trainerId=${encodeURIComponent(TRAINER_ID)}&memberId=${encodeURIComponent(memberId)}&memoId=${encodeURIComponent(memoId)}&contentType=${encodeURIComponent(contentType)}&keepIds=${encodeURIComponent(nowKeepIds)}`, {
         method:'POST',
         headers:{ 'Authorization':'Bearer '+fsToken },
         body: formData,
@@ -7094,7 +7107,7 @@ async function deleteMemoPhotoByUrl(url){
   if(!key) return;
   try{
     await ensureFreshToken();
-    const res = await fetch(`/api/memo-photo?key=${encodeURIComponent(key)}`, {
+    const res = await fetch(`${API_BASE}/api/memo-photo?key=${encodeURIComponent(key)}`, {
       method:'DELETE',
       headers:{ 'Authorization':'Bearer '+fsToken },
     });
@@ -7533,6 +7546,9 @@ const CHANGELOG = {
   ],
   '2.9.8': [
     '일부 기기에서 새 버전이 나와도 캐시 때문에 계속 예전 버전으로 보이던 문제를 고쳤어요 — 업데이트 확인/새로고침이 항상 최신 내용을 확실히 받아오게 했어요'
+  ],
+  '2.9.9': [
+    '다른 주소로 접속했을 때 메모 사진 저장/보기/삭제가 항상 되게 고쳤어요'
   ]
 };
 
