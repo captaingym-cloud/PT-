@@ -636,10 +636,55 @@ async function handleDeleteMemoPhoto(request, env) {
   return jsonResponse({ ok: true });
 }
 
+// index.html은 이 Worker 도메인뿐 아니라 GitHub Pages 등 다른 정적 호스팅에도
+// 그대로 복사돼 열릴 수 있는데, 그런 도메인에서 fetch(API_BASE + '/api/...')로
+// 크로스오리진 요청을 보내면 브라우저가 CORS 프리플라이트(OPTIONS)부터 보내고,
+// 이 헤더들이 없으면 실제 요청 자체를 막아버림(응답을 받고도 JS에서 못 읽음).
+// 트레이너가 쓰는 도메인을 미리 다 알 수 없어서 '*'로 허용 — 이 API들은 어차피
+// Authorization 헤더(Firebase 토큰) 검증을 각자 안에서 하므로 Origin 제한이
+// 없어도 인증 없는 요청은 그대로 거부됨
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+};
+
+function withCors(response) {
+  const headers = new Headers(response.headers);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) headers.set(k, v);
+  return new Response(response.body, { status: response.status, headers });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    if (url.pathname.startsWith('/api/')) {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, { headers: CORS_HEADERS });
+      }
+      return handleApi(request, env, url).then(withCors);
+    }
+
+    // API 경로가 아니면 기존처럼 정적 파일(index.html 등)로 그대로 넘김
+    return env.ASSETS.fetch(request);
+  },
+
+  // Cloudflare cron trigger가 5분마다 자동 호출함 (wrangler.jsonc의
+  // triggers.crons 설정 참고). 한 번에 한 배치만 처리하고, 오늘치 백업이
+  // 이미 끝나 있으면 runFullBackup이 곧바로 skip 처리해서 조용히 리턴함 —
+  // 그래서 하루 종일 돌아도 실제로는 새벽에 몇 번만 의미 있게 실행됨.
+  // 백업이 done:true를 반환한 틱에 이어서 고아 사진 정리도 시도함(그 전
+  // 틱들은 아직 백업 중이라 스냅샷이 없으므로 자동으로 스킵됨) — 정리도
+  // 배치 구조라 한 번에 안 끝나면 다음 틱들에서 이어서 마저 처리됨
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(
+      runFullBackup(env).then((backupResult) => continueOrphanSweepIfBackupDone(env, backupResult))
+    );
+  },
+};
+
+async function handleApi(request, env, url) {
     if (url.pathname === '/api/send-sms' && request.method === 'POST') {
       return handleSendSms(request, env);
     }
@@ -713,20 +758,5 @@ export default {
       return handleDeleteMemoPhoto(request, env);
     }
 
-    // API 경로가 아니면 기존처럼 정적 파일(index.html 등)로 그대로 넘김
-    return env.ASSETS.fetch(request);
-  },
-
-  // Cloudflare cron trigger가 5분마다 자동 호출함 (wrangler.jsonc의
-  // triggers.crons 설정 참고). 한 번에 한 배치만 처리하고, 오늘치 백업이
-  // 이미 끝나 있으면 runFullBackup이 곧바로 skip 처리해서 조용히 리턴함 —
-  // 그래서 하루 종일 돌아도 실제로는 새벽에 몇 번만 의미 있게 실행됨.
-  // 백업이 done:true를 반환한 틱에 이어서 고아 사진 정리도 시도함(그 전
-  // 틱들은 아직 백업 중이라 스냅샷이 없으므로 자동으로 스킵됨) — 정리도
-  // 배치 구조라 한 번에 안 끝나면 다음 틱들에서 이어서 마저 처리됨
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(
-      runFullBackup(env).then((backupResult) => continueOrphanSweepIfBackupDone(env, backupResult))
-    );
-  },
-};
+    return jsonResponse({ ok: false, error: 'Not found' }, 404);
+}
